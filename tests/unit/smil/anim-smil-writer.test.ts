@@ -28,13 +28,17 @@ describe('buildSlideTiming', () => {
     })
     expect(result).toContain('<p:timing>')
     expect(result).toContain('<p:tnLst>')
+    expect(result).toContain('<p:par>')
     expect(result).toContain('<p:seq')
+    expect(result).toContain('nodeType="tmRoot"')
+    expect(result).toContain('nodeType="mainSeq"')
     expect(result).toContain('presetID="10"')
     expect(result).toContain('presetClass="entr"')
     expect(result).toContain('<p:spTgt spid="5"/>')
     expect(result).toContain('dur="400"')
     expect(result).toContain('</p:timing>')
-    // Plain fade should NOT emit a filter companion (presetID=10 handles it)
+    expect(result).toContain('<p:prevCondLst>')
+    expect(result).toContain('<p:nextCondLst>')
     expect(result).not.toContain('filter="fade"')
   })
 
@@ -57,7 +61,6 @@ describe('buildSlideTiming', () => {
     expect(result).toContain('presetID="7"')
     expect(result).toContain('presetClass="entr"')
     expect(result).toContain('presetSubtype="8"')
-    // fade-up also gets a companion filter element
     expect(result).toContain('filter="fade"')
   })
 
@@ -149,16 +152,25 @@ describe('buildSlideTiming', () => {
         makeAnim({ spid: 3, order: 2, type: 'slide-up' })
       ]
     })
-    // All three spid values appear (filter companions may duplicate some spids)
     expect(result).toContain('spid="1"')
     expect(result).toContain('spid="2"')
     expect(result).toContain('spid="3"')
-    // Order: spid=1 (order 0) before spid=2 (order 1) before spid=3 (order 2)
     const i1 = result.indexOf('spid="1"')
     const i2 = result.indexOf('spid="2"')
     const i3 = result.indexOf('spid="3"')
     expect(i1).toBeLessThan(i2)
     expect(i2).toBeLessThan(i3)
+  })
+
+  it('wraps each shape animation in its own <p:par>', () => {
+    const result = buildSlideTiming({
+      elements: [
+        makeAnim({ spid: 1, order: 0, type: 'fade' }),
+        makeAnim({ spid: 2, order: 1, type: 'fade' })
+      ]
+    })
+    const parCount = (result.match(/<p:par>/g) || []).length
+    expect(parCount).toBeGreaterThanOrEqual(4) // root + seq child + 2 shape pars
   })
 })
 
@@ -167,22 +179,12 @@ describe('buildSlideTransition', () => {
     expect(buildSlideTransition('none')).toBe('')
   })
 
-  it('includes dur attribute with correct clamped values', () => {
-    const d0 = buildSlideTransition('fade', 0)
-    expect(d0).toContain('dur="100"')
-    expect(d0).toContain('spd="fast"')
-
-    const d500 = buildSlideTransition('fade', 500)
-    expect(d500).toContain('dur="500"')
-    expect(d500).toContain('spd="med"')
-  })
-
-  it('generates fade transition with <p:fade/> child and dur attribute', () => {
+  it('generates fade transition with <p:fade/> child', () => {
     const result = buildSlideTransition('fade', 500)
     expect(result).toContain('<p:transition')
     expect(result).toContain('<p:fade/>')
     expect(result).toContain('advClick="1"')
-    expect(result).toContain('dur="500"')
+    expect(result).toContain('spd="med"')
     expect(result).toContain('</p:transition>')
   })
 
@@ -231,6 +233,11 @@ describe('buildSlideTransition', () => {
     expect(result).toContain('spd="fast"')
     const result2 = buildSlideTransition('fade', 10000)
     expect(result2).toContain('spd="slow"')
+  })
+
+  it('does not emit dur attribute on transition element', () => {
+    const result = buildSlideTransition('fade', 500)
+    expect(result).not.toMatch(/ dur="\d+"/)
   })
 })
 

@@ -762,7 +762,10 @@ function buildContentTypesXml(
     `<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>`,
     `<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`,
     `<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>`,
-    `<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>`
+    `<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>`,
+    `<Override PartName="/ppt/viewProps.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.viewProperties+xml"/>`,
+    `<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>`,
+    `<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>`
   ]
   for (let i = 1; i <= slideCount; i++) {
     overrides.push(
@@ -791,6 +794,8 @@ function buildContentTypesXml(
 function buildRootRelsXml(): string {
   return `${XML_HEADER}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
 </Relationships>`
 }
 
@@ -844,11 +849,13 @@ ${variantXml.join('\n')}
     }
   }
 
+  const fontAttrs = embeddedFonts.length > 0
+    ? '\n                embedTrueTypeFonts="1"\n                saveSubsetFonts="1"'
+    : ''
+
   return `${XML_HEADER}<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
                 xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-                xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
-                embedTrueTypeFonts="1"
-                saveSubsetFonts="1">
+                xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"${fontAttrs}>
   <p:sldMasterIdLst>
     <p:sldMasterId id="2147483648" r:id="rIdSm"/>
   </p:sldMasterIdLst>
@@ -856,7 +863,7 @@ ${variantXml.join('\n')}
     ${sldIds.join('\n    ')}
   </p:sldIdLst>
   <p:sldSz cx="${SLIDE_WIDTH_EMU}" cy="${SLIDE_HEIGHT_EMU}" type="wide"/>
-  <p:notesSz cx="${SLIDE_HEIGHT_EMU}" cy="${SLIDE_WIDTH_EMU}"/>${embeddedFontLstXml}
+  <p:notesSz cx="6858000" cy="9144000"/>${embeddedFontLstXml}
 </p:presentation>`
 }
 
@@ -865,7 +872,8 @@ function buildPresentationRelsXml(
   fontRelEntries: Array<{ key: string; rId: string; fontFile: string }> = []
 ): string {
   const rels: string[] = [
-    `<Relationship Id="rIdSm" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>`
+    `<Relationship Id="rIdSm" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>`,
+    `<Relationship Id="rIdVp" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProperties" Target="viewProps.xml"/>`
   ]
   for (let i = 1; i <= slideCount; i++) {
     rels.push(
@@ -1002,6 +1010,38 @@ function buildSlideRelsXml(imageRels: ImageRel[]): string {
 </Relationships>`
 }
 
+function buildDocPropsCoreXml(title: string): string {
+  const now = new Date().toISOString()
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                   xmlns:dc="http://purl.org/dc/elements/1.1/"
+                   xmlns:dcterms="http://purl.org/dc/terms/"
+                   xmlns:dcmitype="http://purl.org/dc/dcmitype/"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>${title}</dc:title>
+  <dc:creator>OhMyPPT</dc:creator>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
+</cp:coreProperties>`
+}
+
+function buildDocPropsAppXml(slideCount: number): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+            xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>OhMyPPT</Application>
+  <Slides>${slideCount}</Slides>
+  <HiddenSlides>0</HiddenSlides>
+</Properties>`
+}
+
+function buildViewPropsXml(): string {
+  return `${XML_HEADER}<p:viewPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                              xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+</p:viewPr>`
+}
+
 // ─── Media helpers ───────────────────────────────────────────────────
 
 function dataUriToBuffer(dataUri: string): { buffer: Uint8Array; ext: string } | null {
@@ -1116,6 +1156,11 @@ export const writePptxDocument = async (
   files['ppt/slideMasters/_rels/slideMaster1.xml.rels'] = strToU8(buildSlideMasterRelsXml())
   files['ppt/slideLayouts/slideLayout1.xml'] = strToU8(buildSlideLayoutXml())
   files['ppt/slideLayouts/_rels/slideLayout1.xml.rels'] = strToU8(buildSlideLayoutRelsXml())
+
+  // Document properties (required by PowerPoint)
+  files['docProps/core.xml'] = strToU8(buildDocPropsCoreXml(document.title))
+  files['docProps/app.xml'] = strToU8(buildDocPropsAppXml(slideCount))
+  files['ppt/viewProps.xml'] = strToU8(buildViewPropsXml())
 
   // Per-slide
   for (let i = 0; i < slideCount; i++) {
