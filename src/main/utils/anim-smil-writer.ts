@@ -111,13 +111,14 @@ export function buildSlideTiming(timing: SmilSlideTiming, startNodeId = 1000): s
       }
 
       const filterXml = preset.filter
-        ? `\n                    <p:animEffect transition="in" filter="${preset.filter}">
-                      <p:cTn id="${nextId()}" dur="${durMs}"/>
-                      <p:target><p:spTgt spid="${anim.spid}"/></p:target>
-                    </p:animEffect>`
+        ? `\n                      <p:animEffect transition="in" filter="${preset.filter}">
+                        <p:cTn id="${nextId()}" dur="${durMs}"/>
+                        <p:target><p:spTgt spid="${anim.spid}"/></p:target>
+                      </p:animEffect>`
         : ''
 
       const nodeType = `nodeType="${preset.filter ? 'withEffect' : 'afterEffect'}"`
+      const setId = nextId()
 
       return `<p:par>
                   <p:cTn id="${shapeParId}" fill="hold">
@@ -127,6 +128,13 @@ export function buildSlideTiming(timing: SmilSlideTiming, startNodeId = 1000): s
                         <p:cTn id="${effectId}" dur="${durMs}" fill="hold"/>
                         <p:target><p:spTgt spid="${anim.spid}"/></p:target>
                       </p:animEffect>${filterXml}
+                      <p:set>
+                        <p:cTn id="${setId}" dur="1" fill="hold">
+                          <p:stCondLst><p:cond delay="0"/></p:stCondLst>
+                        </p:cTn>
+                        <p:target><p:spTgt spid="${anim.spid}"/></p:target>
+                        <p:to><p:strVal val="visible"/></p:to>
+                      </p:set>
                     </p:childTnLst>
                   </p:cTn>
                 </p:par>`
