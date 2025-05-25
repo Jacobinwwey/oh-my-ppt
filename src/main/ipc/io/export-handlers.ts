@@ -52,6 +52,21 @@ const parseFontEmbedMode = (payload: unknown): 'auto' | 'always' | 'never' => {
 const sanitizeExportBaseName = (value: string, fallback: string): string =>
   value.replace(/[\\/:*?"<>|]/g, '_').slice(0, 120) || fallback
 
+const readTransitionTypeFromIndex = (projectDir: string): string | undefined => {
+  const indexPath = path.join(projectDir, 'index.html')
+  try {
+    const html = fs.readFileSync(indexPath, 'utf-8')
+    const match = html.match(
+      /<script\b[^>]*id=["']ppt-index-transition-config["'][^>]*>([\s\S]*?)<\/script>/i
+    )
+    if (!match) return undefined
+    const config = JSON.parse(match[1].trim())
+    return config?.type && config.type !== 'none' ? String(config.type) : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const isSameOrChildPath = async (candidatePath: string, parentPath: string): Promise<boolean> => {
   const resolveRealPath = async (value: string): Promise<string> =>
     fs.promises.realpath(value).catch(() => path.resolve(value))
@@ -321,6 +336,29 @@ export function registerExportHandlers(ctx: IpcContext): void {
         if (pagesWithoutText > 0) {
           warnings.push(`${pages.length} 页中有 ${pagesWithoutText} 页未提取到可编辑文本。`)
         }
+      }
+
+      // Apply slide transition from index.html config
+      const transitionType = readTransitionTypeFromIndex(projectDir)
+      if (transitionType) {
+        for (const slide of slides) {
+          if (!slide.transitionType) {
+            slide.transitionType = transitionType
+          }
+        }
+        log.info('[export:pptx] applied transition from index', { sessionId, transitionType })
+      }
+
+      // Log animation trace stats
+      const slidesWithAnim = slides.filter((s) => (s.animationTraces?.length ?? 0) > 0)
+      if (slidesWithAnim.length > 0) {
+        log.info('[export:pptx] animation traces collected', {
+          sessionId,
+          slidesWithAnim: slidesWithAnim.length,
+          totalTraces: slidesWithAnim.reduce((n, s) => n + (s.animationTraces?.length ?? 0), 0)
+        })
+      } else {
+        log.info('[export:pptx] no animation traces found in any slide', { sessionId })
       }
 
       // Collect embedded fonts (editable mode only). The user-facing behavior is

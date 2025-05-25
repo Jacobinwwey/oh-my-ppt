@@ -486,7 +486,9 @@ export const MARK_KATEX_BLOCKS_SCRIPT = `
 
 export const COLLECT_ANIMATION_TRACE_SCRIPT = `
 (() => {
-  const root = document.querySelector('.ppt-page-root') || document.body;
+  const root =
+    document.querySelector('.ppt-page-root[data-ppt-guard-root="1"]') ||
+    document.querySelector('.ppt-page-root') || document.body;
   const pageRect = root.getBoundingClientRect();
   const SUPPORTED_ANIM_TYPES = new Set([
     'fade', 'fade-up', 'fade-down', 'fade-left', 'fade-right',
@@ -494,13 +496,26 @@ export const COLLECT_ANIMATION_TRACE_SCRIPT = `
   ]);
   const traces = [];
   const elements = root.querySelectorAll('[data-anim]');
+  const staggerCounters = {};
   for (const el of elements) {
     const animType = (el.getAttribute('data-anim') || '').trim().toLowerCase();
     if (!SUPPORTED_ANIM_TYPES.has(animType)) continue;
     const rect = el.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
     const duration = Number(el.getAttribute('data-anim-duration')) || 500;
-    const delay = Number(el.getAttribute('data-anim-delay')) || 0;
+    const delayRaw = (el.getAttribute('data-anim-delay') || '0').trim();
+    let delay = 0;
+    if (delayRaw.indexOf('stagger') === 0) {
+      const m = delayRaw.match(/stagger\\s*\\(\\s*(\\d+)\\s*\\)/);
+      const gap = m ? Number(m[1]) : 50;
+      const trigger = el.getAttribute('data-anim-trigger') || 'load';
+      const groupKey = trigger;
+      if (staggerCounters[groupKey] === undefined) staggerCounters[groupKey] = 0;
+      delay = staggerCounters[groupKey] * gap;
+      staggerCounters[groupKey] += 1;
+    } else {
+      delay = Number(delayRaw) || 0;
+    }
     const trigger = el.getAttribute('data-anim-trigger') || 'load';
     if (trigger !== 'load') continue;
     traces.push({
