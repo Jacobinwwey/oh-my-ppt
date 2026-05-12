@@ -7,6 +7,7 @@ import {
 import {
   buildEditModeCleanupScript,
   buildEditModeInjectScript,
+  buildEditModeSetPreviewScaleScript,
   EDIT_MODE_CONSOLE_PREFIX,
   type EditModeMovePayload,
   type EditSelectionPayload
@@ -61,8 +62,14 @@ export const PreviewIframe = forwardRef<
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
+  const previewScaleRef = useRef(1)
   const [webviewElement, setWebviewElement] = useState<Electron.WebviewTag | null>(null)
   const [transform, setTransform] = useState('scale(1)')
+  const [previewScale, setPreviewScale] = useState(1)
+
+  useEffect(() => {
+    previewScaleRef.current = previewScale
+  }, [previewScale])
 
   const resolvePageHtmlPath = (inputPath?: string, currentPageId?: string): string | undefined => {
     if (!inputPath) return undefined
@@ -216,7 +223,7 @@ export const PreviewIframe = forwardRef<
 
     const runEditModeLifecycle = (): void => {
       if (editMode) {
-        safeExecuteJavaScript(webview, buildEditModeInjectScript())
+        safeExecuteJavaScript(webview, buildEditModeInjectScript(previewScaleRef.current))
       } else {
         safeExecuteJavaScript(webview, buildEditModeCleanupScript())
       }
@@ -231,6 +238,12 @@ export const PreviewIframe = forwardRef<
       safeExecuteJavaScript(webview, buildEditModeCleanupScript())
     }
   }, [inspectable, editMode, webviewSrc, webviewElement])
+
+  useEffect(() => {
+    const webview = webviewElement
+    if (!webview || !inspectable || !editMode) return
+    safeExecuteJavaScript(webview, buildEditModeSetPreviewScaleScript(previewScale))
+  }, [editMode, inspectable, previewScale, webviewElement])
 
   // Console message router: inspector + unified edit mode
   useEffect(() => {
@@ -417,6 +430,7 @@ export const PreviewIframe = forwardRef<
       const nextScale = Number.isFinite(nextScaleRaw) && nextScaleRaw > 0 ? nextScaleRaw : 1
       const offsetX = Math.max(0, (width - 1600 * nextScale) / 2)
       const offsetY = Math.max(0, (height - 900 * nextScale) / 2)
+      setPreviewScale(nextScale)
       setTransform(`translate(${offsetX}px, ${offsetY}px) scale(${nextScale})`)
     }
 
