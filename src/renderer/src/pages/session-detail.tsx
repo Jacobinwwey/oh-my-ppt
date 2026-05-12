@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ipc } from '@renderer/lib/ipc'
-import type { DragEditorMovePayload } from '../components/preview/drag-editor-script'
-import type { TextEditorSelectionPayload } from '../components/preview/text-editor-types'
+import type {
+  EditModeMovePayload,
+  EditSelectionPayload
+} from '../components/preview/edit-mode-script'
 import type { PreviewIframeHandle } from '../components/preview/PreviewIframe'
 import { TooltipProvider } from '../components/ui/Tooltip'
 import { Button } from '../components/ui/Button'
@@ -17,6 +19,7 @@ import {
 import { MessagePanel } from '../components/session-detail/MessagePanel'
 import { PageSidebar } from '../components/session-detail/PageSidebar'
 import { PreviewStage } from '../components/session-detail/PreviewStage'
+import { ElementInspectorPanel } from '../components/session-detail/ElementInspectorPanel'
 import { SessionToolbar } from '../components/session-detail/SessionToolbar'
 import type { ElementEditDraft } from '../components/session-detail/ElementInspectorPanel'
 import type { ChatType, SessionPreviewPage } from '../components/session-detail/types'
@@ -113,13 +116,18 @@ export function SessionDetailPage(): React.JSX.Element {
   const setIsAddingPage = useSessionDetailUiStore((state) => state.setIsAddingPage)
   const activeChatRef = useRef<{ chatType: ChatType; pageId?: string }>({ chatType: 'page' })
   const [pendingDragEdits, setPendingDragEdits] = useState<
-    Array<DragEditorMovePayload & { pageId: string; htmlPath: string }>
+    Array<EditModeMovePayload & { pageId: string; htmlPath: string }>
   >([])
   const [pendingTextEdits, setPendingTextEdits] = useState<
-    Array<{ pageId: string; htmlPath: string; selector: string; patch: { text: string; style: { color: string; fontSize: string; fontWeight: string } } }>
+    Array<{
+      pageId: string
+      htmlPath: string
+      selector: string
+      patch: { text: string; style: { color: string; fontSize: string; fontWeight: string } }
+    }>
   >([])
   const [isSavingEdits, setIsSavingEdits] = useState(false)
-  const [textSelection, setTextSelection] = useState<TextEditorSelectionPayload | null>(null)
+  const [textSelection, setTextSelection] = useState<EditSelectionPayload | null>(null)
   const [textDraft, setTextDraft] = useState<ElementEditDraft>(EMPTY_ELEMENT_DRAFT)
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -260,7 +268,11 @@ export function SessionDetailPage(): React.JSX.Element {
   useEffect(() => {
     if (!id || !currentSession) return
     // Don't redirect during addPage / retrySinglePage — we're already on the editor page
-    if (useSessionDetailUiStore.getState().isAddingPage || useSessionDetailUiStore.getState().isRetryingSinglePage) return
+    if (
+      useSessionDetailUiStore.getState().isAddingPage ||
+      useSessionDetailUiStore.getState().isRetryingSinglePage
+    )
+      return
     if (!canEditInSessionDetail) {
       navigate(`/sessions/${id}/generating`, { replace: true })
     }
@@ -275,7 +287,11 @@ export function SessionDetailPage(): React.JSX.Element {
 
   useEffect(() => {
     // Skip auto-select during addPage / retrySinglePage — selection managed explicitly
-    if (useSessionDetailUiStore.getState().isAddingPage || useSessionDetailUiStore.getState().isRetryingSinglePage) return
+    if (
+      useSessionDetailUiStore.getState().isAddingPage ||
+      useSessionDetailUiStore.getState().isRetryingSinglePage
+    )
+      return
 
     if (normalizedOrderedPages.length === 0) {
       useSessionDetailUiStore.getState().setSelectedPageId(null)
@@ -806,7 +822,10 @@ export function SessionDetailPage(): React.JSX.Element {
     }
   }
 
-  const handleExportPptx = async (options?: { exportImages?: boolean; exportShapes?: boolean }): Promise<void> => {
+  const handleExportPptx = async (options?: {
+    exportImages?: boolean
+    exportShapes?: boolean
+  }): Promise<void> => {
     const detailState = useSessionDetailUiStore.getState()
     if (!id || detailState.isExportingPptx) return
     detailState.setIsExportingPptx(true)
@@ -841,12 +860,8 @@ export function SessionDetailPage(): React.JSX.Element {
     }
   }
 
-  const selectedPagePendingDragCount = useMemo(() => {
-    if (!selectedPage?.pageId) return 0
-    return pendingDragEdits.filter((item) => item.pageId === selectedPage.pageId).length
-  }, [pendingDragEdits, selectedPage])
-
-  const handleElementMoved = (payload: DragEditorMovePayload): void => {
+  const handleElementMoved = (payload: EditModeMovePayload): void => {
+    console.log('[DEBUG] handleElementMoved called', { selector: payload.selector, x: payload.x, y: payload.y, deltaX: payload.deltaX, deltaY: payload.deltaY, id, htmlPath: selectedPage?.htmlPath, pageId: selectedPage?.pageId })
     if (!id || !selectedPage?.htmlPath || !selectedPage.pageId) return
     const nextEdit = {
       ...payload,
@@ -871,6 +886,10 @@ export function SessionDetailPage(): React.JSX.Element {
     const dragEdits = pendingDragEdits.filter((item) => item.pageId === selectedPage.pageId)
     const textEdits = pendingTextEdits.filter((item) => item.pageId === selectedPage.pageId)
     if (dragEdits.length === 0 && textEdits.length === 0) {
+      previewIframeRef.current?.clearEditModeSelection()
+      setTextSelection(null)
+      setTextDraft(EMPTY_ELEMENT_DRAFT)
+      setPreviewRefreshKey((key) => key + 1)
       useSessionDetailUiStore.getState().setInteractionMode('preview')
       return
     }
@@ -906,10 +925,11 @@ export function SessionDetailPage(): React.JSX.Element {
       }
       setPendingDragEdits((items) => items.filter((item) => item.pageId !== selectedPage.pageId))
       setPendingTextEdits((items) => items.filter((item) => item.pageId !== selectedPage.pageId))
-      previewIframeRef.current?.clearTextEditorSelection()
+      previewIframeRef.current?.clearEditModeSelection()
       setTextSelection(null)
       setTextDraft(EMPTY_ELEMENT_DRAFT)
       useSessionDetailUiStore.getState().bumpThumbnailVersion(selectedPage.pageId)
+      setPreviewRefreshKey((key) => key + 1)
       useSessionDetailUiStore.getState().setInteractionMode('preview')
       const totalCount = dragEdits.length + textEdits.length
       await ipc.recordHistorySnapshot({
@@ -937,7 +957,7 @@ export function SessionDetailPage(): React.JSX.Element {
     const hadTextPending = pendingTextEdits.some((item) => item.pageId === selectedPage.pageId)
     setPendingDragEdits((items) => items.filter((item) => item.pageId !== selectedPage.pageId))
     setPendingTextEdits((items) => items.filter((item) => item.pageId !== selectedPage.pageId))
-    previewIframeRef.current?.clearTextEditorSelection()
+    previewIframeRef.current?.clearEditModeSelection()
     setTextSelection(null)
     setTextDraft(EMPTY_ELEMENT_DRAFT)
     setPreviewRefreshKey((key) => key + 1)
@@ -945,23 +965,27 @@ export function SessionDetailPage(): React.JSX.Element {
     if (hadDragPending || hadTextPending) toastInfo(t('sessionDetail.discardedAdjustments'))
   }
 
-  const handleTextSelected = (payload: TextEditorSelectionPayload): void => {
+  const handleElementSelected = (payload: EditSelectionPayload): void => {
     // Commit previous edit before switching to new element
     commitCurrentTextEdit()
     setTextSelection(payload)
-    setTextDraft({
-      text: payload.text,
-      color: rgbToHex(payload.style.color),
-      fontSize: fontSizeToNumber(payload.style.fontSize),
-      fontWeight: normalizeFontWeight(payload.style.fontWeight)
-    })
+    if (payload.isText) {
+      setTextDraft({
+        text: payload.text,
+        color: rgbToHex(payload.style.color),
+        fontSize: fontSizeToNumber(payload.style.fontSize),
+        fontWeight: normalizeFontWeight(payload.style.fontWeight)
+      })
+    } else {
+      setTextDraft(EMPTY_ELEMENT_DRAFT)
+    }
   }
 
   const handleTextDraftChange = (draft: ElementEditDraft): void => {
     setTextDraft(draft)
     // Live preview in iframe
     if (textSelection && selectedPage?.pageId) {
-      previewIframeRef.current?.liveUpdateTextElement(textSelection.selector, {
+      previewIframeRef.current?.liveUpdateElement(textSelection.selector, {
         text: draft.text,
         style: {
           color: draft.color,
@@ -983,7 +1007,8 @@ export function SessionDetailPage(): React.JSX.Element {
       textDraft.color === rgbToHex(textSelection.style.color) &&
       textDraft.fontSize === fontSizeToNumber(textSelection.style.fontSize) &&
       textDraft.fontWeight === normalizeFontWeight(textSelection.style.fontWeight)
-    ) return
+    )
+      return
     const patch = {
       text: nextText,
       style: {
@@ -1010,7 +1035,7 @@ export function SessionDetailPage(): React.JSX.Element {
   const handleCancelTextEdit = (): void => {
     // Commit current text edit before closing panel
     commitCurrentTextEdit()
-    previewIframeRef.current?.clearTextEditorSelection()
+    previewIframeRef.current?.clearEditModeSelection()
     setTextSelection(null)
     setTextDraft(EMPTY_ELEMENT_DRAFT)
   }
@@ -1064,17 +1089,22 @@ export function SessionDetailPage(): React.JSX.Element {
             isGenerating={isGenerating}
             progressLabel={progress?.label}
             previewRefreshKey={previewRefreshKey}
-            pendingEditCount={selectedPagePendingDragCount + pendingTextEdits.filter((item) => item.pageId === selectedPage?.pageId).length}
             isSavingEdits={isSavingEdits}
-            textSelection={textSelection}
-            textDraft={textDraft}
-            onTextDraftChange={handleTextDraftChange}
             onElementMoved={handleElementMoved}
-            onTextSelected={handleTextSelected}
+            onElementSelected={handleElementSelected}
             onCancelTextEdit={handleCancelTextEdit}
             onSaveAllEdits={() => void handleSaveAllEdits()}
             onDiscardAllEdits={handleDiscardAllEdits}
           />
+
+          {interactionMode === 'edit' && textSelection && (
+            <ElementInspectorPanel
+              selection={textSelection}
+              draft={textDraft}
+              onDraftChange={handleTextDraftChange}
+              onClose={handleCancelTextEdit}
+            />
+          )}
 
           {interactionMode === 'ai-inspect' && (
             <MessagePanel
@@ -1100,9 +1130,7 @@ export function SessionDetailPage(): React.JSX.Element {
                   <h3 className="text-base font-semibold text-[#2f3a2a]">
                     {t('sessionDetail.historyTitle')}
                   </h3>
-                  <p className="mt-1 text-xs text-[#8a9a7b]">
-                    {t('sessionDetail.historyRecent')}
-                  </p>
+                  <p className="mt-1 text-xs text-[#8a9a7b]">{t('sessionDetail.historyRecent')}</p>
                 </div>
                 <button
                   type="button"
@@ -1196,9 +1224,7 @@ export function SessionDetailPage(): React.JSX.Element {
               <h3 className="mb-3 text-base font-semibold text-[#2f3a2a]">
                 {t('sessionDetail.addPage')}
               </h3>
-              <p className="mb-3 text-xs text-[#8a9a7b]">
-                {t('sessionDetail.addPageHint')}
-              </p>
+              <p className="mb-3 text-xs text-[#8a9a7b]">{t('sessionDetail.addPageHint')}</p>
               <textarea
                 value={addPageInput}
                 onChange={(e) => setAddPageInput(e.target.value)}
@@ -1332,10 +1358,14 @@ export function SessionDetailPage(): React.JSX.Element {
               <Button
                 type="button"
                 size="sm"
-                onClick={() => rollbackConfirmVersion && void handleRollbackHistory(rollbackConfirmVersion)}
+                onClick={() =>
+                  rollbackConfirmVersion && void handleRollbackHistory(rollbackConfirmVersion)
+                }
                 disabled={Boolean(historyRollbackId)}
               >
-                {historyRollbackId ? t('sessionDetail.historyRollingBack') : t('sessionDetail.historyRollback')}
+                {historyRollbackId
+                  ? t('sessionDetail.historyRollingBack')
+                  : t('sessionDetail.historyRollback')}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -3,7 +3,6 @@ import type { UploadedAsset } from '@shared/generation.js'
 
 export type SessionDetailChatType = 'main' | 'page'
 export type InteractionMode = 'preview' | 'ai-inspect' | 'edit'
-export type EditSubMode = 'layout' | 'text'
 
 interface SessionDetailUiStore {
   input: string
@@ -15,7 +14,6 @@ interface SessionDetailUiStore {
   isExportingPng: boolean
   isExportingPptx: boolean
   interactionMode: InteractionMode
-  editSubMode: EditSubMode
   thumbnailVersions: Record<string, number>
   selectedSelector: string | null
   selectorLabel: string
@@ -38,7 +36,6 @@ interface SessionDetailUiStore {
   setIsExportingPng: (isExporting: boolean) => void
   setIsExportingPptx: (isExporting: boolean) => void
   setInteractionMode: (mode: InteractionMode) => void
-  setEditSubMode: (sub: EditSubMode) => void
   setSelectedElement: (
     selector: string,
     label: string,
@@ -71,7 +68,6 @@ export const useSessionDetailUiStore = create<SessionDetailUiStore>((set) => ({
   isExportingPng: false,
   isExportingPptx: false,
   interactionMode: 'preview' as InteractionMode,
-  editSubMode: 'layout' as EditSubMode,
   thumbnailVersions: {},
   selectedSelector: null,
   selectorLabel: '',
@@ -97,16 +93,16 @@ export const useSessionDetailUiStore = create<SessionDetailUiStore>((set) => ({
   setIsExportingPng: (isExportingPng) => set({ isExportingPng }),
   setIsExportingPptx: (isExportingPptx) => set({ isExportingPptx }),
   setInteractionMode: (interactionMode) => set({ interactionMode }),
-  setEditSubMode: (editSubMode) => set({ editSubMode }),
+  // Fix: only reset to preview when currently in preview mode.
+  // In edit/ai-inspect mode, selecting an element should NOT change the mode.
   setSelectedElement: (selectedSelector, selectorLabel, elementTag = '', elementText = '') =>
     set((state) => ({
       selectedSelector,
       selectorLabel,
       elementTag,
       elementText,
-      interactionMode: state.interactionMode === 'ai-inspect'
-        ? 'ai-inspect'
-        : ('preview' as InteractionMode)
+      interactionMode:
+        state.interactionMode === 'preview' ? ('preview' as InteractionMode) : state.interactionMode
     })),
   clearSelectedElement: () =>
     set({
@@ -145,7 +141,6 @@ export const useSessionDetailUiStore = create<SessionDetailUiStore>((set) => ({
   resetForPageChange: () =>
     set({
       interactionMode: 'preview' as InteractionMode,
-      editSubMode: 'layout' as EditSubMode,
       selectedSelector: null,
       selectorLabel: '',
       elementTag: '',
@@ -157,7 +152,6 @@ export const useSessionDetailUiStore = create<SessionDetailUiStore>((set) => ({
       chatType: 'page',
       selectedPageId: null,
       interactionMode: 'preview' as InteractionMode,
-      editSubMode: 'layout' as EditSubMode,
       selectedSelector: null,
       selectorLabel: '',
       elementTag: '',

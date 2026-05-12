@@ -1,4 +1,4 @@
-import { useEffect, useState, forwardRef } from 'react'
+import { useEffect, forwardRef } from 'react'
 import { Check, Loader2, Pencil, Sparkles } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { useSessionDetailUiStore } from '@renderer/store/sessionDetailStore'
@@ -6,10 +6,7 @@ import { useToastStore } from '@renderer/store/toastStore'
 import { Button } from '../ui/Button'
 import { PreviewIframe, type PreviewIframeHandle } from '../preview/PreviewIframe'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/Tooltip'
-import type { DragEditorMovePayload } from '../preview/drag-editor-script'
-import type { TextEditorSelectionPayload } from '../preview/text-editor-types'
-import { ElementInspectorPanel, type ElementEditDraft } from './ElementInspectorPanel'
-import type { InspectorPanelPosition } from './ElementInspectorPanel'
+import type { EditModeMovePayload, EditSelectionPayload } from '../preview/edit-mode-script'
 import type { SessionPreviewPage } from './types'
 import { useT } from '@renderer/i18n'
 
@@ -21,13 +18,9 @@ export const PreviewStage = forwardRef<
     isGenerating: boolean
     progressLabel?: string
     previewRefreshKey?: number
-    pendingEditCount?: number
     isSavingEdits?: boolean
-    textSelection: TextEditorSelectionPayload | null
-    textDraft: ElementEditDraft
-    onTextDraftChange: (draft: ElementEditDraft) => void
-    onElementMoved: (payload: DragEditorMovePayload) => void
-    onTextSelected: (payload: TextEditorSelectionPayload) => void
+    onElementMoved: (payload: EditModeMovePayload) => void
+    onElementSelected: (payload: EditSelectionPayload) => void
     onCancelTextEdit: () => void
     onSaveAllEdits: () => void
     onDiscardAllEdits: () => void
@@ -39,13 +32,9 @@ export const PreviewStage = forwardRef<
     isGenerating,
     progressLabel,
     previewRefreshKey = 0,
-    pendingEditCount = 0,
     isSavingEdits = false,
-    textSelection,
-    textDraft,
-    onTextDraftChange,
     onElementMoved,
-    onTextSelected,
+    onElementSelected,
     onCancelTextEdit,
     onSaveAllEdits,
     onDiscardAllEdits
@@ -59,8 +48,6 @@ export const PreviewStage = forwardRef<
   const setInteractionMode = useSessionDetailUiStore((state) => state.setInteractionMode)
   const setSelectedElement = useSessionDetailUiStore((state) => state.setSelectedElement)
   const clearSelectedElement = useSessionDetailUiStore((state) => state.clearSelectedElement)
-  const [inspectorPanelPosition, setInspectorPanelPosition] =
-    useState<InspectorPanelPosition | null>(null)
   const displayTitle = sessionTitle || t('sessionDetail.sessionFallback')
 
   const isEditing = interactionMode === 'edit'
@@ -91,11 +78,11 @@ export const PreviewStage = forwardRef<
           <div className="relative h-full overflow-hidden rounded-[1.55rem] bg-[#f5f1e8] p-2 shadow-[0_14px_32px_rgba(93,107,77,0.14)]">
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="absolute left-5 top-5 z-20 max-w-[460px] truncate border-l-2 border-[#7f9468] bg-[#fffaf1]/68 px-3 py-1.5 text-sm font-medium leading-5 text-[#3e4a32] shadow-[0_8px_22px_rgba(74,59,42,0.08)] backdrop-blur-md">
+                <div className="absolute bottom-5 left-5 z-20 max-w-[460px] truncate border-l-2 border-[#7f9468] bg-[#fffaf1]/68 px-3 py-1.5 text-sm font-medium leading-5 text-[#3e4a32] shadow-[0_8px_22px_rgba(74,59,42,0.08)] backdrop-blur-md">
                   {displayTitle}
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">
+              <TooltipContent side="top" align="start">
                 {displayTitle}
               </TooltipContent>
             </Tooltip>
@@ -108,11 +95,10 @@ export const PreviewStage = forwardRef<
               title={`preview-page-${selectedPage.pageNumber}`}
               inspectable
               inspecting={isInspecting}
-              dragEditing={isEditing}
-              textEditing={isEditing}
+              editMode={isEditing}
               onSelectorSelected={setSelectedElement}
               onElementMoved={onElementMoved}
-              onTextSelected={onTextSelected}
+              onElementSelected={onElementSelected}
               onInspectExit={() => {
                 setInteractionMode('preview')
                 onCancelTextEdit()
@@ -164,7 +150,6 @@ export const PreviewStage = forwardRef<
                 )}
                 {interactionMode === 'edit' && (
                   <div className="flex items-center gap-1.5">
-                    {pendingEditCount > 0 && (
                       <Button
                         type="button"
                         variant="default"
@@ -180,7 +165,6 @@ export const PreviewStage = forwardRef<
                         )}
                         {t('sessionDetail.exitAndSave')}
                       </Button>
-                    )}
                     <Button
                       type="button"
                       variant="outline"
@@ -211,16 +195,6 @@ export const PreviewStage = forwardRef<
                   </div>
                 )}
               </div>
-            )}
-            {isEditing && textSelection && (
-              <ElementInspectorPanel
-                selection={textSelection}
-                draft={textDraft}
-                position={inspectorPanelPosition}
-                onDraftChange={onTextDraftChange}
-                onClose={onCancelTextEdit}
-                onPositionChange={setInspectorPanelPosition}
-              />
             )}
             {selectedPage.status === 'failed' && (
               <div className="absolute bottom-5 left-5 z-20 max-w-[520px] rounded-[1rem] bg-[#fff4ef]/92 px-3 py-2 text-xs text-[#8e5a53] shadow-[0_10px_24px_rgba(142,90,83,0.12)] backdrop-blur-sm">

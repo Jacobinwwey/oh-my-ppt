@@ -1,6 +1,29 @@
-export const DRAG_EDITOR_CONSOLE_PREFIX = '__PPT_DRAG_EDITOR__:'
+export const EDIT_MODE_CONSOLE_PREFIX = '__PPT_EDIT_MODE__:'
 
-export interface DragEditorMovePayload {
+export interface EditSelectionPayload {
+  selector: string
+  label: string
+  elementTag: string
+  elementText: string
+  isText: boolean
+  text: string
+  style: {
+    color?: string
+    fontSize?: string
+    fontWeight?: string
+    lineHeight?: string
+    textAlign?: string
+    backgroundColor?: string
+  }
+  bounds?: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+}
+
+export interface EditModeMovePayload {
   selector: string
   label: string
   elementTag: string
@@ -18,28 +41,21 @@ export interface DragEditorMovePayload {
   }>
 }
 
-export function buildDragEditorInjectScript(): string {
+export function buildEditModeInjectScript(): string {
   return `
 (() => {
-  const STATE_KEY = "__pptDragEditorState";
-  const STYLE_ID = "ppt-drag-editor-style";
-  const OVERLAY_ID = "ppt-drag-editor-resize-overlay";
-  const HOVER_CLASS = "ppt-drag-editor-hover";
-  const ACTIVE_CLASS = "ppt-drag-editor-active";
-  const HANDLE_CLASS = "ppt-drag-editor-resize-handle";
-  const LOG_PREFIX = "${DRAG_EDITOR_CONSOLE_PREFIX}";
-  const uiMessage = (zh, en) => {
-    try {
-      return window.localStorage.getItem("oh-my-ppt:lang") === "en" ? en : zh;
-    } catch (_error) {
-      return zh;
-    }
-  };
+  const STATE_KEY = "__pptEditModeState";
+  const STYLE_ID = "ppt-edit-mode-style";
+  const OVERLAY_ID = "ppt-edit-mode-resize-overlay";
+  const HOVER_CLASS = "ppt-edit-mode-hover";
+  const SELECTED_CLASS = "ppt-edit-mode-selected";
+  const HANDLE_CLASS = "ppt-edit-mode-resize-handle";
+  const LOG_PREFIX = "${EDIT_MODE_CONSOLE_PREFIX}";
   const SCAFFOLD_BLOCK_IDS = new Set(["content"]);
   const TEXT_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "span", "strong", "em", "b", "i", "small", "label", "button", "td", "th", "blockquote", "figcaption"]);
   const BLOCKED_TEXT_TAGS = new Set(["script", "style", "svg", "canvas", "img", "video", "audio", "input", "textarea", "select", "option"]);
 
-  const normalizeText = (value) => String(value || "").replace(/\\s+/g, " ").trim();
+  const normalizeText = (value) => String(value || "").replace(/\\\\s+/g, " ").trim();
 
   const hasOnlyEditableTextChildren = (element) => {
     return Array.from(element.children || []).every((child) => {
@@ -59,10 +75,6 @@ export function buildDragEditorInjectScript(): string {
     if (!text || text.length > 500) return false;
     return true;
   };
-
-  // Deferred drag state for text elements: don't start drag on pointerdown,
-  // only start when pointer moves beyond threshold. This preserves dblclick events.
-  let textPendingState = null;
 
   const existing = window[STATE_KEY];
   if (existing && existing.active) return;
@@ -92,7 +104,7 @@ export function buildDragEditorInjectScript(): string {
 
   const getClassList = (el) =>
     Array.from(el.classList || [])
-      .filter((item) => item && !item.startsWith("ppt-drag-editor-") && !item.includes(":"))
+      .filter((item) => item && !item.startsWith("ppt-edit-mode-") && !item.includes(":"))
       .slice(0, 3);
 
   const buildSegment = (el) => {
@@ -395,14 +407,14 @@ export function buildDragEditorInjectScript(): string {
       .\${HOVER_CLASS} * {
         cursor: move !important;
       }
-      .\${ACTIVE_CLASS} {
+      .\${SELECTED_CLASS} {
         outline: 2px solid #5d6b4d !important;
         outline-offset: 3px !important;
         box-shadow: 0 0 0 4px rgba(93,107,77,0.14) !important;
         cursor: move !important;
         user-select: none !important;
       }
-      .\${ACTIVE_CLASS} * {
+      .\${SELECTED_CLASS} * {
         cursor: move !important;
       }
       #\${OVERLAY_ID} {
@@ -475,17 +487,27 @@ export function buildDragEditorInjectScript(): string {
     document.head.appendChild(style);
   };
 
+  // --- State ---
   let hoverElement = null;
-  let activeElement = null;
+  let selectedElement = null;
   let dragState = null;
   let resizeState = null;
   let pendingAnchorState = null;
+  let dragPendingState = null;
   let pendingClientX = 0;
   let pendingClientY = 0;
   let frameId = 0;
   let overlayElement = null;
   let overlayResizeObserver = null;
-  const resolveDragAnchor = window.__pptResolveDragAnchor = function(result) {
+
+  // Double-click detection
+  const DBLCLICK_MS = 400;
+  let lastClickTime = 0;
+  let lastClickTarget = null;
+  let lastClickSelector = null;
+
+  // Anchor resolution — host resolves selector and calls this
+  window.__pptResolveEditModeAnchor = function(result) {
     if (!pendingAnchorState) return;
     const stableSelector = (result && result.selector) || pendingAnchorState.tempSelector;
     if (pendingAnchorState.mode === 'drag') {
@@ -498,8 +520,8 @@ export function buildDragEditorInjectScript(): string {
         baseX: pendingAnchorState.baseX,
         baseY: pendingAnchorState.baseY,
       };
-      setActive(pendingAnchorState.target);
-    } else {
+      setSelected(pendingAnchorState.target);
+    } else if (pendingAnchorState.mode === 'resize') {
       resizeState = {
         target: pendingAnchorState.target,
         selector: stableSelector,
@@ -529,11 +551,12 @@ export function buildDragEditorInjectScript(): string {
   }
   ensureStyle();
 
+  // --- Visual helpers ---
   const setHover = (target) => {
     if (hoverElement === target) return;
-    if (hoverElement && hoverElement !== activeElement) hoverElement.classList.remove(HOVER_CLASS);
+    if (hoverElement && hoverElement !== selectedElement) hoverElement.classList.remove(HOVER_CLASS);
     hoverElement = target;
-    if (hoverElement && hoverElement !== activeElement) hoverElement.classList.add(HOVER_CLASS);
+    if (hoverElement && hoverElement !== selectedElement) hoverElement.classList.add(HOVER_CLASS);
   };
 
   const ensureOverlay = () => {
@@ -552,35 +575,33 @@ export function buildDragEditorInjectScript(): string {
   };
 
   const updateOverlay = () => {
-    if (!activeElement) {
+    if (!selectedElement) {
       if (overlayElement) overlayElement.remove();
       overlayElement = null;
       return;
     }
     const overlay = ensureOverlay();
-    const rect = activeElement.getBoundingClientRect();
+    const rect = selectedElement.getBoundingClientRect();
     overlay.style.left = rect.left.toFixed(1) + "px";
     overlay.style.top = rect.top.toFixed(1) + "px";
     overlay.style.width = Math.max(1, rect.width).toFixed(1) + "px";
     overlay.style.height = Math.max(1, rect.height).toFixed(1) + "px";
   };
 
-  const setActive = (target) => {
-    if (activeElement === target) return;
-    if (activeElement) activeElement.classList.remove(ACTIVE_CLASS);
-    // Disconnect previous observer
+  const setSelected = (target) => {
+    if (selectedElement === target) return;
+    if (selectedElement) selectedElement.classList.remove(SELECTED_CLASS);
     if (overlayResizeObserver) {
       overlayResizeObserver.disconnect();
       overlayResizeObserver = null;
     }
-    activeElement = target;
-    if (activeElement) {
-      activeElement.classList.remove(HOVER_CLASS);
-      activeElement.classList.add(ACTIVE_CLASS);
+    selectedElement = target;
+    if (selectedElement) {
+      selectedElement.classList.remove(HOVER_CLASS);
+      selectedElement.classList.add(SELECTED_CLASS);
       updateOverlay();
-      // Watch activeElement for size changes (e.g. text content edits)
       overlayResizeObserver = new ResizeObserver(() => updateOverlay());
-      overlayResizeObserver.observe(activeElement);
+      overlayResizeObserver.observe(selectedElement);
     } else {
       updateOverlay();
     }
@@ -588,9 +609,9 @@ export function buildDragEditorInjectScript(): string {
 
   const clearVisualState = () => {
     if (hoverElement) hoverElement.classList.remove(HOVER_CLASS);
-    if (activeElement) activeElement.classList.remove(ACTIVE_CLASS);
+    if (selectedElement) selectedElement.classList.remove(SELECTED_CLASS);
     hoverElement = null;
-    activeElement = null;
+    selectedElement = null;
     if (overlayResizeObserver) {
       overlayResizeObserver.disconnect();
       overlayResizeObserver = null;
@@ -599,6 +620,41 @@ export function buildDragEditorInjectScript(): string {
     overlayElement = null;
   };
 
+  // --- Emit helpers ---
+  const emitSelected = (target, selector) => {
+    const elementTag = target.tagName ? target.tagName.toLowerCase() : "";
+    const isText = isEditableTextElement(target);
+    const rawText = isText ? normalizeText(target.textContent) : "";
+    const elementText = rawText.length > 80 ? rawText.slice(0, 80) + "\\u2026" : rawText;
+    const computed = isText ? window.getComputedStyle(target) : null;
+    const rect = target.getBoundingClientRect();
+
+    console.log(LOG_PREFIX + JSON.stringify({
+      type: "selected",
+      selector,
+      label: selector,
+      elementTag,
+      elementText,
+      isText,
+      text: rawText,
+      style: computed ? {
+        color: computed.color || "",
+        fontSize: computed.fontSize || "",
+        fontWeight: computed.fontWeight || "",
+        lineHeight: computed.lineHeight || "",
+        textAlign: computed.textAlign || "",
+        backgroundColor: computed.backgroundColor || ""
+      } : {},
+      bounds: {
+        x: Math.round(rect.left * 10) / 10,
+        y: Math.round(rect.top * 10) / 10,
+        width: Math.round(rect.width * 10) / 10,
+        height: Math.round(rect.height * 10) / 10
+      }
+    }));
+  };
+
+  // --- Drag/Resize frame callbacks ---
   const applyPendingDrag = () => {
     frameId = 0;
     if (!dragState) return;
@@ -647,6 +703,7 @@ export function buildDragEditorInjectScript(): string {
     updateOverlay();
   };
 
+  // --- Pointer event handlers ---
   const onPointerMove = (event) => {
     if (pendingAnchorState) {
       pendingClientX = event.clientX;
@@ -656,21 +713,21 @@ export function buildDragEditorInjectScript(): string {
       return;
     }
 
-    // Deferred text drag: only activate when pointer moves beyond threshold
-    if (textPendingState) {
-      const dx = event.clientX - textPendingState.startClientX;
-      const dy = event.clientY - textPendingState.startClientY;
+    // Deferred drag: only activate when pointer moves beyond threshold
+    if (dragPendingState) {
+      const dx = event.clientX - dragPendingState.startClientX;
+      const dy = event.clientY - dragPendingState.startClientY;
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
       // Threshold exceeded — convert to real drag
-      const s = textPendingState;
-      textPendingState = null;
+      const s = dragPendingState;
+      dragPendingState = null;
       ensureDragTranslate(s.target);
       if (rootHost && rootHost.style) rootHost.style.cursor = "move";
       if (cursorHost && cursorHost.style) cursorHost.style.cursor = "move";
       pendingClientX = event.clientX;
       pendingClientY = event.clientY;
       if (s.selector.indexOf('[data-block-id=') !== -1) {
-        setActive(s.target);
+        setSelected(s.target);
         dragState = {
           target: s.target,
           selector: s.selector,
@@ -730,20 +787,20 @@ export function buildDragEditorInjectScript(): string {
   const onPointerDown = (event) => {
     if (event.button !== 0) return;
     const handle = event.target instanceof Element ? event.target.closest("." + HANDLE_CLASS) : null;
-    if (handle && activeElement) {
-      const selector = buildStableSelector(activeElement);
+    if (handle && selectedElement) {
+      const selector = buildStableSelector(selectedElement);
       if (!selector) return;
-      const computed = getComputedStyle(activeElement);
-      const rect = activeElement.getBoundingClientRect();
-      const baseX = parsePx(activeElement.style.getPropertyValue("--ppt-drag-x") || computed.getPropertyValue("--ppt-drag-x"));
-      const baseY = parsePx(activeElement.style.getPropertyValue("--ppt-drag-y") || computed.getPropertyValue("--ppt-drag-y"));
-      ensureDragTranslate(activeElement);
+      const computed = getComputedStyle(selectedElement);
+      const rect = selectedElement.getBoundingClientRect();
+      const baseX = parsePx(selectedElement.style.getPropertyValue("--ppt-drag-x") || computed.getPropertyValue("--ppt-drag-x"));
+      const baseY = parsePx(selectedElement.style.getPropertyValue("--ppt-drag-y") || computed.getPropertyValue("--ppt-drag-y"));
+      ensureDragTranslate(selectedElement);
       pendingClientX = event.clientX;
       pendingClientY = event.clientY;
-      const elementTag = activeElement.tagName ? activeElement.tagName.toLowerCase() : "";
+      const elementTag = selectedElement.tagName ? selectedElement.tagName.toLowerCase() : "";
       if (selector.indexOf('[data-block-id=') !== -1) {
         resizeState = {
-          target: activeElement,
+          target: selectedElement,
           selector,
           elementTag,
           dir: handle.getAttribute("data-dir") || "se",
@@ -753,12 +810,12 @@ export function buildDragEditorInjectScript(): string {
           baseY,
           baseWidth: Math.max(1, rect.width),
           baseHeight: Math.max(1, rect.height),
-          childItems: collectResizableChildren(activeElement),
+          childItems: collectResizableChildren(selectedElement),
         };
       } else {
         pendingAnchorState = {
           mode: 'resize',
-          target: activeElement,
+          target: selectedElement,
           tempSelector: selector,
           elementTag,
           dir: handle.getAttribute("data-dir") || "se",
@@ -768,7 +825,7 @@ export function buildDragEditorInjectScript(): string {
           baseY,
           baseWidth: Math.max(1, rect.width),
           baseHeight: Math.max(1, rect.height),
-          childItems: collectResizableChildren(activeElement),
+          childItems: collectResizableChildren(selectedElement),
         };
         console.log(LOG_PREFIX + JSON.stringify({ type: "pre-anchor", selector, elementTag }));
       }
@@ -784,85 +841,51 @@ export function buildDragEditorInjectScript(): string {
     if (!target) return;
 
     const selector = buildStableSelector(target);
-    if (!selector) {
-      console.log(LOG_PREFIX + JSON.stringify({
-        type: "invalid",
-        message: uiMessage("请拖拽页面内可见元素", "Drag a visible element inside the page"),
-      }));
-      return;
-    }
+    if (!selector) return;
 
-    // Text elements use deferred drag: don't preventDefault / setPointerCapture
-    // so that click/dblclick events can fire for the text editor.
-    // Drag only activates on significant pointer movement.
-    if (isEditableTextElement(target)) {
-      const computed = getComputedStyle(target);
-      const baseX = parsePx(target.style.getPropertyValue("--ppt-drag-x") || computed.getPropertyValue("--ppt-drag-x"));
-      const baseY = parsePx(target.style.getPropertyValue("--ppt-drag-y") || computed.getPropertyValue("--ppt-drag-y"));
-      const elementTag = target.tagName ? target.tagName.toLowerCase() : "";
-      textPendingState = {
-        target,
-        selector,
-        elementTag,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        baseX,
-        baseY,
-      };
-      return;
-    }
-    if (!selector) {
-      console.log(LOG_PREFIX + JSON.stringify({
-        type: "invalid",
-        message: uiMessage("请拖拽页面内可见元素", "Drag a visible element inside the page"),
-      }));
-      return;
-    }
-
+    // All elements: deferred drag. Record start position.
+    // < 3px on pointerup = click (emit selected). >= 3px on pointermove = drag.
     const computed = getComputedStyle(target);
     const baseX = parsePx(target.style.getPropertyValue("--ppt-drag-x") || computed.getPropertyValue("--ppt-drag-x"));
     const baseY = parsePx(target.style.getPropertyValue("--ppt-drag-y") || computed.getPropertyValue("--ppt-drag-y"));
-    ensureDragTranslate(target);
-    if (rootHost && rootHost.style) rootHost.style.cursor = "move";
-    if (cursorHost && cursorHost.style) cursorHost.style.cursor = "move";
-    pendingClientX = event.clientX;
-    pendingClientY = event.clientY;
     const elementTag = target.tagName ? target.tagName.toLowerCase() : "";
-    if (selector.indexOf('[data-block-id=') !== -1) {
-      setActive(target);
-      dragState = {
-        target,
-        selector,
-        elementTag,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        baseX,
-        baseY,
-      };
-    } else {
-      pendingAnchorState = {
-        mode: 'drag',
-        target,
-        tempSelector: selector,
-        elementTag,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        baseX,
-        baseY,
-      };
-      console.log(LOG_PREFIX + JSON.stringify({ type: "pre-anchor", selector, elementTag }));
-    }
-    try {
-      target.setPointerCapture?.(event.pointerId);
-    } catch (_error) {}
+    dragPendingState = {
+      target,
+      selector,
+      elementTag,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      baseX,
+      baseY,
+    };
     event.preventDefault();
     event.stopPropagation();
   };
 
-  const finishDrag = (event) => {
-    // Clear deferred text drag on pointerup — no movement means it was just a click/dblclick
-    if (textPendingState) {
-      textPendingState = null;
+  const onPointerUp = (event) => {
+    // Click (< 3px movement): select visually, double-click opens editing panel
+    if (dragPendingState) {
+      const s = dragPendingState;
+      dragPendingState = null;
+      const now = Date.now();
+      // Always select on click (show overlay + handles for resize)
+      setSelected(s.target);
+      if (
+        s.target === lastClickTarget &&
+        s.selector === lastClickSelector &&
+        now - lastClickTime < DBLCLICK_MS
+      ) {
+        // Double-click: also emit to host (opens editing panel)
+        emitSelected(s.target, s.selector);
+        lastClickTime = 0;
+        lastClickTarget = null;
+        lastClickSelector = null;
+      } else {
+        // Single click: visual select only, record for double-click detection
+        lastClickTime = now;
+        lastClickTarget = s.target;
+        lastClickSelector = s.selector;
+      }
       return;
     }
 
@@ -942,7 +965,6 @@ export function buildDragEditorInjectScript(): string {
     try {
       target.releasePointerCapture?.(event.pointerId);
     } catch (_error) {}
-    target.classList.remove(ACTIVE_CLASS);
     target.style.willChange = "";
     updateOverlay();
     if (rootHost && rootHost.style) rootHost.style.cursor = "move";
@@ -973,11 +995,43 @@ export function buildDragEditorInjectScript(): string {
     }
   };
 
+  // --- Live update API (called by host via executeJavaScript) ---
+  window.__pptEditModeLiveUpdate = (selector, patch) => {
+    try {
+      const el = document.querySelector(selector);
+      if (!el) return;
+      if (typeof patch.text === "string") {
+        el.textContent = patch.text;
+      }
+      if (patch.style) {
+        if (patch.style.color) el.style.setProperty("color", patch.style.color, "important");
+        if (patch.style.fontSize) el.style.setProperty("font-size", patch.style.fontSize, "important");
+        if (patch.style.fontWeight) el.style.setProperty("font-weight", patch.style.fontWeight, "important");
+      }
+    } catch (_error) {}
+  };
+
+  window.__pptEditModeClearSelection = () => {
+    if (selectedElement) {
+      selectedElement.classList.remove(SELECTED_CLASS);
+      selectedElement = null;
+    }
+    if (overlayResizeObserver) {
+      overlayResizeObserver.disconnect();
+      overlayResizeObserver = null;
+    }
+    if (overlayElement) {
+      overlayElement.remove();
+      overlayElement = null;
+    }
+  };
+
+  // --- Cleanup ---
   const cleanup = () => {
     document.removeEventListener("pointermove", onPointerMove, true);
     document.removeEventListener("pointerdown", onPointerDown, true);
-    document.removeEventListener("pointerup", finishDrag, true);
-    document.removeEventListener("pointercancel", finishDrag, true);
+    document.removeEventListener("pointerup", onPointerUp, true);
+    document.removeEventListener("pointercancel", onPointerUp, true);
     document.removeEventListener("keydown", onKeyDown, true);
     clearVisualState();
     if (overlayResizeObserver) {
@@ -992,8 +1046,10 @@ export function buildDragEditorInjectScript(): string {
     overlayElement = null;
     resizeState = null;
     pendingAnchorState = null;
-    textPendingState = null;
-    delete window.__pptResolveDragAnchor;
+    dragPendingState = null;
+    delete window.__pptResolveEditModeAnchor;
+    delete window.__pptEditModeLiveUpdate;
+    delete window.__pptEditModeClearSelection;
     const style = document.getElementById(STYLE_ID);
     if (style) style.remove();
     if (cursorHost && cursorHost.style) {
@@ -1007,19 +1063,19 @@ export function buildDragEditorInjectScript(): string {
 
   document.addEventListener("pointermove", onPointerMove, true);
   document.addEventListener("pointerdown", onPointerDown, true);
-  document.addEventListener("pointerup", finishDrag, true);
-  document.addEventListener("pointercancel", finishDrag, true);
+  document.addEventListener("pointerup", onPointerUp, true);
+  document.addEventListener("pointercancel", onPointerUp, true);
   document.addEventListener("keydown", onKeyDown, true);
 
   window[STATE_KEY] = { active: true, cleanup };
 })();
-  `
+`
 }
 
-export function buildDragEditorCleanupScript(): string {
+export function buildEditModeCleanupScript(): string {
   return `
 (() => {
-  const STATE_KEY = "__pptDragEditorState";
+  const STATE_KEY = "__pptEditModeState";
   const state = window[STATE_KEY];
   if (state && typeof state.cleanup === "function") {
     state.cleanup();
@@ -1027,5 +1083,5 @@ export function buildDragEditorCleanupScript(): string {
     delete window[STATE_KEY];
   }
 })();
-  `
+`
 }
