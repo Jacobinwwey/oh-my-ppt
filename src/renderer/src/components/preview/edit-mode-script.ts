@@ -41,7 +41,7 @@ export interface EditModeMovePayload {
   }>
 }
 
-export function buildEditModeInjectScript(): string {
+export function buildEditModeInjectScript(previewScale = 1): string {
   return `
 (() => {
   const STATE_KEY = "__pptEditModeState";
@@ -50,12 +50,19 @@ export function buildEditModeInjectScript(): string {
   const HOVER_CLASS = "ppt-edit-mode-hover";
   const SELECTED_CLASS = "ppt-edit-mode-selected";
   const HANDLE_CLASS = "ppt-edit-mode-resize-handle";
+  const INITIAL_PREVIEW_SCALE = ${JSON.stringify(
+    Number.isFinite(previewScale) && previewScale > 0 ? Number(previewScale.toFixed(4)) : 1
+  )};
   const LOG_PREFIX = "${EDIT_MODE_CONSOLE_PREFIX}";
   const SCAFFOLD_BLOCK_IDS = new Set(["content"]);
   const TEXT_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "span", "strong", "em", "b", "i", "small", "label", "button", "td", "th", "blockquote", "figcaption"]);
   const BLOCKED_TEXT_TAGS = new Set(["script", "style", "svg", "canvas", "img", "video", "audio", "input", "textarea", "select", "option"]);
 
   const normalizeText = (value) => String(value || "").replace(/\\\\s+/g, " ").trim();
+  const normalizeScale = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+  };
 
   const hasOnlyEditableTextChildren = (element) => {
     return Array.from(element.children || []).every((child) => {
@@ -77,7 +84,15 @@ export function buildEditModeInjectScript(): string {
   };
 
   const existing = window[STATE_KEY];
-  if (existing && existing.active) return;
+  if (existing && existing.active) {
+    try {
+      existing.setPreviewScale?.(INITIAL_PREVIEW_SCALE);
+      window.__pptEditModeSetPreviewScale?.(INITIAL_PREVIEW_SCALE);
+    } catch (_error) {}
+    return;
+  }
+
+  let previewScaleValue = normalizeScale(INITIAL_PREVIEW_SCALE);
 
   const cssEscape = (value) => {
     if (window.CSS && typeof window.CSS.escape === "function") {
@@ -234,6 +249,52 @@ export function buildEditModeInjectScript(): string {
 
   const getContentRoot = (element) => {
     return element && element.closest('[data-block-id="content"], [data-role="content"]');
+  };
+
+  const getElementRenderScale = (element) => {
+    if (!(element instanceof HTMLElement)) {
+      return { x: 1, y: 1 };
+    }
+
+    const scope = element.closest(".ppt-page-fit-scope");
+    if (scope instanceof HTMLElement) {
+      const scopeRect = scope.getBoundingClientRect();
+      const scopeWidth = scope.offsetWidth || scope.clientWidth;
+      const scopeHeight = scope.offsetHeight || scope.clientHeight;
+      return {
+        x: Math.max(0.01, scopeWidth > 0 ? scopeRect.width / scopeWidth : 1),
+        y: Math.max(0.01, scopeHeight > 0 ? scopeRect.height / scopeHeight : 1),
+      };
+    }
+
+    const rect = element.getBoundingClientRect();
+    const width = element.offsetWidth || element.clientWidth;
+    const height = element.offsetHeight || element.clientHeight;
+    return {
+      x: Math.max(0.01, width > 0 ? rect.width / width : 1),
+      y: Math.max(0.01, height > 0 ? rect.height / height : 1),
+    };
+  };
+
+  const getPointerScale = (element) => {
+    const renderScale = getElementRenderScale(element);
+    // NOTE: Do NOT multiply by the external webview previewScale here.
+    // The browser already maps pointer coordinates to the iframe's own
+    // coordinate system when the webview element has a CSS transform,
+    // so including previewScale would double-compensate and make the
+    // element move 1/previewScale times too far.
+    return {
+      x: Math.max(0.01, renderScale.x),
+      y: Math.max(0.01, renderScale.y),
+    };
+  };
+
+  const getPointerDelta = (element, currentClientX, currentClientY, startClientX, startClientY) => {
+    const scale = getPointerScale(element);
+    return {
+      x: (currentClientX - startClientX) / scale.x,
+      y: (currentClientY - startClientY) / scale.y,
+    };
   };
 
   const isUsableElementTarget = (element) => {
@@ -413,6 +474,7 @@ export function buildEditModeInjectScript(): string {
         box-shadow: 0 0 0 4px rgba(93,107,77,0.14) !important;
         cursor: move !important;
         user-select: none !important;
+        transition: none !important;
       }
       .\${SELECTED_CLASS} * {
         cursor: move !important;
@@ -658,8 +720,15 @@ export function buildEditModeInjectScript(): string {
   const applyPendingDrag = () => {
     frameId = 0;
     if (!dragState) return;
-    const nextX = dragState.baseX + pendingClientX - dragState.startClientX;
-    const nextY = dragState.baseY + pendingClientY - dragState.startClientY;
+    const delta = getPointerDelta(
+      dragState.target,
+      pendingClientX,
+      pendingClientY,
+      dragState.startClientX,
+      dragState.startClientY
+    );
+    const nextX = dragState.baseX + delta.x;
+    const nextY = dragState.baseY + delta.y;
     dragState.target.style.setProperty("--ppt-drag-x", nextX.toFixed(1) + "px");
     dragState.target.style.setProperty("--ppt-drag-y", nextY.toFixed(1) + "px");
     ensureDragTranslate(dragState.target);
@@ -669,8 +738,15 @@ export function buildEditModeInjectScript(): string {
   const applyPendingResize = () => {
     frameId = 0;
     if (!resizeState) return;
-    const dx = pendingClientX - resizeState.startClientX;
-    const dy = pendingClientY - resizeState.startClientY;
+    const delta = getPointerDelta(
+      resizeState.target,
+      pendingClientX,
+      pendingClientY,
+      resizeState.startClientX,
+      resizeState.startClientY
+    );
+    const dx = delta.x;
+    const dy = delta.y;
     const dir = resizeState.dir;
     const affectsWidth = dir.includes("w") || dir.includes("e");
     const affectsHeight = dir.includes("n") || dir.includes("s");
@@ -953,10 +1029,12 @@ export function buildEditModeInjectScript(): string {
     }
 
     if (!dragState) return;
-    if (frameId) {
-      cancelAnimationFrame(frameId);
-      applyPendingDrag();
-    }
+    if (frameId) cancelAnimationFrame(frameId);
+    // Always apply the latest pointer position — the last rAF may have
+    // already fired (frameId === 0) while the pointer kept moving.
+    pendingClientX = event.clientX;
+    pendingClientY = event.clientY;
+    applyPendingDrag();
     const target = dragState.target;
     const nextX = parsePx(target.style.getPropertyValue("--ppt-drag-x"));
     const nextY = parsePx(target.style.getPropertyValue("--ppt-drag-y"));
@@ -995,6 +1073,10 @@ export function buildEditModeInjectScript(): string {
     }
   };
 
+  const setPreviewScale = (value) => {
+    previewScaleValue = normalizeScale(value);
+  };
+
   // --- Live update API (called by host via executeJavaScript) ---
   window.__pptEditModeLiveUpdate = (selector, patch) => {
     try {
@@ -1026,6 +1108,8 @@ export function buildEditModeInjectScript(): string {
     }
   };
 
+  window.__pptEditModeSetPreviewScale = setPreviewScale;
+
   // --- Cleanup ---
   const cleanup = () => {
     document.removeEventListener("pointermove", onPointerMove, true);
@@ -1050,6 +1134,7 @@ export function buildEditModeInjectScript(): string {
     delete window.__pptResolveEditModeAnchor;
     delete window.__pptEditModeLiveUpdate;
     delete window.__pptEditModeClearSelection;
+    delete window.__pptEditModeSetPreviewScale;
     const style = document.getElementById(STYLE_ID);
     if (style) style.remove();
     if (cursorHost && cursorHost.style) {
@@ -1067,9 +1152,27 @@ export function buildEditModeInjectScript(): string {
   document.addEventListener("pointercancel", onPointerUp, true);
   document.addEventListener("keydown", onKeyDown, true);
 
-  window[STATE_KEY] = { active: true, cleanup };
+  window[STATE_KEY] = { active: true, cleanup, setPreviewScale };
 })();
 `
+}
+
+export function buildEditModeSetPreviewScaleScript(previewScale: number): string {
+  const normalizedScale =
+    Number.isFinite(previewScale) && previewScale > 0 ? Number(previewScale.toFixed(4)) : 1;
+  return `
+(() => {
+  const value = ${JSON.stringify(normalizedScale)};
+  if (typeof window.__pptEditModeSetPreviewScale === "function") {
+    window.__pptEditModeSetPreviewScale(value);
+    return;
+  }
+  const state = window.__pptEditModeState;
+  if (state && typeof state.setPreviewScale === "function") {
+    state.setPreviewScale(value);
+  }
+})();
+`;
 }
 
 export function buildEditModeCleanupScript(): string {
