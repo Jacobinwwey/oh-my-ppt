@@ -15,6 +15,7 @@ import { registerEditorHandlers } from './editor'
 import { registerDocumentParseHandlers } from './io/document-parse-handlers'
 import { registerPptxImportHandlers } from './io/pptx-import-handlers'
 import { registerHistoryHandlers } from './history/history-handlers'
+import { registerPresentationHandlers } from './session/presentation-handlers'
 
 export function setupIPC(
   mainWindow: BrowserWindow,
@@ -36,4 +37,5 @@ export function setupIPC(
   registerDocumentParseHandlers(context)
   registerPptxImportHandlers(context)
   registerHistoryHandlers(context)
+  registerPresentationHandlers()
 }

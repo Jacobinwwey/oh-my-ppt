@@ -142,23 +142,31 @@ export const PageSidebar = memo(function PageSidebar({
     >
       <div className={`flex min-h-0 flex-1 flex-col ${collapsed ? 'px-1' : 'px-2.5'}`}>
       {collapsed ? (
-        // Collapsed: just page numbers
+        // Collapsed: compact icons
         <>
+          {/* Top: back + page count */}
+          <div className="mb-2 space-y-1.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={handleBackToSessions}
+                  className="flex h-8 w-full items-center justify-center rounded-xl bg-[#e8e0d0]/72 text-[#5d6b4d] shadow-[0_4px_10px_rgba(93,107,77,0.08)] transition-colors hover:bg-[#d4e4c1]/78 hover:text-[#3e4a32] cursor-pointer"
+                  aria-label={t('sessionDetail.backToSessions')}
+                >
+                  <Home className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{t('sessionDetail.backToSessions')}</TooltipContent>
+            </Tooltip>
+            <div className="text-center text-[10px] font-semibold text-[#5c6c47]">
+              {pages.length}
+            </div>
+          </div>
+
+          {/* Middle: page list */}
           <ScrollArea className="min-h-0 flex-1" viewportClassName="pb-2" viewportRef={viewportRef}>
             <div className="space-y-1.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={handleBackToSessions}
-                    className="mb-1 flex h-8 w-full items-center justify-center rounded-xl bg-[#e8e0d0]/72 text-[#5d6b4d] shadow-[0_4px_10px_rgba(93,107,77,0.08)] transition-colors hover:bg-[#d4e4c1]/78 hover:text-[#3e4a32] cursor-pointer"
-                    aria-label={t('sessionDetail.backToSessions')}
-                  >
-                    <Home className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">{t('sessionDetail.backToSessions')}</TooltipContent>
-              </Tooltip>
               {pages.map((page) => (
                 <button
                   key={page.id}
@@ -172,6 +180,8 @@ export const PageSidebar = memo(function PageSidebar({
               ))}
             </div>
           </ScrollArea>
+
+          {/* Bottom: add page + expand */}
           <div className="mt-2 space-y-1.5">
             {onAddPage && (
               <Tooltip>
@@ -208,6 +218,7 @@ export const PageSidebar = memo(function PageSidebar({
       ) : (
         // Expanded: full sidebar
         <>
+          {/* Top: back + page count */}
           <div className="relative mb-3 flex items-center justify-between overflow-hidden rounded-[1.35rem] bg-[#e8e0d0]/72 px-2 py-1.5 shadow-[0_10px_24px_rgba(93,107,77,0.08)]">
             <div className="pointer-events-none absolute -right-6 -top-7 h-20 w-20 rounded-[30%_70%_70%_30%/30%_30%_70%_70%] bg-[#d4e4c1]/62" />
             <Tooltip>
@@ -227,6 +238,8 @@ export const PageSidebar = memo(function PageSidebar({
               {t('sessionDetail.pagesCount', { count: pages.length })}
             </div>
           </div>
+
+          {/* Middle: page list */}
           <ScrollArea className="min-h-0 flex-1" viewportClassName="px-0.5 pb-2" viewportRef={viewportRef}>
             {pages.length === 0 ? (
               <div className="flex min-h-[96px] items-center justify-center rounded-[1.25rem] bg-[#e8e0d0]/54 text-xs text-[#8a9a7b]">
@@ -309,6 +322,8 @@ export const PageSidebar = memo(function PageSidebar({
               </DndContext>
             )}
           </ScrollArea>
+
+          {/* Bottom: add page + collapse */}
           <div className="mt-2 flex items-center gap-1.5">
             {onAddPage && (
               <button

@@ -167,6 +167,7 @@ export const useSessionDetailUiStore = create<SessionDetailUiStore>((set) => ({
       addPageDialogOpen: false,
       isAddingPage: false,
       isRetryingSinglePage: false,
-      isManagingPages: false
+      isManagingPages: false,
+      sidebarCollapsed: false
     })
 }))

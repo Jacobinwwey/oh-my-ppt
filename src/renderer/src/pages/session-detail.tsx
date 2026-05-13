@@ -1121,6 +1121,13 @@ export function SessionDetailPage(): React.JSX.Element {
                     void ipc.revealFile(selectedPage.htmlPath, id || undefined)
                   }
                 }}
+                onPresent={() => {
+                  const idx = normalizedOrderedPages.findIndex((p) => p.id === selectedPageId)
+                  void ipc.openPresentation({
+                    sessionId: id || '',
+                    startIndex: idx >= 0 ? idx : 0
+                  })
+                }}
               />
             </div>
           </div>

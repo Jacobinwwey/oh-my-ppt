@@ -463,5 +463,7 @@ export const ipc = {
   getAppVersion: () =>
     getIpc().invoke('app:getVersion') as Promise<{
       version: string
-    }>
+    }>,
+  openPresentation: (payload: { sessionId: string; startIndex?: number }) =>
+    getIpc().invoke('presentation:open', payload) as Promise<{ success: boolean }>
 }
