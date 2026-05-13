@@ -12,6 +12,8 @@ export interface DragEditItem {
   height: number | null
   childUpdates: Array<{ path: number[]; width?: number; height?: number }>
   isAbsoluteMode: boolean
+  zIndex?: number
+  zIndexOnly?: boolean
 }
 
 export interface TextEditItem {
@@ -115,10 +117,32 @@ export const useEditHistoryStore = create<EditHistoryState>((set, get) => ({
           item.htmlPath === edit.htmlPath &&
           item.selector === edit.selector
       )
-      const next =
-        idx < 0
-          ? [...state.dragEdits, edit]
-          : state.dragEdits.map((item, i) => (i === idx ? edit : item))
+      let next: DragEditItem[]
+      if (idx < 0) {
+        next = [...state.dragEdits, edit]
+      } else {
+        // Merge: zIndexOnly edits preserve existing position data;
+        // drag edits preserve existing zIndex if new edit has none
+        const existing = state.dragEdits[idx]
+        const merged: DragEditItem = {
+          ...edit,
+          zIndex: edit.zIndex ?? existing.zIndex
+        }
+        if (edit.zIndexOnly) {
+          // Z-index-only change: keep existing position data, preserve flag
+          merged.x = existing.x
+          merged.y = existing.y
+          merged.width = existing.width
+          merged.height = existing.height
+          merged.childUpdates = existing.childUpdates
+          merged.isAbsoluteMode = existing.isAbsoluteMode
+          merged.zIndexOnly = true
+        } else {
+          // Full drag edit: clear zIndexOnly flag since position is also being updated
+          merged.zIndexOnly = undefined
+        }
+        next = state.dragEdits.map((item, i) => (i === idx ? merged : item))
+      }
       return {
         undoStack: [...state.undoStack, snapshot],
         redoStack: [],

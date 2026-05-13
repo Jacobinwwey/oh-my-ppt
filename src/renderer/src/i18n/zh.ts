@@ -376,6 +376,7 @@ export const zh = {
     exitWithoutSaving: '退出编辑模式',
     exitAdjust: '退出调整',
     adjustLayout: '调整位置/大小',
+    zIndex: '图层顺序',
     saveAdjustments: '保存调整',
     deleteElement: '删除元素',
     deleteElementConfirm: '确定删除该元素吗？',

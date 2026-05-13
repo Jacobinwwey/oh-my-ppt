@@ -23,6 +23,7 @@ export interface EditSelectionPayload {
   }
   translateX: number
   translateY: number
+  zIndex?: number
   editability?: {
     x: boolean
     y: boolean
@@ -63,6 +64,11 @@ export function buildEditModeInjectScript(previewScale = 1): string {
   )};
   const LOG_PREFIX = "${EDIT_MODE_CONSOLE_PREFIX}";
   const SCAFFOLD_BLOCK_IDS = new Set(["content"]);
+  // Remove transform from fit-scope to prevent stacking context isolation;
+  // transform (even scale(1)) creates a stacking context that breaks z-index
+  // comparison between elements inside and outside the scope.
+  const __fitScope = document.querySelector(".ppt-page-fit-scope");
+  if (__fitScope) __fitScope.style.transform = "none";
   const TEXT_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "span", "strong", "em", "b", "i", "small", "label", "button", "td", "th", "blockquote", "figcaption"]);
   const BLOCKED_TEXT_TAGS = new Set(["script", "style", "svg", "canvas", "img", "video", "audio", "input", "textarea", "select", "option"]);
 
@@ -607,10 +613,7 @@ export function buildEditModeInjectScript(previewScale = 1): string {
   let overlayResizeObserver = null;
 
   // Double-click detection
-  const DBLCLICK_MS = 400;
-  let lastClickTime = 0;
-  let lastClickTarget = null;
-  let lastClickSelector = null;
+
 
   // Anchor resolution — host resolves selector and calls this
   window.__pptResolveEditModeAnchor = function(result) {
@@ -754,6 +757,8 @@ export function buildEditModeInjectScript(previewScale = 1): string {
     const rect = target.getBoundingClientRect();
     const currentDragX = parsePx(target.style.getPropertyValue("--ppt-drag-x"));
     const currentDragY = parsePx(target.style.getPropertyValue("--ppt-drag-y"));
+    const rawZIndex = window.getComputedStyle(target).zIndex;
+    const zIndex = rawZIndex && rawZIndex !== 'auto' ? parseInt(rawZIndex, 10) : undefined;
 
     console.log(LOG_PREFIX + JSON.stringify({
       type: "selected",
@@ -779,6 +784,7 @@ export function buildEditModeInjectScript(previewScale = 1): string {
           },
       translateX: target.hasAttribute("data-ppt-layout-converted") ? 0 : currentDragX,
       translateY: target.hasAttribute("data-ppt-layout-converted") ? 0 : currentDragY,
+      zIndex,
       editability: analyzeEditability(target)
     }));
   };
@@ -1044,29 +1050,12 @@ export function buildEditModeInjectScript(previewScale = 1): string {
   };
 
   const onPointerUp = (event) => {
-    // Click (< 3px movement): select visually, double-click opens editing panel
+    // Click (< 3px movement): select element and emit to host
     if (dragPendingState) {
       const s = dragPendingState;
       dragPendingState = null;
-      const now = Date.now();
-      // Always select on click (show overlay + handles for resize)
       setSelected(s.target);
-      if (
-        s.target === lastClickTarget &&
-        s.selector === lastClickSelector &&
-        now - lastClickTime < DBLCLICK_MS
-      ) {
-        // Double-click: also emit to host (opens editing panel)
-        emitSelected(s.target, s.selector);
-        lastClickTime = 0;
-        lastClickTarget = null;
-        lastClickSelector = null;
-      } else {
-        // Single click: visual select only, record for double-click detection
-        lastClickTime = now;
-        lastClickTarget = s.target;
-        lastClickSelector = s.selector;
-      }
+      emitSelected(s.target, s.selector);
       return;
     }
 

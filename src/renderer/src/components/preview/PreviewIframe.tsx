@@ -31,6 +31,7 @@ export interface PreviewIframeHandle {
     selector: string,
     style: { x: number; y: number; width?: number; height?: number }
   ) => void
+  applyZIndex: (selector: string, zIndex: number) => void
   applyChildUpdates: (
     selector: string,
     childUpdates: Array<{ path: number[]; width?: number; height?: number }>
@@ -191,7 +192,7 @@ export const PreviewIframe = forwardRef<
       },
       liveUpdateElement(
         selector: string,
-        patch: { text?: string; style?: { color?: string; fontSize?: string; fontWeight?: string } }
+        patch: { text?: string; style?: { color?: string; fontSize?: string; fontWeight?: string }; zIndex?: number }
       ): void {
         const wv = webviewRef.current
         if (!wv) return
@@ -252,6 +253,18 @@ export const PreviewIframe = forwardRef<
           `__el.style.translate = 'var(--ppt-drag-x, 0px) var(--ppt-drag-y, 0px)';` +
           (style.width != null ? `__el.style.width = ${JSON.stringify(style.width + 'px')};` : '') +
           (style.height != null ? `__el.style.height = ${JSON.stringify(style.height + 'px')};` : '')
+        )
+      },
+      applyZIndex(selector: string, zIndex: number): void {
+        const wv = webviewRef.current
+        if (!wv) return
+        safeExecuteJavaScript(
+          wv,
+          `(function(){` +
+          `var __el = document.querySelector(${JSON.stringify(selector)});` +
+          `if (!__el) return;` +
+          `__el.style.setProperty("z-index", String(${zIndex}), "important");` +
+          `})()`
         )
       },
       applyChildUpdates(
@@ -405,6 +418,7 @@ export const PreviewIframe = forwardRef<
           bounds?: EditSelectionPayload['bounds']
           translateX?: number
           translateY?: number
+          zIndex?: number
           editability?: EditSelectionPayload['editability']
         }
 
@@ -447,6 +461,7 @@ export const PreviewIframe = forwardRef<
               bounds: parsed.bounds,
               translateX: Number(parsed.translateX || 0),
               translateY: Number(parsed.translateY || 0),
+              zIndex: typeof parsed.zIndex === 'number' ? parsed.zIndex : undefined,
               editability: parsed.editability || undefined
             })
           })().catch(() => {})

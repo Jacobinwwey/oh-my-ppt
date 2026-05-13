@@ -193,9 +193,13 @@ export function registerEditorHandlers(ctx: IpcContext): void {
           height?: unknown
           childUpdates?: unknown
           isAbsoluteMode?: unknown
+          zIndex?: unknown
+          zIndexOnly?: unknown
         }
         const selector = typeof e.selector === 'string' ? e.selector.trim() : ''
         if (!selector) continue
+        const zIndex = typeof e.zIndex === 'number' ? e.zIndex : undefined
+        const zIndexOnly = !!e.zIndexOnly
         html = patchDraggedElementStyle(
           html,
           selector,
@@ -204,7 +208,9 @@ export function registerEditorHandlers(ctx: IpcContext): void {
           clampSizeValue(e.width),
           clampSizeValue(e.height),
           normalizeChildStyleUpdates(e.childUpdates),
-          !!e.isAbsoluteMode
+          !!e.isAbsoluteMode,
+          zIndex,
+          zIndexOnly
         )
       }
 

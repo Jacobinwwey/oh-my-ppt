@@ -392,6 +392,7 @@ Business presentations, product introductions, project summaries — formal but 
     exitWithoutSaving: 'Exit editing',
     exitAdjust: 'Exit adjustment',
     adjustLayout: 'Adjust position/size',
+    zIndex: 'Layer order',
     saveAdjustments: 'Save adjustments',
     deleteElement: 'Delete element',
     deleteElementConfirm: 'Are you sure you want to delete this element? This cannot be undone.',

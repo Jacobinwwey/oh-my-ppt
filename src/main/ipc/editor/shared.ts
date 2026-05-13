@@ -218,7 +218,9 @@ export function patchDraggedElementStyle(
   width: number | null,
   height: number | null,
   childUpdates: ChildStyleUpdate[],
-  isAbsoluteMode: boolean
+  isAbsoluteMode: boolean,
+  zIndex?: number,
+  zIndexOnly?: boolean
 ): string {
   const $ = cheerio.load(html, { scriptingEnabled: false })
   let target
@@ -230,7 +232,16 @@ export function patchDraggedElementStyle(
   if (!target || target.length === 0) return html
 
   const styleMap = parseStyle(target.attr('style') || '')
+
+  // zIndexOnly: only update z-index, leave everything else untouched
+  if (zIndexOnly && zIndex !== undefined) {
+    styleMap.set('z-index', String(zIndex))
+    target.attr('style', serializeStyle(styleMap))
+    return $.html()
+  }
+
   const tagName = String(target.get(0)?.tagName || '').toLowerCase()
+  const effectiveZIndex = zIndex !== undefined ? String(zIndex) : undefined
 
   if (isAbsoluteMode) {
     styleMap.set('position', 'absolute')
@@ -238,7 +249,11 @@ export function patchDraggedElementStyle(
     styleMap.set('top', `${y}px`)
     if (width !== null) styleMap.set('width', `${width}px`)
     if (height !== null) styleMap.set('height', `${height}px`)
-    if (!styleMap.has('z-index')) styleMap.set('z-index', '10')
+    if (effectiveZIndex !== undefined) {
+      styleMap.set('z-index', effectiveZIndex)
+    } else if (!styleMap.has('z-index')) {
+      styleMap.set('z-index', '10')
+    }
     styleMap.delete('--ppt-drag-x')
     styleMap.delete('--ppt-drag-y')
     styleMap.delete('translate')
@@ -252,7 +267,9 @@ export function patchDraggedElementStyle(
     if (!position || position === 'static') {
       styleMap.set('position', 'relative')
     }
-    if (!styleMap.has('z-index')) {
+    if (effectiveZIndex !== undefined) {
+      styleMap.set('z-index', effectiveZIndex)
+    } else if (!styleMap.has('z-index')) {
       styleMap.set('z-index', '10')
     }
     styleMap.set('--ppt-drag-x', `${x}px`)

@@ -1,4 +1,4 @@
-import { Trash2, X } from 'lucide-react'
+import { Layers, Trash2, X } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,7 @@ export interface ElementEditDraft {
   layoutY: string
   layoutWidth: string
   layoutHeight: string
+  layoutZIndex: string
 }
 
 const LAYOUT_FIELDS: Array<{ key: keyof ElementEditDraft; label: string }> = [
@@ -30,6 +31,14 @@ const LAYOUT_FIELDS: Array<{ key: keyof ElementEditDraft; label: string }> = [
   { key: 'layoutWidth', label: 'W' },
   { key: 'layoutHeight', label: 'H' }
 ]
+
+const MEDIA_TAGS = new Set(['img', 'video', 'canvas'])
+
+function isMediaElement(selection: EditSelectionPayload | null): boolean {
+  if (!selection) return false
+  const tag = (selection.elementTag || '').toLowerCase()
+  return MEDIA_TAGS.has(tag)
+}
 
 export function ElementInspectorPanel({
   selection,
@@ -87,8 +96,50 @@ export function ElementInspectorPanel({
           </div>
         </div>
 
+        {/* Z-Index control for image/video elements */}
+        {isMediaElement(selection) && (
+          <div className="rounded-[1.15rem] border border-[#ded2bd]/72 bg-[#fffaf1]/82 px-3 py-2.5 shadow-[0_6px_14px_rgba(74,59,42,0.08)]">
+            <div className="flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5 text-[#7a875f]" />
+              <span className="text-[11px] font-medium text-[#7a875f]">
+                {t('sessionDetail.zIndex')}
+              </span>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#d7cbb7]/40 bg-[#f5efe4]/40 text-[13px] font-medium text-[#59664b] transition-colors hover:bg-[#d4e4c1]/60"
+                onClick={() => {
+                  const current = parseInt(draft.layoutZIndex || '0', 10) || 0
+                  onDraftChange({ ...draft, layoutZIndex: String(Math.max(0, current - 1)) })
+                }}
+              >
+                -
+              </button>
+              <Input
+                type="number"
+                min={0}
+                max={9999}
+                value={draft.layoutZIndex}
+                onChange={(event) => onDraftChange({ ...draft, layoutZIndex: event.target.value })}
+                className="h-8 flex-1 rounded-full border border-[#ded2bd]/72 bg-[#fffdf8]/88 px-2.5 text-center text-xs text-[#3f4b35] shadow-[inset_0_1px_2px_rgba(74,59,42,0.05)] focus-visible:border-[#9bb98a] focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+              <button
+                type="button"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#d7cbb7]/40 bg-[#f5efe4]/40 text-[13px] font-medium text-[#59664b] transition-colors hover:bg-[#d4e4c1]/60"
+                onClick={() => {
+                  const current = parseInt(draft.layoutZIndex || '0', 10) || 0
+                  onDraftChange({ ...draft, layoutZIndex: String(Math.min(9999, current + 1)) })
+                }}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Text editing (only for text elements) */}
-        {!isText && (
+        {!isText && !isMediaElement(selection) && (
           <div className="rounded-[1.15rem] border border-[#e8c8c6]/72 bg-[#fdf0ef]/82 px-3 py-4 text-center shadow-[0_6px_14px_rgba(74,59,42,0.08)]">
             <p className="whitespace-pre-line text-[12px] leading-5 text-[#8e5a53]">
               {t('sessionDetail.nonTextElementHint')}

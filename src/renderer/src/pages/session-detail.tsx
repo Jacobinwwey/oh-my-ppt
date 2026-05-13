@@ -51,7 +51,8 @@ const EMPTY_ELEMENT_DRAFT: ElementEditDraft = {
   layoutX: '',
   layoutY: '',
   layoutWidth: '',
-  layoutHeight: ''
+  layoutHeight: '',
+  layoutZIndex: ''
 }
 
 function normalizePagesForSelection(
@@ -902,7 +903,8 @@ export function SessionDetailPage(): React.JSX.Element {
       width: payload.width ?? null,
       height: payload.height ?? null,
       childUpdates: payload.childUpdates ?? [],
-      isAbsoluteMode: false
+      isAbsoluteMode: false,
+      zIndex: parseInt(textDraft.layoutZIndex, 10) || undefined
     }
     editHistory.upsertDragEdit(nextEdit)
   }
@@ -1016,6 +1018,7 @@ export function SessionDetailPage(): React.JSX.Element {
     // Commit previous edit before switching to new element
     commitCurrentTextEdit()
     setTextSelection(payload)
+    const zValue = payload.zIndex !== undefined ? String(payload.zIndex) : '10'
     if (payload.isText) {
       setTextDraft({
         text: payload.text,
@@ -1025,7 +1028,8 @@ export function SessionDetailPage(): React.JSX.Element {
         layoutX: payload.bounds ? String(Math.round(payload.bounds.x)) : '',
         layoutY: payload.bounds ? String(Math.round(payload.bounds.y)) : '',
         layoutWidth: payload.bounds ? String(Math.round(payload.bounds.width)) : '',
-        layoutHeight: payload.bounds ? String(Math.round(payload.bounds.height)) : ''
+        layoutHeight: payload.bounds ? String(Math.round(payload.bounds.height)) : '',
+        layoutZIndex: zValue
       })
     } else {
       setTextDraft({
@@ -1033,23 +1037,56 @@ export function SessionDetailPage(): React.JSX.Element {
         layoutX: payload.bounds ? String(Math.round(payload.bounds.x)) : '',
         layoutY: payload.bounds ? String(Math.round(payload.bounds.y)) : '',
         layoutWidth: payload.bounds ? String(Math.round(payload.bounds.width)) : '',
-        layoutHeight: payload.bounds ? String(Math.round(payload.bounds.height)) : ''
+        layoutHeight: payload.bounds ? String(Math.round(payload.bounds.height)) : '',
+        layoutZIndex: zValue
       })
     }
   }
 
   const handleTextDraftChange = (draft: ElementEditDraft): void => {
+    // Detect z-index change and persist as a drag edit
+    if (
+      textSelection &&
+      selectedPage?.htmlPath &&
+      selectedPage?.pageId &&
+      draft.layoutZIndex !== textDraft.layoutZIndex
+    ) {
+      const zNum = parseInt(draft.layoutZIndex, 10)
+      if (Number.isFinite(zNum)) {
+        editHistory.upsertDragEdit({
+          pageId: selectedPage.pageId,
+          htmlPath: selectedPage.htmlPath,
+          selector: textSelection.selector,
+          x: textSelection.translateX ?? 0,
+          y: textSelection.translateY ?? 0,
+          width: textSelection.bounds?.width ?? null,
+          height: textSelection.bounds?.height ?? null,
+          childUpdates: [],
+          isAbsoluteMode: false,
+          zIndex: zNum,
+          zIndexOnly: true
+        })
+      }
+    }
     setTextDraft(draft)
     // Live preview in iframe
     if (textSelection && selectedPage?.pageId) {
-      previewIframeRef.current?.liveUpdateElement(textSelection.selector, {
-        text: draft.text,
-        style: {
-          color: draft.color,
-          fontSize: draft.fontSize ? `${draft.fontSize}px` : undefined,
-          fontWeight: draft.fontWeight
-        }
-      })
+      // Z-index: use dedicated function to avoid clearing element content
+      const zNum = parseInt(draft.layoutZIndex, 10)
+      if (Number.isFinite(zNum) && draft.layoutZIndex !== textDraft.layoutZIndex) {
+        previewIframeRef.current?.applyZIndex(textSelection.selector, zNum)
+      }
+      // Text & style: only for text elements
+      if (textSelection.isText) {
+        previewIframeRef.current?.liveUpdateElement(textSelection.selector, {
+          text: draft.text,
+          style: {
+            color: draft.color,
+            fontSize: draft.fontSize ? `${draft.fontSize}px` : undefined,
+            fontWeight: draft.fontWeight
+          }
+        })
+      }
     }
   }
 
@@ -1101,6 +1138,9 @@ export function SessionDetailPage(): React.JSX.Element {
         width: d.width ?? undefined,
         height: d.height ?? undefined
       })
+      if (d.zIndex !== undefined) {
+        iframe.applyZIndex(d.selector, d.zIndex)
+      }
       if (d.childUpdates.length > 0) {
         iframe.applyChildUpdates(d.selector, d.childUpdates)
       }
@@ -1140,7 +1180,7 @@ export function SessionDetailPage(): React.JSX.Element {
   const handleAddElement = (relativePath: string, _fileName: string): void => {
     if (!id || !selectedPage?.pageId || !selectedPage.htmlPath) return
     const blockId = 'select-arcsin1-' + nanoid(8)
-    const parentSelector = `body[data-page-id="${selectedPage.pageId}"]`
+    const parentSelector = `body[data-page-id="${selectedPage.pageId}"] [data-ppt-guard-root="1"]`
     const isVideo = /^\.\/videos\//i.test(relativePath)
     // Offset each added element so they don't overlap
     const existingCount = editHistory.addElements.filter(
@@ -1151,9 +1191,10 @@ export function SessionDetailPage(): React.JSX.Element {
     const h = isVideo ? 360 : 300
     const left = Math.min(400 + offset, 1600 - w - 20)
     const top = Math.min(200 + offset, 900 - h - 20)
+    const zIdx = 10 + existingCount
     const htmlFragment = isVideo
-      ? `<video src="${relativePath}" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${10 + existingCount};" controls playsinline></video>`
-      : `<img src="${relativePath}" alt="" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${10 + existingCount}; object-fit:contain;" />`
+      ? `<video src="${relativePath}" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${zIdx};" controls playsinline></video>`
+      : `<img src="${relativePath}" alt="" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${zIdx}; object-fit:contain;" />`
     editHistory.addElement({
       pageId: selectedPage.pageId,
       htmlPath: selectedPage.htmlPath,
@@ -1163,6 +1204,22 @@ export function SessionDetailPage(): React.JSX.Element {
       insertIndex: -1
     })
     previewIframeRef.current?.injectElement(parentSelector, htmlFragment)
+    // Auto-select the newly added element and show inspector panel
+    const selector = `body[data-page-id="${selectedPage.pageId}"] [data-block-id="${blockId}"]`
+    handleElementSelected({
+      selector,
+      label: selector,
+      elementTag: isVideo ? 'video' : 'img',
+      elementText: '',
+      isText: false,
+      text: '',
+      style: {},
+      bounds: { x: left, y: top, width: w, height: h },
+      translateX: 0,
+      translateY: 0,
+      zIndex: zIdx,
+      editability: { x: true, y: true, width: true, height: true }
+    })
   }
 
   const handleUploadAndAdd = async (assetType: 'image' | 'video'): Promise<void> => {
