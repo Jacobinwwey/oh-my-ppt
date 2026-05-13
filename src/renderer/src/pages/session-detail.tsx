@@ -909,13 +909,23 @@ export function SessionDetailPage(): React.JSX.Element {
       const deletedSelectors = new Set(snapshot.deletes.map((d) => d.selector))
       const safeDragEdits = snapshot.dragEdits.filter((e) => !deletedSelectors.has(e.selector))
       const safeTextEdits = snapshot.textEdits.filter((e) => !deletedSelectors.has(e.selector))
+      // Build descriptive prompt for history
+      const parts: string[] = []
+      const dc = snapshot.deletes.length
+      const rc = safeDragEdits.length
+      const tc = safeTextEdits.length
+      if (dc > 0) parts.push(`删除 ${dc} 个元素`)
+      if (rc > 0) parts.push(`调整 ${rc} 个元素位置`)
+      if (tc > 0) parts.push(`编辑 ${tc} 个元素文字`)
+      const prompt = parts.join('、') || '手动调整'
       const result = await ipc.saveEditBatch({
         sessionId: id,
         htmlPath: selectedPage.htmlPath,
         pageId: selectedPage.pageId,
         dragEdits: safeDragEdits,
         textEdits: safeTextEdits,
-        deletes: snapshot.deletes
+        deletes: snapshot.deletes,
+        prompt
       })
       if (!result.success) throw new Error(t('sessionDetail.layoutSaveFailed'))
       editHistory.clearPage(selectedPage.pageId)

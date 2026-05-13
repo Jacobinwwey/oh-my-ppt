@@ -123,6 +123,7 @@ export function registerEditorHandlers(ctx: IpcContext): void {
       dragEdits?: unknown
       textEdits?: unknown
       deletes?: unknown
+      prompt?: unknown
     }
     const sessionId = normalizeSessionId(record.sessionId)
     const pageId = typeof record.pageId === 'string' ? record.pageId.trim() : ''
@@ -219,12 +220,13 @@ export function registerEditorHandlers(ctx: IpcContext): void {
     const projectDir = await resolveSessionProjectDir(sessionId)
     const dragCount = rawDrag.length
     const textCount = rawText.length
+    const prompt = typeof record.prompt === 'string' ? record.prompt : '手动调整'
     await new GitHistoryService(db).recordOperation({
       sessionId,
       projectDir,
       type: 'edit',
       scope: 'selector',
-      prompt: '手动调整',
+      prompt,
       metadata: { pageId, dragCount, textCount, deleteCount }
     })
 
