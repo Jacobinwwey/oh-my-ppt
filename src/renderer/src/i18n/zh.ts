@@ -390,9 +390,9 @@ export const zh = {
     exitAndSave: '退出且保存版本',
     undo: '撤销',
     redo: '重做',
-    clickTextToEdit: '双击文字以编辑',
-    dblClickTextToEdit: '双击文字以编辑',
-    editModeToast: '拖拽调整元素位置和大小，双击文字可编辑内容',
+    clickTextToEdit: '单击文字以编辑',
+    dblClickTextToEdit: '单击文字以编辑',
+    editModeToast: '拖拽调整元素位置和大小，单击选中元素进行编辑',
     failedPageHint:
       '这一页上次生成失败，当前展示的是可恢复的页面文件。请保持“当前页”上下文，直接描述如何修复或重新生成这一页。',
     clickToSelect: '点击页面元素以选中',

@@ -408,7 +408,7 @@ Business presentations, product introductions, project summaries — formal but 
     redo: 'Redo',
     clickTextToEdit: 'Double-click text to edit',
     dblClickTextToEdit: 'Double-click text to edit',
-    editModeToast: 'Drag to adjust position and size, double-click text to edit',
+    editModeToast: 'Drag to adjust position and size, click to select and edit elements',
     failedPageHint:
       'This page failed last time and is showing a recoverable file. Keep the Current page context and describe how to fix or regenerate it.',
     clickToSelect: 'Click an element to select it',
