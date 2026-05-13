@@ -406,6 +406,27 @@ export const ipc = {
     getIpc().invoke('text-editor:update-element-properties', payload) as Promise<{
       success: boolean
     }>,
+  deleteElement: (payload: {
+    sessionId: string
+    htmlPath: string
+    pageId: string
+    selector: string
+  }) =>
+    getIpc().invoke('element-editor:delete-element', payload) as Promise<{
+      success: boolean
+    }>,
+  saveEditBatch: (payload: {
+    sessionId: string
+    htmlPath: string
+    pageId: string
+    dragEdits: unknown[]
+    textEdits: unknown[]
+  }) =>
+    getIpc().invoke('edit:save-batch', payload) as Promise<{
+      success: boolean
+      dragCount: number
+      textCount: number
+    }>,
   openFile: (filePath: string, sessionId?: string) =>
     getIpc().invoke('file:open', { path: filePath, sessionId }) as Promise<string>,
   revealFile: (filePath: string, sessionId?: string) =>

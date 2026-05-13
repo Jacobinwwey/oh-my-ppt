@@ -904,7 +904,7 @@ export function SessionDetailPage(): React.JSX.Element {
 
   // Unified save: persist both drag edits and text edits for the current page
   const handleSaveAllEdits = async (): Promise<void> => {
-    if (!id || !selectedPage?.pageId) return
+    if (!id || !selectedPage?.pageId || !selectedPage.htmlPath) return
     const dragEdits = pendingDragEdits.filter((item) => item.pageId === selectedPage.pageId)
     const textEdits = pendingTextEdits.filter((item) => item.pageId === selectedPage.pageId)
     if (dragEdits.length === 0 && textEdits.length === 0) {
@@ -917,35 +917,14 @@ export function SessionDetailPage(): React.JSX.Element {
     }
     setIsSavingEdits(true)
     try {
-      for (const edit of dragEdits) {
-        const result = await ipc.updateElementLayout({
-          sessionId: id,
-          htmlPath: edit.htmlPath,
-          pageId: edit.pageId,
-          selector: edit.selector,
-          x: edit.x,
-          y: edit.y,
-          width: edit.width,
-          height: edit.height,
-          childUpdates: edit.childUpdates,
-          isAbsoluteMode: (edit as { isAbsoluteMode?: boolean }).isAbsoluteMode
-        })
-        if (!result.success) {
-          throw new Error(t('sessionDetail.layoutSaveFailed'))
-        }
-      }
-      for (const edit of textEdits) {
-        const result = await ipc.updateElementProperties({
-          sessionId: id,
-          htmlPath: edit.htmlPath,
-          pageId: edit.pageId,
-          selector: edit.selector,
-          patch: edit.patch
-        })
-        if (!result.success) {
-          throw new Error(t('sessionDetail.textSaveFailed'))
-        }
-      }
+      const result = await ipc.saveEditBatch({
+        sessionId: id,
+        htmlPath: selectedPage.htmlPath,
+        pageId: selectedPage.pageId,
+        dragEdits,
+        textEdits
+      })
+      if (!result.success) throw new Error(t('sessionDetail.layoutSaveFailed'))
       setPendingDragEdits((items) => items.filter((item) => item.pageId !== selectedPage.pageId))
       setPendingTextEdits((items) => items.filter((item) => item.pageId !== selectedPage.pageId))
       previewIframeRef.current?.clearEditModeSelection()
@@ -954,18 +933,7 @@ export function SessionDetailPage(): React.JSX.Element {
       useSessionDetailUiStore.getState().bumpThumbnailVersion(selectedPage.pageId)
       setPreviewRefreshKey((key) => key + 1)
       useSessionDetailUiStore.getState().setInteractionMode('preview')
-      const totalCount = dragEdits.length + textEdits.length
-      await ipc.recordHistorySnapshot({
-        sessionId: id,
-        type: 'edit',
-        scope: 'selector',
-        prompt: t('sessionDetail.manualAdjustHistory'),
-        metadata: {
-          pageId: selectedPage.pageId,
-          dragCount: dragEdits.length,
-          textCount: textEdits.length
-        }
-      })
+      const totalCount = result.dragCount + result.textCount
       toastSuccess(t('sessionDetail.adjustmentsSaved', { count: totalCount }))
     } catch (error) {
       toastError(error instanceof Error ? error.message : t('sessionDetail.layoutSaveFailed'))
@@ -986,6 +954,33 @@ export function SessionDetailPage(): React.JSX.Element {
     setPreviewRefreshKey((key) => key + 1)
     useSessionDetailUiStore.getState().setInteractionMode('preview')
     if (hadDragPending || hadTextPending) toastInfo(t('sessionDetail.discardedAdjustments'))
+  }
+
+  const handleDeleteElement = async (): Promise<void> => {
+    if (!id || !selectedPage?.htmlPath || !selectedPage.pageId || !textSelection) return
+    try {
+      const selector = textSelection.selector
+      const result = await ipc.deleteElement({
+        sessionId: id,
+        htmlPath: selectedPage.htmlPath,
+        pageId: selectedPage.pageId,
+        selector
+      })
+      if (!result.success) throw new Error(t('sessionDetail.deleteElementFailed'))
+      previewIframeRef.current?.clearEditModeSelection()
+      setPendingDragEdits((items) =>
+        items.filter((item) => !(item.pageId === selectedPage.pageId && item.selector === selector))
+      )
+      setPendingTextEdits((items) =>
+        items.filter((item) => !(item.pageId === selectedPage.pageId && item.selector === selector))
+      )
+      setTextSelection(null)
+      setTextDraft(EMPTY_ELEMENT_DRAFT)
+      useSessionDetailUiStore.getState().bumpThumbnailVersion(selectedPage.pageId)
+      setPreviewRefreshKey((key) => key + 1)
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : t('sessionDetail.deleteElementFailed'))
+    }
   }
 
   const handleElementSelected = (payload: EditSelectionPayload): void => {
@@ -1136,6 +1131,7 @@ export function SessionDetailPage(): React.JSX.Element {
               draft={textDraft}
               onDraftChange={handleTextDraftChange}
               onClose={handleCancelTextEdit}
+              onDelete={handleDeleteElement}
             />
           )}
 
