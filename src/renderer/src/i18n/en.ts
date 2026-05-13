@@ -394,6 +394,7 @@ Business presentations, product introductions, project summaries — formal but 
     adjustLayout: 'Adjust position/size',
     zIndex: 'Layer order',
     saveAdjustments: 'Save adjustments',
+    copyElement: 'Copy',
     deleteElement: 'Delete element',
     deleteElementConfirm: 'Are you sure you want to delete this element? This cannot be undone.',
     nonTextElementHint: 'Still working on this feature.\nYou can use AI mode to inspect and edit elements for now.',

@@ -1177,6 +1177,37 @@ export function SessionDetailPage(): React.JSX.Element {
     setTextDraft(EMPTY_ELEMENT_DRAFT)
   }
 
+  const handleCopyElement = async (): Promise<void> => {
+    if (!textSelection || !selectedPage?.pageId || !selectedPage.htmlPath) return
+    const blockId = 'select-arcsin1-' + nanoid(8)
+    const result = await previewIframeRef.current?.copyElement(textSelection.selector, blockId)
+    if (!result) return
+    const bounds = textSelection.bounds
+    const zValue = textSelection.zIndex !== undefined ? String(textSelection.zIndex + 1) : '10'
+    editHistory.addElement({
+      pageId: selectedPage.pageId,
+      htmlPath: selectedPage.htmlPath,
+      parentSelector: `body[data-page-id="${selectedPage.pageId}"] [data-ppt-guard-root="1"]`,
+      htmlFragment: result.html,
+      assignedBlockId: blockId,
+      insertIndex: -1
+    })
+    handleElementSelected({
+      selector: result.selector,
+      label: result.selector,
+      elementTag: textSelection.elementTag,
+      elementText: '',
+      isText: false,
+      text: '',
+      style: {},
+      bounds: bounds ? { x: bounds.x + 20, y: bounds.y + 20, width: bounds.width, height: bounds.height } : undefined,
+      translateX: 0,
+      translateY: 0,
+      zIndex: parseInt(zValue, 10),
+      editability: { x: true, y: true, width: true, height: true }
+    })
+  }
+
   const handleAddElement = (relativePath: string, _fileName: string): void => {
     if (!id || !selectedPage?.pageId || !selectedPage.htmlPath) return
     const blockId = 'select-arcsin1-' + nanoid(8)
@@ -1323,6 +1354,7 @@ export function SessionDetailPage(): React.JSX.Element {
               draft={textDraft}
               onDraftChange={handleTextDraftChange}
               onClose={handleCancelTextEdit}
+              onCopy={handleCopyElement}
               onDelete={handleDeleteElement}
             />
           )}

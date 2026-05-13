@@ -1,4 +1,4 @@
-import { Layers, Trash2, X } from 'lucide-react'
+import { Copy, Layers, Trash2, X } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +45,7 @@ export function ElementInspectorPanel({
   draft,
   onDraftChange,
   onClose,
+  onCopy,
   onDelete
 }: {
   selection: EditSelectionPayload | null
@@ -52,6 +53,7 @@ export function ElementInspectorPanel({
   onDraftChange: (draft: ElementEditDraft) => void
   onClose: () => void
   onDelete?: () => void
+  onCopy?: () => void
 }): React.JSX.Element {
   const t = useT()
   const isText = selection?.isText ?? false
@@ -225,14 +227,24 @@ export function ElementInspectorPanel({
           </>
         )}
 
-        {/* Delete element */}
-        {onDelete && (
-          <div className="px-0.5 pb-1 pt-1">
+        {/* Copy & Delete buttons */}
+        <div className="flex gap-2 px-0.5 pb-1 pt-1">
+          {onCopy && (
+            <button
+              type="button"
+              className="flex flex-1 h-8 items-center justify-center gap-1.5 rounded-full border border-[#d7cbb7]/40 bg-[#fffdf8]/60 text-xs font-medium text-[#59664b] transition-colors hover:bg-[#d4e4c1]/60"
+              onClick={onCopy}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              {t('sessionDetail.copyElement')}
+            </button>
+          )}
+          {onDelete && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <button
                   type="button"
-                  className="flex w-full h-8 items-center justify-center gap-1.5 rounded-full border border-[#e8c8c6]/80 bg-[#fffdf8]/60 text-xs font-medium text-[#8e5a53] transition-colors hover:border-[#c0392b]/40 hover:bg-[#fdf0ef] hover:shadow-[0_4px_12px_rgba(192,57,43,0.1)]"
+                  className="flex flex-1 h-8 items-center justify-center gap-1.5 rounded-full border border-[#e8c8c6]/80 bg-[#fffdf8]/60 text-xs font-medium text-[#8e5a53] transition-colors hover:border-[#c0392b]/40 hover:bg-[#fdf0ef] hover:shadow-[0_4px_12px_rgba(192,57,43,0.1)]"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   {t('sessionDetail.deleteElement')}
@@ -254,8 +266,8 @@ export function ElementInspectorPanel({
                 </div>
               </AlertDialogContent>
             </AlertDialog>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
