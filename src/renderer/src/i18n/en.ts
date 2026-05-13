@@ -468,6 +468,8 @@ Business presentations, product introductions, project summaries — formal but 
     textSaveEmpty: 'Text cannot be empty',
     inspectActiveToast: 'AI mode active — select elements on the page for AI to modify',
     addPage: 'Add Page',
+    collapseSidebar: 'Collapse sidebar',
+    expandSidebar: 'Expand sidebar',
     addPageHint: 'Auto-generated in the current style — just describe the page you want',
     addPageDescription: 'Describe the page you want to add',
     addPageGenerating: 'Generating new page...',

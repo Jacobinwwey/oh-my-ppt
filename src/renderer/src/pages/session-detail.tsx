@@ -117,6 +117,8 @@ export function SessionDetailPage(): React.JSX.Element {
   const isAddingPage = useSessionDetailUiStore((state) => state.isAddingPage)
   const isRetryingSinglePage = useSessionDetailUiStore((state) => state.isRetryingSinglePage)
   const isManagingPages = useSessionDetailUiStore((state) => state.isManagingPages)
+  const sidebarCollapsed = useSessionDetailUiStore((state) => state.sidebarCollapsed)
+  const toggleSidebarCollapsed = useSessionDetailUiStore((state) => state.toggleSidebarCollapsed)
   const setAddPageDialogOpen = useSessionDetailUiStore((state) => state.setAddPageDialogOpen)
   const setIsAddingPage = useSessionDetailUiStore((state) => state.setIsAddingPage)
   const activeChatRef = useRef<{ chatType: ChatType; pageId?: string }>({ chatType: 'page' })
@@ -1133,6 +1135,8 @@ export function SessionDetailPage(): React.JSX.Element {
             onReorderPages={handleReorderPages}
             onDeletePage={handleDeletePage}
             pageManagementDisabled={isGenerating || isAddingPage || isRetryingSinglePage}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={toggleSidebarCollapsed}
           />
 
           <PreviewStage
