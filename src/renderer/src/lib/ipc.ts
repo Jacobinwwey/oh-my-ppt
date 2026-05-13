@@ -288,6 +288,10 @@ export const ipc = {
       assets: UploadedAsset[]
       cancelled?: boolean
     }>,
+  listAssets: (sessionId: string, assetType: 'image' | 'video') =>
+    getIpc().invoke('assets:list', { sessionId, assetType }) as Promise<{
+      assets: Array<{ fileName: string; relativePath: string; absolutePath: string }>
+    }>,
   exportPdf: (sessionId: string) =>
     getIpc().invoke('export:pdf', { sessionId }) as Promise<ExportDeckResult>,
   exportPng: (sessionId: string) =>
@@ -422,6 +426,7 @@ export const ipc = {
     dragEdits: unknown[]
     textEdits: unknown[]
     deletes?: unknown[]
+    addElements?: unknown[]
     prompt?: string
   }) =>
     getIpc().invoke('edit:save-batch', payload) as Promise<{
@@ -429,6 +434,7 @@ export const ipc = {
       dragCount: number
       textCount: number
       deleteCount: number
+      addCount: number
     }>,
   openFile: (filePath: string, sessionId?: string) =>
     getIpc().invoke('file:open', { path: filePath, sessionId }) as Promise<string>,

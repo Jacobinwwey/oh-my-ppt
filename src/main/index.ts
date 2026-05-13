@@ -6,7 +6,7 @@ import log from 'electron-log/main.js'
 import dayjs from 'dayjs'
 import { PPTDatabase } from './db/database'
 import { AgentManager } from './agent'
-import { setupIPC } from './ipc'
+import { setupIPC, registerLocalAssetProtocol } from './ipc'
 import { setStyleDb } from './utils/style-skills'
 import type { UpdateAvailablePayload } from '@shared/app-update'
 
@@ -261,6 +261,8 @@ app.whenReady().then(async () => {
   agentManager = new AgentManager(db)
 
   const mainWindow = createWindow()
+
+  registerLocalAssetProtocol()
 
   if (mainWindow && db && agentManager) {
     setupIPC(mainWindow, db, agentManager)

@@ -386,3 +386,22 @@ export function ensureElementAnchorInHtml(
     changed: true
   }
 }
+
+export function patchAddElement(
+  html: string,
+  parentSelector: string,
+  htmlFragment: string,
+  insertIndex: number
+): string {
+  const $ = cheerio.load(html, { scriptingEnabled: false })
+  const parent = $(parentSelector).first()
+  if (!parent || parent.length === 0) {
+    throw new Error('插入目标父元素不存在')
+  }
+  if (insertIndex < 0 || insertIndex >= parent.children().length) {
+    parent.append(htmlFragment)
+  } else {
+    parent.children().eq(insertIndex).before(htmlFragment)
+  }
+  return $.html()
+}

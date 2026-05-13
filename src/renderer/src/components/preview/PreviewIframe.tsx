@@ -35,6 +35,7 @@ export interface PreviewIframeHandle {
     selector: string,
     childUpdates: Array<{ path: number[]; width?: number; height?: number }>
   ) => void
+  injectElement: (parentSelector: string, htmlFragment: string) => void
 }
 
 export const PreviewIframe = forwardRef<
@@ -275,8 +276,15 @@ export const PreviewIframe = forwardRef<
           `  if (__u.height !== null) __c.style.height = __u.height + 'px';` +
           `}`
         )
-      }
-    }),
+      },
+      injectElement(parentSelector: string, htmlFragment: string): void {
+        const wv = webviewRef.current
+        if (!wv) return
+        safeExecuteJavaScript(
+          wv,
+          `if (window.__pptEditModeInjectElement) window.__pptEditModeInjectElement(${JSON.stringify(parentSelector)}, ${JSON.stringify(htmlFragment)});`
+        )
+      }    }),
     []
   )
 

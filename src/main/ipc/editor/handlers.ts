@@ -11,7 +11,8 @@ import {
   normalizeText,
   patchDraggedElementStyle,
   patchElementProperties,
-  ensureElementAnchorInHtml
+  ensureElementAnchorInHtml,
+  patchAddElement
 } from './shared'
 
 export function registerEditorHandlers(ctx: IpcContext): void {
@@ -123,6 +124,7 @@ export function registerEditorHandlers(ctx: IpcContext): void {
       dragEdits?: unknown
       textEdits?: unknown
       deletes?: unknown
+      addElements?: unknown
       prompt?: unknown
     }
     const sessionId = normalizeSessionId(record.sessionId)
@@ -135,6 +137,7 @@ export function registerEditorHandlers(ctx: IpcContext): void {
     const rawDrag = Array.isArray(record.dragEdits) ? record.dragEdits : []
     const rawText = Array.isArray(record.textEdits) ? record.textEdits : []
     const rawDeletes = Array.isArray(record.deletes) ? record.deletes : []
+    const rawAddElements = Array.isArray(record.addElements) ? record.addElements : []
 
     const safeHtmlPath = await assertPathInAllowedRoots({
       filePath: htmlPath,
@@ -144,6 +147,7 @@ export function registerEditorHandlers(ctx: IpcContext): void {
     })
 
     let deleteCount = 0
+    let addCount = 0
     await withHtmlFileLock(safeHtmlPath, async () => {
       let html = await fs.promises.readFile(safeHtmlPath, 'utf-8')
 
@@ -160,6 +164,22 @@ export function registerEditorHandlers(ctx: IpcContext): void {
           html = $.html()
           deleteCount++
         }
+      }
+
+      // Apply add elements (after deletes, before drag/text)
+      for (const item of rawAddElements) {
+        if (!item || typeof item !== 'object') continue
+        const e = item as {
+          parentSelector?: unknown
+          htmlFragment?: unknown
+          insertIndex?: unknown
+        }
+        const parentSelector = typeof e.parentSelector === 'string' ? e.parentSelector.trim() : ''
+        const htmlFragment = typeof e.htmlFragment === 'string' ? e.htmlFragment : ''
+        if (!parentSelector || !htmlFragment) continue
+        const insertIndex = typeof e.insertIndex === 'number' ? e.insertIndex : -1
+        html = patchAddElement(html, parentSelector, htmlFragment, insertIndex)
+        addCount++
       }
 
       // Apply drag edits
@@ -227,10 +247,10 @@ export function registerEditorHandlers(ctx: IpcContext): void {
       type: 'edit',
       scope: 'selector',
       prompt,
-      metadata: { pageId, dragCount, textCount, deleteCount }
+      metadata: { pageId, dragCount, textCount, deleteCount, addCount }
     })
 
-    return { success: true, dragCount, textCount, deleteCount }
+    return { success: true, dragCount, textCount, deleteCount, addCount }
   })
 
   // ─── drag-editor:update-element-layout ──────────────────

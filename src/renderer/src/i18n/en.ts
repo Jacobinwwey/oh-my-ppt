@@ -493,5 +493,18 @@ Business presentations, product introductions, project summaries — formal but 
     deleteLastPageError: 'Cannot delete the last page',
     reorderFailed: 'Failed to reorder pages',
     deleteFailed: 'Failed to delete page'
+  },
+  editMode: {
+    addImage: 'Add Image',
+    addVideo: 'Add Video',
+    fromLibrary: 'Choose from Library',
+    fromLocal: 'Upload from Local',
+    chooseImage: 'Choose Image',
+    chooseVideo: 'Choose Video',
+    assetPickerHint: 'Select an asset then confirm',
+    loadingAssets: 'Loading...',
+    noAssets: 'No assets yet. Upload from local first.',
+    cancel: 'Cancel',
+    confirmAdd: 'Confirm Add'
   }
 } satisfies DeepStringShape<typeof zh>

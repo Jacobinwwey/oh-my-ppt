@@ -1,9 +1,15 @@
 import { useEffect, forwardRef } from 'react'
-import { Check, Loader2, Pencil, Redo2, Sparkles, Undo2 } from 'lucide-react'
+import { ChevronDown, Check, ImagePlus, Loader2, Pencil, Redo2, Sparkles, Undo2, Video } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { useSessionDetailUiStore } from '@renderer/store/sessionDetailStore'
 import { useToastStore } from '@renderer/store/toastStore'
 import { Button } from '../ui/Button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '../ui/DropdownMenu'
 import { PreviewIframe, type PreviewIframeHandle } from '../preview/PreviewIframe'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/Tooltip'
 import type { EditModeMovePayload, EditSelectionPayload } from '../preview/edit-mode-script'
@@ -30,6 +36,8 @@ export const PreviewStage = forwardRef<
     onReplayPendingEdits: () => void
     onSaveAllEdits: () => void
     onDiscardAllEdits: () => void
+    onAddFromLibrary?: (type: 'image' | 'video') => void
+    onAddFromLocal?: (type: 'image' | 'video') => void
   }
 >(function PreviewStage(
   {
@@ -49,7 +57,9 @@ export const PreviewStage = forwardRef<
     onRedo,
     onReplayPendingEdits,
     onSaveAllEdits,
-    onDiscardAllEdits
+    onDiscardAllEdits,
+    onAddFromLibrary,
+    onAddFromLocal
   },
   ref
 ) {
@@ -190,6 +200,50 @@ export const PreviewStage = forwardRef<
                 )}
                 {interactionMode === 'edit' && (
                   <div className="flex items-center gap-1.5">
+                    {onAddFromLibrary && onAddFromLocal && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-7 items-center gap-0.5 rounded-[7px] border-transparent bg-[#fffaf1]/90 px-2 text-[10px] font-semibold leading-none text-[#59664b] shadow-[0_8px_20px_rgba(74,59,42,0.10)] hover:bg-[#d4e4c1]/78"
+                          >
+                            <ImagePlus className="mr-0.5 h-2.5 w-2.5" />
+                            {t('editMode.addImage')}
+                            <ChevronDown className="ml-0.5 h-2.5 w-2.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[10rem]">
+                          <DropdownMenuItem onClick={() => onAddFromLibrary('image')}>
+                            {t('editMode.fromLibrary')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onAddFromLocal('image')}>
+                            {t('editMode.fromLocal')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                    {onAddFromLibrary && onAddFromLocal && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-7 items-center gap-0.5 rounded-[7px] border-transparent bg-[#fffaf1]/90 px-2 text-[10px] font-semibold leading-none text-[#59664b] shadow-[0_8px_20px_rgba(74,59,42,0.10)] hover:bg-[#d4e4c1]/78"
+                          >
+                            <Video className="mr-0.5 h-2.5 w-2.5" />
+                            {t('editMode.addVideo')}
+                            <ChevronDown className="ml-0.5 h-2.5 w-2.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[10rem]">
+                          <DropdownMenuItem onClick={() => onAddFromLibrary('video')}>
+                            {t('editMode.fromLibrary')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onAddFromLocal('video')}>
+                            {t('editMode.fromLocal')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                     {hasPendingEdits && (
                       <Button
                         type="button"

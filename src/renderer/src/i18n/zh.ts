@@ -473,5 +473,18 @@ export const zh = {
     deleteLastPageError: '不能删除最后一页',
     reorderFailed: '调整页面顺序失败',
     deleteFailed: '删除页面失败'
+  },
+  editMode: {
+    addImage: '添加图片',
+    addVideo: '添加视频',
+    fromLibrary: '从素材库选择',
+    fromLocal: '从本地上传',
+    chooseImage: '选择图片',
+    chooseVideo: '选择视频',
+    assetPickerHint: '选择一个素材后点击确认',
+    loadingAssets: '加载中...',
+    noAssets: '暂无素材，请先从本地上传',
+    cancel: '取消',
+    confirmAdd: '确认添加'
   }
 } as const

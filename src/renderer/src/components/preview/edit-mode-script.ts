@@ -313,6 +313,11 @@ export function buildEditModeInjectScript(previewScale = 1): string {
     // Atomic visual elements — rendered as a single unit, internals should
     // not be individually selected; clicks bubble up to the parent container.
     if (element.closest("svg")) return false;
+    // Elements with data-block-id added via edit mode (IMG/VIDEO) are always selectable
+    if (element.hasAttribute("data-block-id") && ["IMG", "VIDEO"].includes(element.tagName)) {
+      const rect = element.getBoundingClientRect();
+      return rect.width >= 2 && rect.height >= 2;
+    }
     if (["CANVAS", "VIDEO", "AUDIO", "IFRAME"].includes(element.tagName)) return false;
     const contentRoot = getContentRoot(element);
     const boundaryRoot = contentRoot || getPageRoot(element);
@@ -1301,6 +1306,27 @@ export function buildEditModeInjectScript(previewScale = 1): string {
     }
   };
 
+  window.__pptEditModeInjectElement = (parentSelector, html) => {
+    try {
+      // Inject into .ppt-page-root so element is inside the page root (required for selection/drag)
+      const parent = document.querySelector('.ppt-page-root') ||
+                     document.querySelector('[data-ppt-guard-root="1"]') ||
+                     document.querySelector(parentSelector);
+      if (!parent) return;
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+      const el = temp.firstElementChild;
+      if (el) {
+        parent.appendChild(el);
+        selectedElement = el;
+        el.classList.add(SELECTED_CLASS);
+        requestAnimationFrame(() => {
+          updateOverlay();
+        });
+      }
+    } catch (_error) {}
+  };
+
   window.__pptEditModeSetPreviewScale = setPreviewScale;
 
   // --- Cleanup ---
@@ -1328,6 +1354,7 @@ export function buildEditModeInjectScript(previewScale = 1): string {
     delete window.__pptEditModeLiveUpdate;
     delete window.__pptEditModeSetLayout;
     delete window.__pptEditModeClearSelection;
+    delete window.__pptEditModeInjectElement;
     delete window.__pptEditModeSetPreviewScale;
     const style = document.getElementById(STYLE_ID);
     if (style) style.remove();

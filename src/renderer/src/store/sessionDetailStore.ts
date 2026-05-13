@@ -27,6 +27,8 @@ interface SessionDetailUiStore {
   isRetryingSinglePage: boolean
   isManagingPages: boolean
   sidebarCollapsed: boolean
+  assetPickerOpen: boolean
+  assetPickerType: 'image' | 'video'
 
   setInput: (input: string) => void
   setChatType: (chatType: SessionDetailChatType) => void
@@ -55,6 +57,7 @@ interface SessionDetailUiStore {
   setIsRetryingSinglePage: (retrying: boolean) => void
   setIsManagingPages: (managing: boolean) => void
   toggleSidebarCollapsed: () => void
+  setAssetPickerOpen: (open: boolean, type?: 'image' | 'video') => void
   finishAddPage: (selectedPageId?: string | null) => void
   resetForPageChange: () => void
   resetForSessionChange: () => void
@@ -83,6 +86,8 @@ export const useSessionDetailUiStore = create<SessionDetailUiStore>((set) => ({
   isRetryingSinglePage: false,
   isManagingPages: false,
   sidebarCollapsed: false,
+  assetPickerOpen: false,
+  assetPickerType: 'image' as const,
 
   setInput: (input) => set({ input }),
   setChatType: (chatType) => set({ chatType }),
@@ -137,6 +142,11 @@ export const useSessionDetailUiStore = create<SessionDetailUiStore>((set) => ({
   setIsRetryingSinglePage: (isRetryingSinglePage) => set({ isRetryingSinglePage }),
   setIsManagingPages: (isManagingPages) => set({ isManagingPages }),
   toggleSidebarCollapsed: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  setAssetPickerOpen: (open, type) =>
+    set((state) => ({
+      assetPickerOpen: open,
+      ...(type ? { assetPickerType: type } : { assetPickerType: state.assetPickerType })
+    })),
   finishAddPage: (selectedPageId) =>
     set((state) => ({
       isAddingPage: false,
@@ -168,6 +178,7 @@ export const useSessionDetailUiStore = create<SessionDetailUiStore>((set) => ({
       isAddingPage: false,
       isRetryingSinglePage: false,
       isManagingPages: false,
-      sidebarCollapsed: false
+      sidebarCollapsed: false,
+      assetPickerOpen: false
     })
 }))

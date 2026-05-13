@@ -21,6 +21,7 @@ import { PageSidebar } from '../components/session-detail/PageSidebar'
 import { PreviewStage } from '../components/session-detail/PreviewStage'
 import { ElementInspectorPanel } from '../components/session-detail/ElementInspectorPanel'
 import { SessionToolbar } from '../components/session-detail/SessionToolbar'
+import { AssetPickerDialog } from '../components/session-detail/AssetPickerDialog'
 import type { ElementEditDraft } from '../components/session-detail/ElementInspectorPanel'
 import type { ChatType, SessionPreviewPage } from '../components/session-detail/types'
 import { useSessionStore, useGenerateStore } from '../store'
@@ -32,6 +33,7 @@ import { useToastStore } from '../store'
 import { getEditorGate } from '../lib/sessionMetadata'
 import { useT } from '../i18n'
 import dayjs from 'dayjs'
+import { nanoid } from 'nanoid'
 
 const EMPTY_ELEMENT_DRAFT: ElementEditDraft = {
   text: '',
@@ -119,6 +121,9 @@ export function SessionDetailPage(): React.JSX.Element {
   const isManagingPages = useSessionDetailUiStore((state) => state.isManagingPages)
   const sidebarCollapsed = useSessionDetailUiStore((state) => state.sidebarCollapsed)
   const toggleSidebarCollapsed = useSessionDetailUiStore((state) => state.toggleSidebarCollapsed)
+  const assetPickerOpen = useSessionDetailUiStore((state) => state.assetPickerOpen)
+  const assetPickerType = useSessionDetailUiStore((state) => state.assetPickerType)
+  const setAssetPickerOpen = useSessionDetailUiStore((state) => state.setAssetPickerOpen)
   const setAddPageDialogOpen = useSessionDetailUiStore((state) => state.setAddPageDialogOpen)
   const setIsAddingPage = useSessionDetailUiStore((state) => state.setIsAddingPage)
   const activeChatRef = useRef<{ chatType: ChatType; pageId?: string }>({ chatType: 'page' })
@@ -896,7 +901,11 @@ export function SessionDetailPage(): React.JSX.Element {
   const handleSaveAllEdits = async (): Promise<void> => {
     if (!id || !selectedPage?.pageId || !selectedPage.htmlPath) return
     const snapshot = editHistory.getSnapshotForPage(selectedPage.pageId)
-    const hasEdits = snapshot.dragEdits.length > 0 || snapshot.textEdits.length > 0 || snapshot.deletes.length > 0
+    const hasEdits =
+      snapshot.dragEdits.length > 0 ||
+      snapshot.textEdits.length > 0 ||
+      snapshot.deletes.length > 0 ||
+      snapshot.addElements.length > 0
     if (!hasEdits) {
       previewIframeRef.current?.clearEditModeSelection()
       setTextSelection(null)
@@ -913,9 +922,11 @@ export function SessionDetailPage(): React.JSX.Element {
       const safeTextEdits = snapshot.textEdits.filter((e) => !deletedSelectors.has(e.selector))
       // Build descriptive prompt for history
       const parts: string[] = []
+      const ac = snapshot.addElements.length
       const dc = snapshot.deletes.length
       const rc = safeDragEdits.length
       const tc = safeTextEdits.length
+      if (ac > 0) parts.push(`添加 ${ac} 个元素`)
       if (dc > 0) parts.push(`删除 ${dc} 个元素`)
       if (rc > 0) parts.push(`调整 ${rc} 个元素位置`)
       if (tc > 0) parts.push(`编辑 ${tc} 个元素文字`)
@@ -927,6 +938,7 @@ export function SessionDetailPage(): React.JSX.Element {
         dragEdits: safeDragEdits,
         textEdits: safeTextEdits,
         deletes: snapshot.deletes,
+        addElements: snapshot.addElements,
         prompt
       })
       if (!result.success) throw new Error(t('sessionDetail.layoutSaveFailed'))
@@ -937,7 +949,7 @@ export function SessionDetailPage(): React.JSX.Element {
       useSessionDetailUiStore.getState().bumpThumbnailVersion(selectedPage.pageId)
       setPreviewRefreshKey((key) => key + 1)
       useSessionDetailUiStore.getState().setInteractionMode('preview')
-      const totalCount = result.dragCount + result.textCount + result.deleteCount
+      const totalCount = result.dragCount + result.textCount + result.deleteCount + result.addCount
       toastSuccess(t('sessionDetail.adjustmentsSaved', { count: totalCount }))
     } catch (error) {
       toastError(error instanceof Error ? error.message : t('sessionDetail.layoutSaveFailed'))
@@ -1052,6 +1064,9 @@ export function SessionDetailPage(): React.JSX.Element {
     for (const d of snapshot.deletes) {
       iframe.hideElement(d.selector)
     }
+    for (const a of snapshot.addElements) {
+      iframe.injectElement(a.parentSelector, a.htmlFragment)
+    }
     for (const d of snapshot.dragEdits) {
       iframe.applyDragStyle(d.selector, {
         x: d.x,
@@ -1093,6 +1108,42 @@ export function SessionDetailPage(): React.JSX.Element {
     previewIframeRef.current?.clearEditModeSelection()
     setTextSelection(null)
     setTextDraft(EMPTY_ELEMENT_DRAFT)
+  }
+
+  const handleAddElement = (relativePath: string, _fileName: string): void => {
+    if (!id || !selectedPage?.pageId || !selectedPage.htmlPath) return
+    const blockId = 'select-arcsin1-' + nanoid(8)
+    const parentSelector = `body[data-page-id="${selectedPage.pageId}"]`
+    const isVideo = /^\.\/videos\//i.test(relativePath)
+    // Offset each added element so they don't overlap
+    const existingCount = editHistory.addElements.filter(
+      (e) => e.pageId === selectedPage.pageId
+    ).length
+    const offset = existingCount * 30
+    const w = isVideo ? 640 : 400
+    const h = isVideo ? 360 : 300
+    const left = Math.min(400 + offset, 1600 - w - 20)
+    const top = Math.min(200 + offset, 900 - h - 20)
+    const htmlFragment = isVideo
+      ? `<video src="${relativePath}" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${10 + existingCount};" controls playsinline></video>`
+      : `<img src="${relativePath}" alt="" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${10 + existingCount}; object-fit:contain;" />`
+    editHistory.addElement({
+      pageId: selectedPage.pageId,
+      htmlPath: selectedPage.htmlPath,
+      parentSelector,
+      htmlFragment,
+      assignedBlockId: blockId,
+      insertIndex: -1
+    })
+    previewIframeRef.current?.injectElement(parentSelector, htmlFragment)
+  }
+
+  const handleUploadAndAdd = async (assetType: 'image' | 'video'): Promise<void> => {
+    if (!id) return
+    const result = await ipc.chooseAndUploadAssets(id, assetType)
+    if (result.cancelled || !result.assets?.length) return
+    const asset = result.assets[0]
+    handleAddElement(asset.relativePath, asset.originalName || asset.fileName)
   }
 
   return (
@@ -1160,7 +1211,7 @@ export function SessionDetailPage(): React.JSX.Element {
               selectedPage
                 ? (() => {
                     const s = editHistory.getSnapshotForPage(selectedPage.pageId)
-                    return s.dragEdits.length > 0 || s.textEdits.length > 0 || s.deletes.length > 0
+                    return s.dragEdits.length > 0 || s.textEdits.length > 0 || s.deletes.length > 0 || s.addElements.length > 0
                   })()
                 : false
             }
@@ -1172,6 +1223,8 @@ export function SessionDetailPage(): React.JSX.Element {
             onReplayPendingEdits={replayPendingEdits}
             onSaveAllEdits={() => void handleSaveAllEdits()}
             onDiscardAllEdits={handleDiscardAllEdits}
+            onAddFromLibrary={(type) => setAssetPickerOpen(true, type)}
+            onAddFromLocal={(type) => void handleUploadAndAdd(type)}
           />
 
           {interactionMode === 'edit' && textSelection && (
@@ -1448,6 +1501,13 @@ export function SessionDetailPage(): React.JSX.Element {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        <AssetPickerDialog
+          sessionId={id || ''}
+          assetType={assetPickerType}
+          open={assetPickerOpen}
+          onClose={() => setAssetPickerOpen(false)}
+          onConfirm={handleAddElement}
+        />
       </div>
     </TooltipProvider>
   )
