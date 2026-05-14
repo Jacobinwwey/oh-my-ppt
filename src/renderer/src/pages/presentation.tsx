@@ -117,10 +117,10 @@ export function PresentationPage(): React.JSX.Element {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         closeWindow()
-      } else if (e.key === 'ArrowRight' || e.key === ' ') {
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
         e.preventDefault()
         goNext()
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault()
         goPrev()
       }

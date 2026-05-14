@@ -216,8 +216,8 @@
   window.addEventListener('resize', function () { scheduleFitFrame(); });
   window.addEventListener('hashchange', onHashChange);
   window.addEventListener('keydown', function (event) {
-    if (event.key === 'ArrowRight' || event.key === 'PageDown') gotoOffset(1);
-    if (event.key === 'ArrowLeft' || event.key === 'PageUp') gotoOffset(-1);
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'PageDown') gotoOffset(1);
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp' || event.key === 'PageUp') gotoOffset(-1);
     if (event.key === 'Escape') {
       if (deckSwitcher) deckSwitcher.classList.remove('open');
     }
