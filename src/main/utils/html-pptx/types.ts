@@ -1,5 +1,16 @@
 export type HtmlToPptxTextAlign = 'left' | 'center' | 'right' | 'justify'
 
+export interface HtmlToPptxTextRun {
+  text: string
+  fontSize?: number
+  fontFace?: string
+  color?: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  strike?: boolean
+}
+
 export interface HtmlToPptxTextBox {
   text: string
   x: number
@@ -19,6 +30,7 @@ export interface HtmlToPptxTextBox {
   lineSpacing?: number
   charSpacing?: number
   wrap?: boolean
+  runs?: HtmlToPptxTextRun[]
 }
 
 export type HtmlToPptxShapeType = 'rect' | 'roundRect' | 'ellipse'

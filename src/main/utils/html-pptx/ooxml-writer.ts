@@ -4,14 +4,19 @@ import type {
   HtmlToPptxDocument,
   HtmlToPptxSlide,
   HtmlToPptxTextBox,
+  HtmlToPptxTextRun,
   HtmlToPptxShape,
-  HtmlToPptxImage
+  HtmlToPptxImage,
+  HtmlToPptxTable,
+  HtmlToPptxTableCell
 } from './types'
 
 // ─── Constants ───────────────────────────────────────────────────────
 const EMU_PER_INCH = 914400
-const SLIDE_WIDTH_EMU = 12192000  // 13.333"
-const SLIDE_HEIGHT_EMU = 6858000  // 7.5"
+const SLIDE_WIDTH_IN = 13.333333333  // exact 16:9 = 12192000 / 914400
+const SLIDE_HEIGHT_IN = 7.5
+const SLIDE_WIDTH_EMU = 12192000
+const SLIDE_HEIGHT_EMU = 6858000
 
 const inToEmu = (inches: number): number => Math.round(inches * EMU_PER_INCH)
 const ptToEmu = (pt: number): number => Math.round(pt * 12700)
@@ -56,22 +61,33 @@ const normalizeHexColor = (color: string | undefined, fallback = '000000'): stri
 
 // ─── Element builders ────────────────────────────────────────────────
 
+function buildRunXml(run: HtmlToPptxTextRun, fallbackFontSize: number, fallbackFontFace: string, opacity?: number): string {
+  const lang = /[\u4e00-\u9fff]/.test(run.text) ? 'zh-CN' : 'en-US'
+  const sz = run.fontSize ? ` sz="${Math.round(run.fontSize * 100)}"` : (fallbackFontSize ? ` sz="${Math.round(fallbackFontSize * 100)}"` : '')
+  const b = run.bold ? ' b="1"' : ''
+  const i = run.italic ? ' i="1"' : ''
+  const u = run.underline ? ' u="sng"' : ''
+  const strike = run.strike ? ' strike="sngStrike"' : ''
+  const fillXml = buildColorFillXml(run.color || '111827', opacity)
+  const fontFace = run.fontFace || fallbackFontFace || 'Aptos'
+
+  return `<a:r>
+          <a:rPr lang="${lang}"${sz}${b}${i}${u}${strike} dirty="0">
+            ${fillXml}
+            <a:latin typeface="${escapeXml(fontFace)}"/>
+            <a:ea typeface="${escapeXml(fontFace)}"/>
+          </a:rPr>
+          <a:t>${escapeXml(run.text)}</a:t>
+        </a:r>`
+}
+
 function buildTextShape(id: number, tb: HtmlToPptxTextBox): string {
   const text = normalizePptxText(tb.text)
-  if (!text) return ''
+  if (!text && !tb.runs?.length) return ''
 
-  const lines = text.split('\n')
-  const paragraphs = lines.map((line) => {
-    const fillXml = buildColorFillXml(tb.color || '111827', tb.opacity)
-    const lang = /[\u4e00-\u9fff]/.test(line) ? 'zh-CN' : 'en-US'
-    const sz = tb.fontSize ? ` sz="${Math.round(tb.fontSize * 100)}"` : ''
-    const b = tb.bold ? ' b="1"' : ''
-    const i = tb.italic ? ' i="1"' : ''
-    const u = tb.underline ? ' u="sng"' : ''
-    const strike = tb.strike ? ' strike="sngStrike"' : ''
-    const spc = tb.charSpacing ? ` spc="${Math.round(tb.charSpacing * 100)}"` : ''
-    const fontFace = tb.fontFace || 'Aptos'
+  const hasRuns = tb.runs && tb.runs.length > 0
 
+  const buildParagraph = (lineText: string, runs?: HtmlToPptxTextRun[]): string => {
     const pPrParts: string[] = []
     if (tb.align && tb.align !== 'left') {
       pPrParts.push(` algn="${mapAlign(tb.align)}"`)
@@ -85,21 +101,64 @@ function buildTextShape(id: number, tb: HtmlToPptxTextBox): string {
       ? `<a:pPr${pPrParts.filter(p => !p.startsWith('<')).join('')}>${pPrParts.filter(p => p.startsWith('<')).join('')}</a:pPr>`
       : '<a:pPr/>'
 
-    return `      <a:p>
-        ${pPr}
-        <a:r>
+    let runsXml: string
+    if (runs && runs.length > 0) {
+      runsXml = runs.map(r => buildRunXml(r, tb.fontSize, tb.fontFace || 'Aptos', tb.opacity)).join('\n        ')
+    } else {
+      // Single run using text box level formatting
+      const fillXml = buildColorFillXml(tb.color || '111827', tb.opacity)
+      const lang = /[\u4e00-\u9fff]/.test(lineText) ? 'zh-CN' : 'en-US'
+      const sz = tb.fontSize ? ` sz="${Math.round(tb.fontSize * 100)}"` : ''
+      const b = tb.bold ? ' b="1"' : ''
+      const i = tb.italic ? ' i="1"' : ''
+      const u = tb.underline ? ' u="sng"' : ''
+      const strike = tb.strike ? ' strike="sngStrike"' : ''
+      const spc = tb.charSpacing ? ` spc="${Math.round(tb.charSpacing * 100)}"` : ''
+      const fontFace = tb.fontFace || 'Aptos'
+      runsXml = `<a:r>
           <a:rPr lang="${lang}"${sz}${b}${i}${u}${strike}${spc} dirty="0">
             ${fillXml}
             <a:latin typeface="${escapeXml(fontFace)}"/>
             <a:ea typeface="${escapeXml(fontFace)}"/>
           </a:rPr>
-          <a:t>${escapeXml(line)}</a:t>
-        </a:r>
+          <a:t>${escapeXml(lineText)}</a:t>
+        </a:r>`
+    }
+
+    return `      <a:p>
+        ${pPr}
+        ${runsXml}
       </a:p>`
-  }).join('\n')
+  }
+
+  let paragraphs: string
+  if (hasRuns) {
+    // Multi-run: runs may contain newlines to split into paragraphs
+    const runLines: HtmlToPptxTextRun[][] = [[]]
+    for (const run of tb.runs!) {
+      const parts = run.text.split('\n')
+      for (let pi = 0; pi < parts.length; pi++) {
+        if (pi > 0) runLines.push([])
+        const partText = parts[pi]
+        if (partText) {
+          runLines[runLines.length - 1].push({ ...run, text: partText })
+        }
+      }
+    }
+    paragraphs = runLines
+      .filter(lineRuns => lineRuns.length > 0)
+      .map(lineRuns => buildParagraph('', lineRuns))
+      .join('\n')
+  } else {
+    const lines = text.split('\n')
+    paragraphs = lines.map(line => buildParagraph(line)).join('\n')
+  }
 
   const rot = tb.rotate ? ` rot="${degToRot(tb.rotate)}"` : ''
   const wrap = tb.wrap ? 'square' : 'none'
+  const autoFit = tb.wrap
+    ? '<a:normAutofit fontScale="100000"/>'
+    : '<a:noAutofit/>'
 
   return `<p:sp>
     <p:nvSpPr>
@@ -116,7 +175,7 @@ function buildTextShape(id: number, tb: HtmlToPptxTextBox): string {
       <a:noFill/>
     </p:spPr>
     <p:txBody>
-      <a:bodyPr wrap="${wrap}" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"/>
+      <a:bodyPr wrap="${wrap}" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">${autoFit}</a:bodyPr>
       <a:lstStyle/>
 ${paragraphs}
     </p:txBody>
@@ -228,6 +287,174 @@ function normalizePptxText(value: string): string {
   return lines.join('\n')
 }
 
+// ─── Table ───────────────────────────────────────────────────────────
+
+function buildTableXml(id: number, table: HtmlToPptxTable): string {
+  const maxCols = table.colWidths.length > 0
+    ? table.colWidths.length
+    : Math.max(1, ...table.rows.map(r => r.reduce((s, c) => s + Math.max(1, c.colspan || 1), 0)))
+
+  // Build occupied grid for merge handling
+  const totalRows = table.rows.length
+  const occupied: boolean[][] = Array.from({ length: totalRows }, () => new Array<boolean>(maxCols).fill(false))
+  const cellGrid: (HtmlToPptxTableCell | null)[][] = Array.from(
+    { length: totalRows },
+    () => new Array<HtmlToPptxTableCell | null>(maxCols).fill(null)
+  )
+
+  for (let r = 0; r < totalRows; r++) {
+    let col = 0
+    for (const cell of table.rows[r]) {
+      const rs = Math.max(1, cell.rowspan || 1)
+      const cs = Math.max(1, cell.colspan || 1)
+      while (col < maxCols && occupied[r][col]) col++
+      if (col >= maxCols) break
+      cellGrid[r][col] = cell
+      for (let dr = 0; dr < rs && r + dr < totalRows; dr++) {
+        for (let dc = 0; dc < cs && col + dc < maxCols; dc++) {
+          occupied[r + dr][col + dc] = true
+        }
+      }
+      col += cs
+    }
+  }
+
+  // Grid columns
+  const gridCols = table.colWidths.length > 0
+    ? table.colWidths
+    : Array(maxCols).fill(table.w / maxCols)
+
+  const gridColsXml = gridCols
+    .map(w => `<a:gridCol w="${inToEmu(w)}"/>`)
+    .join('\n      ')
+
+  // Build rows
+  const rowsXml = table.rows.map((row, rIdx) => {
+    const rowHeight = table.rowHeights[rIdx] || (table.h / totalRows)
+    const cellsXml: string[] = []
+    let colIdx = 0
+
+    for (const cell of row) {
+      while (colIdx < maxCols && cellGrid[rIdx][colIdx] !== cell) colIdx++
+      if (colIdx >= maxCols) break
+
+      const cs = Math.max(1, cell.colspan || 1)
+      const rs = Math.max(1, cell.rowspan || 1)
+
+      const gridSpanAttr = cs > 1 ? ` gridSpan="${cs}"` : ''
+      const rowSpanAttr = rs > 1 ? ` rowSpan="${rs}"` : ''
+
+      const cellText = normalizePptxText(cell.text || '')
+      const lang = /[\u4e00-\u9fff]/.test(cellText) ? 'zh-CN' : 'en-US'
+      const sz = cell.fontSize ? ` sz="${Math.round(cell.fontSize * 100)}"` : ''
+      const b = cell.bold ? ' b="1"' : ''
+      const i = cell.italic ? ' i="1"' : ''
+      const u = cell.underline ? ' u="sng"' : ''
+      const strike = cell.strike ? ' strike="sngStrike"' : ''
+      const colorHex = normalizeHexColor(cell.color || '111827')
+      const fontFace = cell.fontFace || 'Aptos'
+      const algn = mapAlign(cell.align)
+
+      let cellParaXml: string
+      if (cellText) {
+        cellParaXml = `<a:p>
+              <a:pPr algn="${algn}"/>
+              <a:r>
+                <a:rPr lang="${lang}"${sz}${b}${i}${u}${strike} dirty="0">
+                  <a:solidFill><a:srgbClr val="${colorHex}"/></a:solidFill>
+                  <a:latin typeface="${escapeXml(fontFace)}"/>
+                  <a:ea typeface="${escapeXml(fontFace)}"/>
+                </a:rPr>
+                <a:t>${escapeXml(cellText)}</a:t>
+              </a:r>
+            </a:p>`
+      } else {
+        cellParaXml = `<a:p><a:pPr algn="${algn}"/><a:endParaRPr lang="zh-CN"/></a:p>`
+      }
+
+      // Cell properties
+      const tcPrParts: string[] = []
+
+      // Vertical alignment
+      if (cell.valign === 'middle') tcPrParts.push('<a:vAlign val="ctr"/>')
+      else if (cell.valign === 'bottom') tcPrParts.push('<a:vAlign val="b"/>')
+
+      // Fill
+      if (cell.fill) {
+        const fillHex = normalizeHexColor(cell.fill)
+        const alphaVal = cell.fillTransparency !== undefined
+          ? Math.round((100 - cell.fillTransparency) * 1000)
+          : 100000
+        if (alphaVal < 100000) {
+          tcPrParts.push(`<a:solidFill><a:srgbClr val="${fillHex}"><a:alpha val="${alphaVal}"/></a:srgbClr></a:solidFill>`)
+        } else {
+          tcPrParts.push(`<a:solidFill><a:srgbClr val="${fillHex}"/></a:solidFill>`)
+        }
+      }
+
+      // Borders
+      if (cell.border) {
+        const bColor = normalizeHexColor(cell.border.color)
+        const bWidth = ptToEmu(cell.border.widthPt)
+        const dashVal = cell.border.dash === 'dash' ? 'dash' : 'solid'
+        const borderXml = `<a:solidFill><a:srgbClr val="${bColor}"/></a:solidFill><a:prstDash val="${dashVal}"/>`
+        tcPrParts.push(
+          `<a:lnL w="${bWidth}">${borderXml}</a:lnL>`,
+          `<a:lnR w="${bWidth}">${borderXml}</a:lnR>`,
+          `<a:lnT w="${bWidth}">${borderXml}</a:lnT>`,
+          `<a:lnB w="${bWidth}">${borderXml}</a:lnB>`
+        )
+      } else {
+        // Default thin border for table structure
+        const defaultBorder = `<a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill>`
+        tcPrParts.push(
+          `<a:lnL w="12700">${defaultBorder}</a:lnL>`,
+          `<a:lnR w="12700">${defaultBorder}</a:lnR>`,
+          `<a:lnT w="12700">${defaultBorder}</a:lnT>`,
+          `<a:lnB w="12700">${defaultBorder}</a:lnB>`
+        )
+      }
+
+      const tcPrXml = tcPrParts.length > 0
+        ? `<a:tcPr>${tcPrParts.join('')}</a:tcPr>`
+        : ''
+
+      cellsXml.push(`<a:tc${gridSpanAttr}${rowSpanAttr}>
+          <a:txBody>
+            <a:bodyPr/>
+            <a:lstStyle/>
+            ${cellParaXml}
+          </a:txBody>
+          ${tcPrXml}
+        </a:tc>`)
+
+      colIdx += cs
+    }
+
+    return `<a:tr h="${inToEmu(rowHeight)}">\n      ${cellsXml.join('\n      ')}\n    </a:tr>`
+  }).join('\n    ')
+
+  return `<p:graphicFrame>
+    <p:nvGrpFrPr>
+      <p:cNvPr id="${id}" name="Table ${id}"/>
+      <p:cNvGrpFrPr/>
+      <p:nvPr/>
+    </p:nvGrpFrPr>
+    <p:xfrm>
+      <a:off x="${inToEmu(table.x)}" y="${inToEmu(table.y)}"/>
+      <a:ext cx="${inToEmu(table.w)}" cy="${inToEmu(table.h)}"/>
+    </p:xfrm>
+    <a:tbl>
+      <a:tblPr firstRow="0" lastRow="0" firstCol="0" lastCol="0" noBandRow="1" noBandCol="1">
+      </a:tblPr>
+      <a:tblGrid>
+      ${gridColsXml}
+      </a:tblGrid>
+    ${rowsXml}
+    </a:tbl>
+  </p:graphicFrame>`
+}
+
 // ─── Slide XML ───────────────────────────────────────────────────────
 
 interface ImageRel {
@@ -262,8 +489,8 @@ function buildSlideXml(
         mimeType: slide.backgroundImage.mimeType,
         x: 0,
         y: 0,
-        w: 13.333,
-        h: 7.5,
+        w: SLIDE_WIDTH_IN,
+        h: SLIDE_HEIGHT_IN,
         alt: slide.backgroundImage.alt
       }))
     }
@@ -282,6 +509,12 @@ function buildSlideXml(
   for (const shape of slide.shapes || []) {
     nextId++
     shapes.push(buildShapeXml(nextId, shape))
+  }
+
+  // Tables
+  for (const table of slide.tables || []) {
+    nextId++
+    shapes.push(buildTableXml(nextId, table))
   }
 
   // Texts

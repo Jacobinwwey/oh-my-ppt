@@ -278,9 +278,30 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     const opacity = Number(style.opacity || '1');
     if (opacity < 0.15) continue;
     const fill = rgbToHex(style.backgroundColor);
-    const borderColor = rgbToHex(style.borderColor);
-    const borderWidth = Number.parseFloat(style.borderWidth || '0') || 0;
-    const hasBorder = borderWidth > 0 && style.borderStyle !== 'none' && borderColor;
+    // Check per-side border: Tailwind border-l-4 sets border-left only,
+    // style.borderColor / style.borderWidth may not reflect it.
+    const resolveBorder = () => {
+      const sides = [
+        { w: style.borderLeftWidth, c: style.borderLeftColor, s: style.borderLeftStyle },
+        { w: style.borderTopWidth, c: style.borderTopColor, s: style.borderTopStyle },
+        { w: style.borderRightWidth, c: style.borderRightColor, s: style.borderRightStyle },
+        { w: style.borderBottomWidth, c: style.borderBottomColor, s: style.borderBottomStyle }
+      ];
+      // Pick the side with the thickest border that has a visible color
+      let best = null;
+      for (const side of sides) {
+        const w = Number.parseFloat(side.w || '0') || 0;
+        if (w <= 0 || side.s === 'none') continue;
+        const c = rgbToHex(side.c);
+        if (!c) continue;
+        if (!best || w > best.w) best = { w, c };
+      }
+      return best;
+    };
+    const borderInfo = resolveBorder();
+    const borderColor = borderInfo ? borderInfo.c : '';
+    const borderWidth = borderInfo ? borderInfo.w : 0;
+    const hasBorder = Boolean(borderInfo);
     const radius = Number.parseFloat(style.borderTopLeftRadius || style.borderRadius || '0') || 0;
     const hasShadow = Boolean(style.boxShadow && style.boxShadow !== 'none');
     // Skip elements with no visual distinction.
