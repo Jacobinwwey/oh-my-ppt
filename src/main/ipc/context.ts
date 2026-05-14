@@ -19,7 +19,7 @@ import {
   SESSION_ASSET_FILE_NAMES,
   type DeckPageFile
 } from './engine/template'
-import { FREEZE_PAGE_FOR_EXPORT_SCRIPT } from '../utils/html-to-pptx-browser-scripts'
+import { FREEZE_PAGE_FOR_EXPORT_SCRIPT } from '../utils/html-pptx/browser-scripts'
 
 export type SessionRunState = {
   sessionId: string

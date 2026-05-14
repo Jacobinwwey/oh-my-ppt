@@ -4,8 +4,8 @@ import fs from 'fs'
 import path from 'path'
 import { PDFDocument } from 'pdf-lib'
 import type { IpcContext } from '../context'
-import { writeHtmlToPptx, type HtmlToPptxSlide } from '../../utils/html-to-pptx'
-import { extractHtmlPageToPptxSlide } from '../../utils/html-to-pptx-renderer'
+import { writeHtmlToPptx, type HtmlToPptxSlide } from '../../utils/html-pptx'
+import { extractHtmlPageToPptxSlide } from '../../utils/html-pptx/renderer'
 
 type ExportPayload = {
   sessionId?: unknown

@@ -6,13 +6,13 @@ import {
   normalizeExtractedHtmlToPptxSlide,
   type HtmlToPptxSlide,
   type HtmlToPptxTextBox
-} from './html-to-pptx'
+} from './index'
 import {
   FREEZE_PAGE_FOR_PPTX_SCRIPT,
   HIDE_ELEMENTS_FOR_PPTX_BACKGROUND_SCRIPT,
   HIDE_TEXT_FOR_PPTX_BACKGROUND_SCRIPT,
   WAIT_FOR_PPTX_CAPTURE_FRAME_SCRIPT
-} from './html-to-pptx-browser-scripts'
+} from './browser-scripts'
 
 export interface HtmlPageForPptx {
   htmlPath: string
