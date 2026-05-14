@@ -217,7 +217,9 @@ If your browser or antivirus blocks the file, first confirm the installer came f
 ## 🙌 Feedback & Requests
 
 If you have new requirements, feature ideas, or bug reports, feel free to open an Issue in this repository.
-
+<p>
+ <a href="https://discord.gg/FSkzBgsQ"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+</p>
 I will keep following up and improving the experience.
 
 ## Reference
