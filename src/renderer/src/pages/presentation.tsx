@@ -81,7 +81,7 @@ export function PresentationPage(): React.JSX.Element {
     return toFileUrl(resolved)
   }, [currentPage])
 
-  // Scale webview to fit container
+  // Scale webview to fill container (cover mode — no black borders)
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -89,14 +89,19 @@ export function PresentationPage(): React.JSX.Element {
       const { width, height } = el.getBoundingClientRect()
       const scale = Math.min(width / 1600, height / 900)
       const s = Number.isFinite(scale) && scale > 0 ? scale : 1
-      const offsetX = Math.max(0, (width - 1600 * s) / 2)
-      const offsetY = Math.max(0, (height - 900 * s) / 2)
+      const offsetX = (width - 1600 * s) / 2
+      const offsetY = (height - 900 * s) / 2
       setTransform(`translate(${offsetX}px, ${offsetY}px) scale(${s})`)
     }
     updateScale()
     const observer = new ResizeObserver(updateScale)
     observer.observe(el)
     return () => observer.disconnect()
+  }, [])
+
+  // Close window via IPC (works on Windows)
+  const closeWindow = useCallback(() => {
+    window.electron?.ipcRenderer.send('presentation:close')
   }, [])
 
   // Keyboard navigation
@@ -111,58 +116,46 @@ export function PresentationPage(): React.JSX.Element {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
-        window.close()
-      } else if (e.key === 'ArrowRight' || e.key === ' ') {
+        closeWindow()
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
         e.preventDefault()
         goNext()
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault()
         goPrev()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [goNext, goPrev])
+  }, [goNext, goPrev, closeWindow])
+
+  // Click/touch navigation: left half = prev, right half = next
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const { clientX } = e
+      const { width } = e.currentTarget.getBoundingClientRect()
+      if (clientX < width / 2) {
+        goPrev()
+      } else {
+        goNext()
+      }
+    },
+    [goPrev, goNext]
+  )
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-black select-none">
-      <div ref={containerRef} className="relative flex-1 overflow-hidden">
-        {webviewSrc && (
-          <webview
-            src={webviewSrc}
-            className="absolute left-0 top-0 h-[900px] w-[1600px] origin-top-left"
-            style={{ transform }}
-          />
-        )}
-      </div>
-      <div className="flex items-center justify-center gap-4 bg-black/80 px-6 py-2.5">
-        <button
-          type="button"
-          onClick={goPrev}
-          disabled={currentIndex <= 0}
-          className="rounded-lg px-3 py-1 text-sm text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          &#8592;
-        </button>
-        <span className="min-w-[80px] text-center text-sm text-white/50">
-          {currentIndex + 1} / {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={goNext}
-          disabled={currentIndex >= totalPages - 1}
-          className="rounded-lg px-3 py-1 text-sm text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          &#8594;
-        </button>
-        <button
-          type="button"
-          onClick={() => window.close()}
-          className="ml-6 rounded-lg px-3 py-1 text-sm text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
-        >
-          ESC
-        </button>
-      </div>
+    <div
+      ref={containerRef}
+      className="relative h-screen w-screen cursor-none overflow-hidden bg-black"
+      onClick={handleClick}
+    >
+      {webviewSrc && (
+        <webview
+          src={webviewSrc}
+          className="absolute left-0 top-0 h-[900px] w-[1600px] origin-top-left"
+          style={{ transform }}
+        />
+      )}
     </div>
   )
 }

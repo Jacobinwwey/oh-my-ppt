@@ -1,96 +1,34 @@
-import PptxGenJS from 'pptxgenjs'
 import { createRequire } from 'module'
 import { pathToFileURL } from 'url'
+import { writePptxDocument } from './ooxml-writer'
 
-export type HtmlToPptxTextAlign = 'left' | 'center' | 'right' | 'justify'
+export type {
+  HtmlToPptxTextAlign,
+  HtmlToPptxTextBox,
+  HtmlToPptxShapeType,
+  HtmlToPptxBorder,
+  HtmlToPptxShape,
+  HtmlToPptxImage,
+  HtmlToPptxTableCell,
+  HtmlToPptxTable,
+  HtmlToPptxSlide,
+  HtmlToPptxDocument,
+  HtmlToPptxExtractOptions,
+  HtmlToPptxExtractedSlide
+} from './types'
 
-export interface HtmlToPptxTextBox {
-  text: string
-  x: number
-  y: number
-  w: number
-  h: number
-  fontSize: number
-  fontFace?: string
-  color?: string
-  bold?: boolean
-  italic?: boolean
-  underline?: boolean
-  strike?: boolean
-  align?: HtmlToPptxTextAlign
-  opacity?: number
-  rotate?: number
-  lineSpacing?: number
-  charSpacing?: number
-  wrap?: boolean
-}
+import type {
+  HtmlToPptxTextBox,
+  HtmlToPptxShape,
+  HtmlToPptxImage,
+  HtmlToPptxTable,
+  HtmlToPptxTableCell,
+  HtmlToPptxSlide,
+  HtmlToPptxDocument,
+  HtmlToPptxExtractOptions
+} from './types'
 
-export type HtmlToPptxShapeType = 'rect' | 'roundRect' | 'ellipse'
-
-export interface HtmlToPptxBorder {
-  color: string
-  widthPt: number
-  transparency?: number
-  dash?: 'solid' | 'dash'
-}
-
-export interface HtmlToPptxShape {
-  x: number
-  y: number
-  w: number
-  h: number
-  fill?: string
-  transparency?: number
-  radius?: number
-  border?: HtmlToPptxBorder
-  shapeType?: HtmlToPptxShapeType
-  rotate?: number
-}
-
-export interface HtmlToPptxImage {
-  dataUri: string
-  mimeType: string
-  x: number
-  y: number
-  w: number
-  h: number
-  alt?: string
-  rotate?: number
-}
-
-export interface HtmlToPptxSlide {
-  title?: string
-  backgroundColor?: string
-  backgroundImage?: HtmlToPptxImage
-  texts: HtmlToPptxTextBox[]
-  shapes?: HtmlToPptxShape[]
-  images?: HtmlToPptxImage[]
-}
-
-export interface HtmlToPptxDocument {
-  title: string
-  author?: string
-  slides: HtmlToPptxSlide[]
-}
-
-export interface HtmlToPptxExtractOptions {
-  pageWidthPx: number
-  pageHeightPx: number
-  slideWidthIn?: number
-  slideHeightIn?: number
-  maxTextChars?: number
-  maxTextBoxes?: number
-  maxShapes?: number
-  maxImages?: number
-  maxImageBytes?: number
-}
-
-export interface HtmlToPptxExtractedSlide {
-  backgroundColor?: string
-  texts: HtmlToPptxTextBox[]
-  shapes: HtmlToPptxShape[]
-  images: HtmlToPptxImage[]
-}
+import { buildTableExtractScript } from './table-extract'
 
 const DEFAULT_SLIDE_WIDTH = 13.333
 const DEFAULT_SLIDE_HEIGHT = 7.5
@@ -188,7 +126,6 @@ const rgbToHex = (value) => {
     .toUpperCase();
 };
 `
-
 export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions): string => {
   const slideWidth = options.slideWidthIn ?? DEFAULT_SLIDE_WIDTH
   const slideHeight = options.slideHeightIn ?? DEFAULT_SLIDE_HEIGHT
@@ -197,6 +134,9 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
   const maxImages = Math.max(0, Math.floor(options.maxImages ?? 40))
   const maxTextChars = Math.max(80, Math.floor(options.maxTextChars ?? DEFAULT_MAX_TEXT_CHARS))
   const maxImageBytes = Math.max(0, Math.floor(options.maxImageBytes ?? DEFAULT_MAX_IMAGE_BYTES))
+
+  // Build table extraction script and inject it into the main script
+  const tableExtractScript = buildTableExtractScript(options)
 
   return `
 (async () => {
@@ -233,6 +173,16 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
   };
   const clampBlockText = (value) => normalizeLines(value).slice(0, maxTextChars);
   ${buildRgbToHexScript()}
+
+  // ========== Table extraction (before shapes/text) ==========
+  const tableResult = ${tableExtractScript};
+  const tables = tableResult.tables || [];
+  const consumedTableElementIds = new Set(tableResult.consumedTableElementIds || []);
+  const isInsideConsumedTable = (element) => {
+    if (element.getAttribute && consumedTableElementIds.has(element.getAttribute('data-pptx-consumed-table'))) return true;
+    const closest = element.closest && element.closest('[data-pptx-consumed-table]');
+    return closest ? consumedTableElementIds.has(closest.getAttribute('data-pptx-consumed-table')) : false;
+  };
 
   const pageElement =
     document.querySelector('.ppt-page-root[data-ppt-guard-root="1"]') ||
@@ -280,7 +230,6 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
   };
   const isStyleElement = (element) =>
     ['SPAN', 'B', 'STRONG', 'I', 'EM', 'U', 'FONT', 'SUB', 'SUP', 'A', 'SMALL', 'BIG', 'MARK'].includes(element.tagName);
-
   const bodyStyle = window.getComputedStyle(pageElement);
   const htmlStyle = window.getComputedStyle(document.documentElement);
   const backgroundColor =
@@ -308,23 +257,62 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     };
   };
 
+  // ========== Shapes: skip consumed table elements ==========
   const shapeNodes = Array.from(pageElement.querySelectorAll('section,main,article,header,footer,aside,div,figure,figcaption,table,td,th'));
   const shapes = [];
   const minShapeArea = layoutWidthPx * layoutHeightPx * 0.005;
   for (const element of shapeNodes) {
     if (shapes.length >= maxShapes) break;
+    // Skip table elements that have been consumed by table extraction
+    if (isInsideConsumedTable(element)) continue;
     const style = window.getComputedStyle(element);
     const { rect, x, y, w, h } = elementToBox(element);
     if (!isVisible(element, style, rect)) continue;
-    const fill = rgbToHex(style.backgroundColor);
-    const borderColor = rgbToHex(style.borderColor);
-    const borderWidth = Number.parseFloat(style.borderWidth || '0') || 0;
-    const hasBorder = borderWidth > 0 && style.borderStyle !== 'none' && borderColor;
+    // Skip decorative blur blobs - cannot be faithfully rendered in PPTX
+    if (/blur/i.test(style.filter || '')) continue;
+    // Skip elements with CSS background-image (gradients, URL images, etc.)
+    // Their full visual is captured in the background screenshot — extracting
+    // as a shape would cause double-rendering or color mismatch.
+    const bgImage = (style.backgroundImage || '').trim();
+    if (bgImage && bgImage !== 'none') continue;
     const opacity = Number(style.opacity || '1');
-    if ((!fill || fill === backgroundColor) && !hasBorder) continue;
-    if (!hasBorder && rect.width * rect.height < minShapeArea) continue;
-    if (rect.width < 24 || rect.height < 16) continue;
+    if (opacity < 0.15) continue;
+    const fill = rgbToHex(style.backgroundColor);
+    // Check per-side border: Tailwind border-l-4 sets border-left only,
+    // style.borderColor / style.borderWidth may not reflect it.
+    const resolveBorder = () => {
+      const sides = [
+        { w: style.borderLeftWidth, c: style.borderLeftColor, s: style.borderLeftStyle },
+        { w: style.borderTopWidth, c: style.borderTopColor, s: style.borderTopStyle },
+        { w: style.borderRightWidth, c: style.borderRightColor, s: style.borderRightStyle },
+        { w: style.borderBottomWidth, c: style.borderBottomColor, s: style.borderBottomStyle }
+      ];
+      // Pick the side with the thickest border that has a visible color
+      let best = null;
+      for (const side of sides) {
+        const w = Number.parseFloat(side.w || '0') || 0;
+        if (w <= 0 || side.s === 'none') continue;
+        const c = rgbToHex(side.c);
+        if (!c) continue;
+        if (!best || w > best.w) best = { w, c };
+      }
+      return best;
+    };
+    const borderInfo = resolveBorder();
+    const borderColor = borderInfo ? borderInfo.c : '';
+    const borderWidth = borderInfo ? borderInfo.w : 0;
+    const hasBorder = Boolean(borderInfo);
     const radius = Number.parseFloat(style.borderTopLeftRadius || style.borderRadius || '0') || 0;
+    const hasShadow = Boolean(style.boxShadow && style.boxShadow !== 'none');
+    // Skip elements with no visual distinction.
+    // BUT keep elements with rounded corners or box-shadow (e.g. cards with bg-white
+    // that visually stand out from the page root background).
+    if ((!fill || (fill === backgroundColor && !radius && !hasShadow)) && !hasBorder) continue;
+    // Skip small elements, BUT keep small badges/buttons (colored fill + radius/shadow)
+    // e.g. timeline year circles (48x48px with bg color + rounded-full + shadow-md)
+    const isSmallBadge = fill && fill !== backgroundColor && (radius > 0 || hasShadow);
+    if (!hasBorder && !isSmallBadge && rect.width * rect.height < minShapeArea) continue;
+    if (rect.width < 12 || rect.height < 12) continue;
     const minSide = Math.min(rect.width, rect.height);
     const shapeType =
       radius > 0 && Math.abs(rect.width - rect.height) < 1.5 && radius >= minSide / 2 - 0.5
@@ -351,8 +339,10 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
           }
         : undefined
     });
+    element.setAttribute('data-pptx-extracted-shape', '1');
   }
 
+  // ========== Texts: skip elements inside consumed tables ==========
   const texts = [];
   const textSeen = new Set();
   const consumedTextElements = new Set();
@@ -364,15 +354,15 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     return false;
   };
   const textWidthIn = (x, width, fontSizePt, text, shouldWrap = false) => {
-    if (shouldWrap) return Math.max(0.12, Math.min(slideWidthIn - x, width));
+    if (shouldWrap) return Math.max(0.12, Math.min(slideWidthIn - x, width * 1.1));
     const hasCjk = /[\\u3400-\\u9fff\\uf900-\\ufaff]/.test(text);
-    const factor = hasCjk ? 1.28 : 1.18;
-    const padding = Math.max(0.16, Math.min(0.6, fontSizePt / 72 * 0.4));
+    const factor = hasCjk ? 1.15 : 1.08;
+    const padding = Math.max(0.08, Math.min(0.3, fontSizePt / 72 * 0.2));
     return Math.max(0.12, Math.min(slideWidthIn - x, width * factor + padding));
   };
   const textHeightIn = (height, fontSizePt) => {
-    const padding = Math.max(0.03, Math.min(0.16, fontSizePt / 72 * 0.12));
-    return Math.max(0.08, height * 1.12 + padding);
+    const padding = Math.max(0.02, Math.min(0.1, fontSizePt / 72 * 0.08));
+    return Math.max(0.06, height * 1.08 + padding);
   };
   const resolveLineHeightPx = (style, fontSizePx) => {
     const lineHeight = Number.parseFloat(style.lineHeight || '');
@@ -543,9 +533,12 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     if (element.querySelector?.('.katex')) return false;
     if (hasNestedTextBlock(element)) return false;
     if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'CANVAS', 'VIDEO', 'IFRAME', 'MATH'].includes(element.tagName)) return false;
-    if (hasDistinctVisibleTextChild(element, style)) return false;
     const tag = element.tagName;
+    // Block text elements: export as ONE text box even with styled children (spans).
+    // This prevents text fragmentation where "非洲将贡献全球**95%**的新增儿童人口"
+    // becomes 3 separate text boxes that can't align correctly.
     if (/^H[1-6]$/.test(tag) || ['P', 'LI', 'BLOCKQUOTE', 'TD', 'TH', 'FIGCAPTION'].includes(tag)) return true;
+    if (hasDistinctVisibleTextChild(element, style)) return false;
     if (element.matches('[data-ppt-text],[data-role="title"],.title,.slide-title,.page-title')) return true;
     const isBlockLike =
       ['block', 'flex', 'grid', 'table-cell', 'list-item'].includes(style.display) ||
@@ -559,6 +552,8 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     for (const element of candidates) {
       if (texts.length >= maxTextBoxes) break;
       if (element.closest('script, style, noscript, svg, canvas, video, iframe, .katex, .katex-mathml')) continue;
+      // Skip elements inside consumed tables
+      if (isInsideConsumedTable(element)) continue;
       if (isInsideConsumedTextElement(element)) continue;
       const style = window.getComputedStyle(element);
       const rect = element.getBoundingClientRect();
@@ -570,6 +565,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
       const largeText = fontSizePx >= 28 || /^H[1-6]$/.test(element.tagName);
       pushTextBox(text, rect, style, element, !(singleLine && largeText));
       consumedTextElements.add(element);
+      element.setAttribute('data-pptx-extracted-text', '1');
     }
   };
   const getLineTextRuns = (node) => {
@@ -625,6 +621,8 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     if (texts.length >= maxTextBoxes) return;
     if (parentElement && isInsideConsumedTextElement(parentElement)) return;
     if (parentElement && parentElement.closest?.('.katex, .katex-mathml')) return;
+    // Skip text nodes inside consumed tables
+    if (parentElement && isInsideConsumedTable(parentElement)) return;
     const text = clampText(node.textContent);
     if (!text) return;
     const range = document.createRange();
@@ -656,6 +654,8 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     const element = node;
     if (consumedTextElements.has(element)) return;
     if (element.closest('script, style, noscript, svg, canvas, video, iframe, .katex, .katex-mathml')) return;
+    // Skip elements inside consumed tables
+    if (isInsideConsumedTable(element)) return;
     const style = window.getComputedStyle(element);
     const rect = element.getBoundingClientRect();
     if (!isVisible(element, style, rect)) return;
@@ -715,6 +715,9 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     const style = window.getComputedStyle(element);
     const { rect, x, y, w, h } = elementToBox(element);
     if (!isVisible(element, style, rect)) continue;
+    // Skip decorative blurred/transparent images (blur blobs, faint SVGs)
+    if (/blur/i.test(style.filter || '')) continue;
+    if (Number(style.opacity || '1') < 0.15) continue;
     const dataUri = element.tagName === 'CANVAS' ? canvasToDataUri(element) : await imageToDataUri(element);
     if (!/^data:image\\/(?:png|jpeg|jpg|gif);base64,/i.test(dataUri)) continue;
     if (maxImageDataUriLength > 128 && dataUri.length > maxImageDataUriLength) continue;
@@ -728,6 +731,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
       alt: element.getAttribute('alt') || '',
       rotate: parseRotate(style)
     });
+    element.setAttribute('data-pptx-extracted-image', '1');
   }
 
   // 用已提取的 dataUri 去重，避免 background-image 与 img/canvas 重复提取
@@ -769,11 +773,83 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
       alt: '',
       rotate: parseRotate(style)
     })
+    el.setAttribute('data-pptx-extracted-image', '1');
   }
 
-  return { backgroundColor, shapes, texts, images };
+  return { backgroundColor, shapes, texts, images, tables };
 })()
 `
+}
+// ========== Normalize ==========
+const normalizeTableCell = (raw: unknown): HtmlToPptxTableCell | null => {
+  const row = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const text = normalizePptxText(String(row.text || ''))
+  if (!text) return null
+  const rowspan = Math.max(1, Number(row.rowspan) || 1)
+  const colspan = Math.max(1, Number(row.colspan) || 1)
+  const borderRaw =
+    row.border && typeof row.border === 'object' ? (row.border as Record<string, unknown>) : null
+  const borderColor = borderRaw ? normalizeHexColor(String(borderRaw.color || ''), '') : ''
+  return {
+    text,
+    rowspan,
+    colspan,
+    x: clamp(Number(row.x) || 0, 0, DEFAULT_SLIDE_WIDTH),
+    y: clamp(Number(row.y) || 0, 0, DEFAULT_SLIDE_HEIGHT),
+    w: clamp(Number(row.w) || 0.1, 0.05, DEFAULT_SLIDE_WIDTH),
+    h: clamp(Number(row.h) || 0.05, 0.03, DEFAULT_SLIDE_HEIGHT),
+    fontSize: row.fontSize ? clamp(Number(row.fontSize), 6, MAX_EXPORT_FONT_SIZE_PT) : undefined,
+    fontFace: resolveExportFontFace(text, String(row.fontFace || '')),
+    color: normalizeHexColor(String(row.color || ''), '111827'),
+    bold: Boolean(row.bold),
+    italic: Boolean(row.italic),
+    underline: Boolean(row.underline),
+    strike: Boolean(row.strike),
+    align:
+      row.align === 'center' || row.align === 'right' || row.align === 'justify'
+        ? (row.align as 'center' | 'right' | 'justify')
+        : 'left',
+    valign:
+      row.valign === 'middle' || row.valign === 'bottom'
+        ? (row.valign as 'middle' | 'bottom')
+        : 'top',
+    fill: row.fill ? normalizeHexColor(String(row.fill), '') : undefined,
+    fillTransparency: row.fillTransparency ? clamp(Number(row.fillTransparency), 0, 100) : undefined,
+    border: borderColor
+      ? {
+          color: borderColor,
+          widthPt: clamp(Number(borderRaw?.widthPt ?? 0.75), 0.1, 20),
+          dash: borderRaw?.dash === 'dash' ? 'dash' : 'solid'
+        }
+      : undefined
+  }
+}
+
+const normalizeTable = (raw: unknown): HtmlToPptxTable | null => {
+  const row = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const rowsRaw = Array.isArray(row.rows) ? row.rows : []
+  const colWidthsRaw = Array.isArray(row.colWidths) ? (row.colWidths as number[]) : []
+  const rowHeightsRaw = Array.isArray(row.rowHeights) ? (row.rowHeights as number[]) : []
+  if (rowsRaw.length === 0) return null
+
+  const rows = rowsRaw
+    .map((cellsRaw: unknown) => {
+      const cells = Array.isArray(cellsRaw) ? cellsRaw : []
+      return cells.map(normalizeTableCell).filter((c): c is HtmlToPptxTableCell => c !== null)
+    })
+    .filter((r) => r.length > 0)
+
+  if (rows.length === 0) return null
+
+  return {
+    x: clamp(Number(row.x) || 0, 0, DEFAULT_SLIDE_WIDTH),
+    y: clamp(Number(row.y) || 0, 0, DEFAULT_SLIDE_HEIGHT),
+    w: clamp(Number(row.w) || 0.1, 0.1, DEFAULT_SLIDE_WIDTH),
+    h: clamp(Number(row.h) || 0.1, 0.1, DEFAULT_SLIDE_HEIGHT),
+    colWidths: colWidthsRaw.map((w) => Math.max(0.05, Number(w) || 0.05)),
+    rowHeights: rowHeightsRaw.map((h) => Math.max(0.03, Number(h) || 0.03)),
+    rows
+  }
 }
 
 export const normalizeExtractedHtmlToPptxSlide = (
@@ -784,6 +860,7 @@ export const normalizeExtractedHtmlToPptxSlide = (
   const textsRaw = Array.isArray(record.texts) ? record.texts : []
   const shapesRaw = Array.isArray(record.shapes) ? record.shapes : []
   const imagesRaw = Array.isArray(record.images) ? record.images : []
+  const tablesRaw = Array.isArray(record.tables) ? record.tables : []
   const texts = textsRaw
     .map((item): HtmlToPptxTextBox | null => {
       const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
@@ -870,120 +947,25 @@ export const normalizeExtractedHtmlToPptxSlide = (
     })
     .filter((item): item is HtmlToPptxImage => Boolean(item))
 
+  const tables = tablesRaw
+    .map(normalizeTable)
+    .filter((t): t is HtmlToPptxTable => t !== null)
+
   return {
     title: fallbackTitle,
     backgroundColor: normalizeHexColor(String(record.backgroundColor || ''), 'FFFFFF'),
     backgroundImage: undefined,
     texts,
     shapes,
-    images
+    images,
+    tables: tables.length > 0 ? tables : undefined
   }
 }
+// ========== Write ==========
 
 export const writeHtmlToPptx = async (
   outputPath: string,
   document: HtmlToPptxDocument
 ): Promise<void> => {
-  const pptx = buildPptxGenDocument(document)
-  await pptx.writeFile({ fileName: outputPath })
-}
-
-const buildPptxGenDocument = (document: HtmlToPptxDocument): PptxGenJS => {
-  const pptx = new PptxGenJS()
-  pptx.layout = 'LAYOUT_WIDE'
-  pptx.author = document.author || 'OhMyPPT'
-  pptx.company = 'OhMyPPT'
-  pptx.subject = document.title || 'OhMyPPT'
-  pptx.title = document.title || 'OhMyPPT'
-  pptx.theme = {
-    headFontFace: 'Aptos Display',
-    bodyFontFace: 'Aptos'
-  }
-
-  const slides = document.slides.length > 0 ? document.slides : [{ texts: [] }]
-  slides.forEach((sourceSlide) => {
-    const slide = pptx.addSlide()
-    slide.background = { color: normalizeHexColor(sourceSlide.backgroundColor, 'FFFFFF') }
-    // Z-order is intentional: visual background first, optional decorative objects next, editable text last.
-    if (sourceSlide.backgroundImage) {
-      slide.addImage({
-        data: sourceSlide.backgroundImage.dataUri,
-        x: 0,
-        y: 0,
-        w: DEFAULT_SLIDE_WIDTH,
-        h: DEFAULT_SLIDE_HEIGHT,
-        altText: 'Slide visual background'
-      })
-    }
-    ;(sourceSlide.shapes || []).forEach((shape) => {
-      slide.addShape(mapPptxShapeType(pptx, shape), {
-        x: shape.x,
-        y: shape.y,
-        w: shape.w,
-        h: shape.h,
-        rotate: shape.rotate || undefined,
-        rectRadius: shape.radius ? clamp(shape.radius / 130, 0, 0.5) : undefined,
-        fill: shape.fill
-          ? {
-              color: normalizeHexColor(shape.fill, 'FFFFFF'),
-              transparency: clamp(shape.transparency ?? 0, 0, 100)
-            }
-          : { transparency: 100 },
-        line: shape.border
-          ? {
-              color: normalizeHexColor(shape.border.color, '000000'),
-              width: shape.border.widthPt,
-              transparency: clamp(shape.border.transparency ?? 0, 0, 100),
-              dashType: shape.border.dash === 'dash' ? 'dash' : 'solid'
-            }
-          : { transparency: 100 }
-      })
-    })
-    ;(sourceSlide.images || []).forEach((image) => {
-      slide.addImage({
-        data: image.dataUri,
-        x: image.x,
-        y: image.y,
-        w: image.w,
-        h: image.h,
-        altText: image.alt,
-        rotate: image.rotate || undefined
-      })
-    })
-
-    sourceSlide.texts.forEach((textBox) => {
-      const text = textBox.text
-      if (!text) return
-      slide.addText(text, {
-        x: textBox.x,
-        y: textBox.y,
-        w: textBox.w,
-        h: textBox.h,
-        fontSize: textBox.fontSize,
-        fontFace: resolveExportFontFace(text, textBox.fontFace),
-        color: normalizeHexColor(textBox.color, '111827'),
-        bold: Boolean(textBox.bold),
-        italic: Boolean(textBox.italic),
-        underline: textBox.underline ? { style: 'sng' } : undefined,
-        strike: textBox.strike ? 'sngStrike' : undefined,
-        align: textBox.align || 'left',
-        valign: 'top',
-        margin: 0,
-        fit: textBox.wrap ? 'shrink' : 'none',
-        wrap: textBox.wrap ?? false,
-        rotate: textBox.rotate || undefined,
-        transparency: Math.round((1 - clamp(textBox.opacity ?? 1, 0, 1)) * 100),
-        lineSpacing: textBox.lineSpacing,
-        charSpacing: textBox.charSpacing
-      })
-    })
-  })
-
-  return pptx
-}
-
-const mapPptxShapeType = (pptx: PptxGenJS, shape: HtmlToPptxShape): PptxGenJS.ShapeType => {
-  if (shape.shapeType === 'ellipse') return pptx.ShapeType.ellipse
-  if (shape.shapeType === 'roundRect') return pptx.ShapeType.roundRect
-  return pptx.ShapeType.rect
+  await writePptxDocument(outputPath, document)
 }

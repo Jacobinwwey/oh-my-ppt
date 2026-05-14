@@ -1,0 +1,136 @@
+export type HtmlToPptxTextAlign = 'left' | 'center' | 'right' | 'justify'
+
+export interface HtmlToPptxTextRun {
+  text: string
+  fontSize?: number
+  fontFace?: string
+  color?: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  strike?: boolean
+}
+
+export interface HtmlToPptxTextBox {
+  text: string
+  x: number
+  y: number
+  w: number
+  h: number
+  fontSize: number
+  fontFace?: string
+  color?: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  strike?: boolean
+  align?: HtmlToPptxTextAlign
+  opacity?: number
+  rotate?: number
+  lineSpacing?: number
+  charSpacing?: number
+  wrap?: boolean
+  runs?: HtmlToPptxTextRun[]
+}
+
+export type HtmlToPptxShapeType = 'rect' | 'roundRect' | 'ellipse'
+
+export interface HtmlToPptxBorder {
+  color: string
+  widthPt: number
+  transparency?: number
+  dash?: 'solid' | 'dash'
+}
+
+export interface HtmlToPptxShape {
+  x: number
+  y: number
+  w: number
+  h: number
+  fill?: string
+  transparency?: number
+  radius?: number
+  border?: HtmlToPptxBorder
+  shapeType?: HtmlToPptxShapeType
+  rotate?: number
+}
+
+export interface HtmlToPptxImage {
+  dataUri: string
+  mimeType: string
+  x: number
+  y: number
+  w: number
+  h: number
+  alt?: string
+  rotate?: number
+}
+
+export interface HtmlToPptxTableCell {
+  text: string
+  rowspan: number
+  colspan: number
+  x: number
+  y: number
+  w: number
+  h: number
+  fontSize?: number
+  fontFace?: string
+  color?: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  strike?: boolean
+  align?: HtmlToPptxTextAlign
+  valign?: 'top' | 'middle' | 'bottom'
+  fill?: string
+  fillTransparency?: number
+  border?: HtmlToPptxBorder
+}
+
+export interface HtmlToPptxTable {
+  x: number
+  y: number
+  w: number
+  h: number
+  colWidths: number[]
+  rowHeights: number[]
+  rows: HtmlToPptxTableCell[][]
+}
+
+export interface HtmlToPptxSlide {
+  title?: string
+  backgroundColor?: string
+  backgroundImage?: HtmlToPptxImage
+  texts: HtmlToPptxTextBox[]
+  shapes?: HtmlToPptxShape[]
+  images?: HtmlToPptxImage[]
+  tables?: HtmlToPptxTable[]
+}
+
+export interface HtmlToPptxDocument {
+  title: string
+  author?: string
+  slides: HtmlToPptxSlide[]
+}
+
+export interface HtmlToPptxExtractOptions {
+  pageWidthPx: number
+  pageHeightPx: number
+  slideWidthIn?: number
+  slideHeightIn?: number
+  maxTextChars?: number
+  maxTextBoxes?: number
+  maxShapes?: number
+  maxImages?: number
+  maxImageBytes?: number
+}
+
+export interface HtmlToPptxExtractedSlide {
+  backgroundColor?: string
+  texts: HtmlToPptxTextBox[]
+  shapes: HtmlToPptxShape[]
+  images: HtmlToPptxImage[]
+  tables: HtmlToPptxTable[]
+  consumedTableElementIds: string[]
+}
