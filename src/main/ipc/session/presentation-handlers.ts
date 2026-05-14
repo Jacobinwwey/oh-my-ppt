@@ -41,4 +41,9 @@ export function registerPresentationHandlers(): void {
 
     return { success: true }
   })
+
+  ipcMain.on('presentation:close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) win.close()
+  })
 }
