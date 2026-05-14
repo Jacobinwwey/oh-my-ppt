@@ -1,5 +1,21 @@
 # 更新日志 / Changelog
 
+## 2026-05-14 · v2.0.7
+
+### 中文
+
+- 新增以及重写可编辑 PPTX 导出引擎：能导出80%-90%pptx效果（缺动画，某些元素还在优化中）。
+- 新增背景图导出为图片版 PPTX：每页截图作为整页背景图，兼容性最佳。
+- 新增演示模式键盘翻页：支持上下键翻页以适配演讲笔
+- 修复演示模式/浏览器预览模式 ESC 退出问题。
+
+### English
+
+- Added and rewrote editable PPTX export engine: achieves 80–90% visual fidelity (no animation support yet; some elements still being refined).
+- Added image-based PPTX export: each slide is captured as a full-page background image for maximum compatibility.
+- Added arrow key navigation in presentation mode: supports up/down keys for presenter remotes.
+- Fixed ESC not exiting presentation / browser preview mode.
+
 ## 2026-05-14 · v2.0.6
 
 ### 中文
