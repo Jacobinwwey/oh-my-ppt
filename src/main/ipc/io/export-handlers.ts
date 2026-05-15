@@ -2,6 +2,9 @@ import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import log from 'electron-log/main.js'
 import fs from 'fs'
 import path from 'path'
+import { is } from '@electron-toolkit/utils'
+import { nanoid } from 'nanoid'
+import { zipSync } from 'fflate'
 import { PDFDocument } from 'pdf-lib'
 import type { IpcContext } from '../context'
 import { writeHtmlToPptx, type HtmlToPptxSlide } from '../../utils/html-pptx'
@@ -312,6 +315,130 @@ export function registerExportHandlers(ctx: IpcContext): void {
         sessionId,
         message
       })
+      throw error
+    }
+  })
+
+  // Export: slide-pack (standalone executable with embedded slides)
+  ipcMain.handle('export:slidePack', async (_event, payload: unknown) => {
+    const sessionId = parseSessionId(payload)
+    if (!sessionId) throw new Error('Missing sessionId')
+
+    try {
+      const { session, projectDir } = await resolveSessionPageFiles(sessionId)
+
+      // Find pre-compiled viewer binary in resources
+      const resourcesDir = is.dev
+        ? path.join(process.cwd(), 'resources')
+        : path.join(process.resourcesPath, 'app.asar.unpacked', 'resources')
+
+      const targets = [
+        { platform: 'macos-arm64', bin: 'slide-pack-darwin-arm64', ext: '' },
+        { platform: 'macos-amd64', bin: 'slide-pack-darwin-amd64', ext: '' },
+        { platform: 'windows-amd64', bin: 'slide-pack-windows-amd64.exe', ext: '.exe' }
+      ]
+
+      const rawTitle = typeof session.title === 'string' && session.title.trim() ? session.title.trim() : 'slides'
+      const sessionName = rawTitle.replace(/[<>:"/\\|?*]/g, '').trim()
+
+      // Let user choose save directory
+      const saveResult = await dialog.showOpenDialog({
+        title: '选择打包导出目录',
+        properties: ['openDirectory', 'createDirectory'],
+        buttonLabel: '导出到此目录'
+      })
+      if (saveResult.canceled || !saveResult.filePaths[0]) {
+        return { success: false, cancelled: true }
+      }
+
+      // Create output folder
+      const outputFolder = path.join(saveResult.filePaths[0], `ohmyppt-${nanoid(8)}`)
+      fs.mkdirSync(outputFolder, { recursive: true })
+
+      log.info('[export:slidePack] starting', { sessionId, projectDir, outputFolder })
+
+      // ZIP all slides
+      const zipFiles: Record<string, Uint8Array> = {}
+      const collectFiles = (dir: string, prefix: string) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.name.startsWith('.')) continue
+          const fullPath = path.join(dir, entry.name)
+          const zipPath = prefix ? `${prefix}/${entry.name}` : entry.name
+          if (entry.isDirectory()) {
+            collectFiles(fullPath, zipPath)
+          } else {
+            zipFiles[zipPath] = fs.readFileSync(fullPath)
+          }
+        }
+      }
+      collectFiles(projectDir, '')
+      const zipData = zipSync(zipFiles)
+
+      log.info('[export:slidePack] zip created', { fileCount: Object.keys(zipFiles).length, zipSize: zipData.byteLength })
+
+      const generatedFiles: string[] = []
+
+      // For each platform: viewer + zip + 8-byte trailer → output executable
+      for (const t of targets) {
+        const viewerPath = path.join(resourcesDir, t.bin)
+        if (!fs.existsSync(viewerPath)) {
+          log.warn('[export:slidePack] skip platform, viewer not found', { bin: t.bin })
+          continue
+        }
+
+        const viewerData = fs.readFileSync(viewerPath)
+        const outputName = `${sessionName}-${t.platform}${t.ext}`
+        const outputPath = path.join(outputFolder, outputName)
+
+        // Trailer: uint64 LE = ZIP data length
+        const trailer = Buffer.alloc(8)
+        trailer.writeBigUInt64LE(BigInt(zipData.byteLength))
+
+        const output = Buffer.concat([viewerData, Buffer.from(zipData), trailer])
+        fs.writeFileSync(outputPath, output)
+        fs.chmodSync(outputPath, 0o755)
+        generatedFiles.push(outputName)
+      }
+
+      // Write README.txt
+      const readmeContent = `演示文稿预览包
+================
+
+双击对应平台的文件即可在浏览器中打开演示。
+
+文件说明：
+  *-macos-arm64       → Apple Silicon Mac (M1/M2/M3/M4)
+  *-macos-amd64       → Intel Mac
+  *-windows-amd64.exe → Windows 电脑
+
+使用方法：
+  macOS：双击文件打开，或在终端运行 ./文件名
+  Windows：双击 .exe 文件打开
+  如果提示"无法打开"，请右键 → 打开 → 确认打开
+
+打开后会自动启动浏览器显示演示。
+关闭终端窗口或按 Ctrl+C 即可停止。
+`
+      fs.writeFileSync(path.join(outputFolder, 'README.txt'), readmeContent, 'utf-8')
+
+      if (generatedFiles.length === 0) {
+        throw new Error('No viewer binaries found in resources/')
+      }
+
+      await shell.openPath(outputFolder)
+
+      log.info('[export:slidePack] completed', { sessionId, outputFolder, files: generatedFiles })
+
+      return {
+        success: true,
+        path: path.join(outputFolder, generatedFiles[0]),
+        cancelled: false,
+        pageCount: generatedFiles.length,
+        warnings: []
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error('[export:slidePack] failed', { sessionId, message })
       throw error
     }
   })

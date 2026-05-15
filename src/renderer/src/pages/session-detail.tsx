@@ -777,7 +777,7 @@ export function SessionDetailPage(): React.JSX.Element {
     detailState.setIsExportingPdf(true)
     toastInfo(t('sessionDetail.exportPdfStart'), {
       description: t('sessionDetail.exportPdfDescription'),
-      duration: 8000
+      duration: 4000
     })
     try {
       const result = await ipc.exportPdf(id)
@@ -809,7 +809,7 @@ export function SessionDetailPage(): React.JSX.Element {
     detailState.setIsExportingPng(true)
     toastInfo(t('sessionDetail.exportPngStart'), {
       description: t('sessionDetail.exportPngDescription'),
-      duration: 8000
+      duration: 4000
     })
     try {
       const result = await ipc.exportPng(id)
@@ -848,7 +848,7 @@ export function SessionDetailPage(): React.JSX.Element {
             ? 'sessionDetail.pptxPreparingImageDescription'
             : 'sessionDetail.pptxPreparingEditableDescription'
         ),
-        duration: 8000
+        duration: 4000
       }
     )
     try {
@@ -877,6 +877,34 @@ export function SessionDetailPage(): React.JSX.Element {
       toastError(error instanceof Error ? error.message : t('sessionDetail.exportFailed'))
     } finally {
       useSessionDetailUiStore.getState().setIsExportingPptx(false)
+    }
+  }
+
+  const handleExportSlidePack = async (): Promise<void> => {
+    const detailState = useSessionDetailUiStore.getState()
+    if (!id || detailState.isExportingSlidePack) return
+    detailState.setIsExportingSlidePack(true)
+    toastInfo(t('sessionDetail.slidePackPreparing'), {
+      description: t('sessionDetail.slidePackPreparingDescription'),
+      duration: 4000
+    })
+    try {
+      const result = await ipc.exportSlidePack(id)
+      if (result.cancelled) {
+        toastInfo(t('sessionDetail.exportCancelled'))
+        return
+      }
+      if (!result.success || !result.path) {
+        toastError(t('sessionDetail.exportFailed'))
+        return
+      }
+      toastSuccess(t('sessionDetail.slidePackExported'), {
+        description: t('sessionDetail.slidePackExportedDescription')
+      })
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : t('sessionDetail.exportFailed'))
+    } finally {
+      useSessionDetailUiStore.getState().setIsExportingSlidePack(false)
     }
   }
 
@@ -1305,6 +1333,7 @@ export function SessionDetailPage(): React.JSX.Element {
                 onExportPdf={() => void handleExportPdf()}
                 onExportPng={() => void handleExportPng()}
                 onExportPptx={(options) => void handleExportPptx(options)}
+                onExportSlidePack={() => void handleExportSlidePack()}
                 onOpenHistory={() => void handleOpenHistory()}
                 onOpenPreview={() => void openProjectPreview()}
                 onRevealFile={() => {
