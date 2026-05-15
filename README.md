@@ -10,7 +10,7 @@
 ![React](https://img.shields.io/badge/React-App-61dafb)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6)
 
-**Oh My PPT - 纯本地 AI 幻灯片生成与编辑工具**
+**Oh My PPT - 纯本地 AI PPT生成与编辑工具**
 
 [English](./README_EN.md) | [为什么做这个](#why) • [能做什么](#features) • [使用流程](#workflow) • [更新日志](./CHANGELOG.md) • [使用问题](#usage-notes)
 
