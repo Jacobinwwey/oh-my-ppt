@@ -159,6 +159,7 @@ export interface ModelConfig {
   model: string
   apiKey: string
   baseUrl: string
+  maxTokens: number
   active: boolean
   createdAt: number
   updatedAt: number
@@ -313,6 +314,7 @@ export const ipc = {
     model: string
     apiKey: string
     baseUrl: string
+    maxTokens?: number
     active?: boolean
   }) =>
     getIpc().invoke('settings:upsertModelConfig', payload) as Promise<{

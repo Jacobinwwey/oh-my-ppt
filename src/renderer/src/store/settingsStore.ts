@@ -25,6 +25,7 @@ interface SettingsStore {
     model: string
     apiKey: string
     baseUrl: string
+    maxTokens?: number
     active?: boolean
   }) => Promise<string | null>
   setActiveModelConfig: (id: string) => Promise<void>

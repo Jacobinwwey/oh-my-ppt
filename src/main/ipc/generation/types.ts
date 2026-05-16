@@ -42,6 +42,7 @@ export type GenerationContext = {
   provider: string
   apiKey: string
   model: string
+  maxTokens: number
   modelTimeouts: Record<ModelTimeoutProfile, number>
   providerBaseUrl: string
   projectId: string

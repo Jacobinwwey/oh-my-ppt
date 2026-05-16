@@ -152,6 +152,7 @@ export const zh = {
     providerPlaceholder: '选择 Provider',
     modelHint: '只要该 provider 兼容这个模型名即可，不做限制。',
     baseUrlHint: '请填写兼容 provider 协议的服务地址。',
+    maxTokensHint: '模型最大输出 token 数，默认 4096。一般无需修改，可按模型支持的上限调整。',
     timeoutSection: '模型超时设置（秒）',
     timeoutPlanning: '大纲规划',
     timeoutDesign: '设计契约',

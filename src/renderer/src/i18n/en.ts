@@ -159,6 +159,7 @@ export const en = {
     providerPlaceholder: 'Select Provider',
     modelHint: 'Any compatible model name for this provider is accepted.',
     baseUrlHint: 'Enter a service URL compatible with the selected provider protocol.',
+    maxTokensHint: 'Max output tokens, default 4096. Generally no need to change. Adjust based on model limits.',
     timeoutSection: 'Model timeouts (seconds)',
     timeoutPlanning: 'Outline planning',
     timeoutDesign: 'Design contract',

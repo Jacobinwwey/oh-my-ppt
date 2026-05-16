@@ -18,6 +18,7 @@ export type CommonGenerationContext = {
   apiKey: string
   model: string
   providerBaseUrl: string
+  maxTokens: number
   modelTimeouts: Record<ModelTimeoutProfile, number>
   projectDir: string
   abortSignal: AbortSignal
@@ -264,6 +265,7 @@ export async function resolveCommonContext(
     apiKey: activeModel.apiKey,
     model: activeModel.model,
     providerBaseUrl: activeModel.baseUrl,
+    maxTokens: activeModel.maxTokens,
     modelTimeouts,
     projectDir: entry.projectDir,
     abortSignal: entry.abortController.signal,

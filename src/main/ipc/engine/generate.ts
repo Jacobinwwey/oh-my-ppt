@@ -321,6 +321,7 @@ export const planDeckWithLLM = async (args: {
   model: string
   baseUrl: string
   temperature?: number
+  maxTokens?: number
   styleId: string | null | undefined
   totalPages: number
   appLocale?: AppLocale
@@ -336,7 +337,8 @@ export const planDeckWithLLM = async (args: {
     args.apiKey,
     args.model,
     args.baseUrl,
-    args.temperature
+    args.temperature,
+    args.maxTokens
   )
   const systemPrompt = buildPlanningSystemPrompt(args.totalPages)
   const userPrompt = buildPlanningUserPrompt({
@@ -524,6 +526,7 @@ export const planNewPage = async (args: {
   model: string
   baseUrl: string
   temperature?: number
+  maxTokens?: number
   appLocale?: AppLocale
   modelTimeoutMs?: number
   userDescription: string
@@ -536,7 +539,8 @@ export const planNewPage = async (args: {
     args.apiKey,
     args.model,
     args.baseUrl,
-    args.temperature
+    args.temperature,
+    args.maxTokens
   )
   const systemPrompt = [
     'You are a PPT slide planner. The user wants to add ONE new slide to an existing deck.',
@@ -613,6 +617,7 @@ export const buildDesignContractWithLLM = async (args: {
   model: string
   baseUrl: string
   temperature?: number
+  maxTokens?: number
   styleId: string | null | undefined
   styleSkillPrompt: string
   appLocale?: AppLocale
@@ -627,7 +632,8 @@ export const buildDesignContractWithLLM = async (args: {
     args.apiKey,
     args.model,
     args.baseUrl,
-    args.temperature
+    args.temperature,
+    args.maxTokens
   )
   const totalPages = Math.max(1, args.totalPages)
   const systemPrompt = buildDesignContractSystemPrompt(args.styleSkillPrompt)
@@ -787,6 +793,7 @@ export const runDeepAgentDeckGeneration = async (args: {
   model: string
   baseUrl: string
   temperature?: number
+  maxTokens?: number
   styleId: string | null | undefined
   styleSkillPrompt: string
   appLocale?: AppLocale
@@ -1039,6 +1046,7 @@ export const runDeepAgentDeckGeneration = async (args: {
       model: args.model,
       baseUrl: args.baseUrl,
       temperature: args.temperature,
+      maxTokens: args.maxTokens,
       styleId: args.styleId,
       context: {
         sessionId: args.sessionId,
@@ -1238,8 +1246,8 @@ export const runDeepAgentDeckGeneration = async (args: {
       } catch (error) {
         lastError = error
         const reason = error instanceof Error ? error.message : String(error)
-        // Write/validation errors are not retryable — the model would fail the same way again
-        const isWriteError = /验证失败|落盘校验|禁止的 CDN|远程资源|未知页面|不允许写入/i.test(
+        // Write/validation errors that are truly non-retryable
+        const isWriteError = /落盘校验|禁止的 CDN|远程资源|未知页面|不允许写入/i.test(
           reason
         )
         if (isWriteError || attempt >= MAX_PAGE_RETRIES) break
@@ -1386,6 +1394,7 @@ type RunDeepAgentEditBaseArgs = {
   model: string
   baseUrl: string
   temperature?: number
+  maxTokens?: number
   styleId: string | null | undefined
   styleSkillPrompt: string
   appLocale?: AppLocale
@@ -1433,6 +1442,7 @@ const runDeepAgentScopedEdit = async (args: RunDeepAgentScopedEditArgs): Promise
     model: args.model,
     baseUrl: args.baseUrl,
     temperature: args.temperature,
+    maxTokens: args.maxTokens,
     styleId: args.styleId,
     context: {
       mode: 'edit',

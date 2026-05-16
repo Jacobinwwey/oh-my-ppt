@@ -52,6 +52,7 @@ export function registerSettingsHandlers(ctx: IpcContext): void {
       model: config.model,
       apiKey: decryptApiKey(config.apiKey),
       baseUrl: config.baseUrl,
+      maxTokens: config.maxTokens || 4096,
       active: config.active === 1,
       createdAt: config.createdAt,
       updatedAt: config.updatedAt
@@ -129,6 +130,10 @@ export function registerSettingsHandlers(ctx: IpcContext): void {
     if (!name) throw new Error(uiText(locale, '请填写模型名称。', 'Enter model name.'))
     if (!model) throw new Error(uiText(locale, '请填写 model。', 'Enter model.'))
     if (!apiKey) throw new Error(uiText(locale, '请填写 api_key。', 'Enter api_key.'))
+    const maxTokens =
+      typeof record.maxTokens === 'number' && record.maxTokens > 0
+        ? Math.min(record.maxTokens, 16384)
+        : 4096
     const savedId = await db.upsertModelConfig({
       id,
       name,
@@ -136,6 +141,7 @@ export function registerSettingsHandlers(ctx: IpcContext): void {
       model,
       apiKey: encryptApiKey(apiKey),
       baseUrl,
+      maxTokens,
       active: record.active === true
     })
     return { success: true, id: savedId }

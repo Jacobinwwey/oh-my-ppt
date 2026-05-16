@@ -201,6 +201,7 @@ export function registerPptxImportHandlers(ctx: IpcContext): void {
           apiKey: activeModel.apiKey,
           model: activeModel.model,
           baseUrl: activeModel.baseUrl,
+          maxTokens: activeModel.maxTokens,
           styleId,
           styleSkillPrompt: styleResult.styleSkill,
           modelTimeoutMs: modelTimeouts.document,

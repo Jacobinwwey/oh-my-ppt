@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid'
 import * as schema from '../schema'
 import type { GenerationPageStatus, GenerationRunStatus } from '../schema'
 import { defaultModelTimeoutMs } from '@shared/model-timeout'
+import { patchModelConfigMaxTokens } from './add-model-max-tokens'
 
 type LibSqlClient = ReturnType<typeof createClient>
 type DrizzleDb = ReturnType<typeof drizzle>
@@ -1108,4 +1109,5 @@ export const runDatabasePatches = async (args: {
   await patchGenerationRecordsFromMetadata({ client, db, resolveStoragePath })
   await patchSessionPagesFromLegacy({ client, db, resolveStoragePath })
   await patchSessionPagesFromGenerationPages({ client, db, resolveStoragePath })
+  await patchModelConfigMaxTokens(client)
 }
