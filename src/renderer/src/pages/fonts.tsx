@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@renderer/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/Card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/components/ui/Dialog'
 import { Input } from '@renderer/components/ui/Input'
 import {
   Select,
@@ -11,16 +18,8 @@ import {
 } from '@renderer/components/ui/Select'
 import { ipc, type FontListItem, type FontRole, type FontScript } from '@renderer/lib/ipc'
 import { useToastStore } from '@renderer/store'
-import { FolderOpen, Loader2, Trash2, Type, Upload } from 'lucide-react'
-
-const roleToLabel = (role: FontRole[]): string => {
-  const hasTitle = role.includes('title')
-  const hasBody = role.includes('body')
-  if (hasTitle && hasBody) return '标题/正文'
-  if (hasTitle) return '标题'
-  if (hasBody) return '正文'
-  return '未设置'
-}
+import { useT } from '@renderer/i18n'
+import { FolderOpen, Loader2, Trash2, Type, Upload, X } from 'lucide-react'
 
 const roleClassName = (role: FontRole[]): string => {
   const hasTitle = role.includes('title')
@@ -31,15 +30,6 @@ const roleClassName = (role: FontRole[]): string => {
   return 'border-[#d5cfc5]/60 bg-[#f9f6f1] text-[#6b6560]'
 }
 
-const scriptsToLabel = (scripts: FontScript[]): string => {
-  const hasLatin = scripts.includes('latin')
-  const hasCjk = scripts.includes('cjk')
-  if (hasLatin && hasCjk) return '中英混排'
-  if (hasCjk) return '中文'
-  if (hasLatin) return '英文'
-  return '未设置'
-}
-
 const scriptsClassName = (scripts: FontScript[]): string => {
   const hasLatin = scripts.includes('latin')
   const hasCjk = scripts.includes('cjk')
@@ -47,14 +37,6 @@ const scriptsClassName = (scripts: FontScript[]): string => {
   if (hasCjk) return 'border-[#d6c08d]/80 bg-[#fff7e8] text-[#7c6a4c]'
   if (hasLatin) return 'border-[#c5d4c0]/80 bg-[#f0f6ec] text-[#4a6940]'
   return 'border-[#d5cfc5]/60 bg-[#f9f6f1] text-[#6b6560]'
-}
-
-const categoryLabel: Record<string, string> = {
-  sans: '无衬线字体',
-  serif: '衬线体',
-  display: '标题字体',
-  handwriting: '手写体',
-  monospace: '等宽字体'
 }
 
 const roleFromValue = (value: string): FontRole[] => {
@@ -75,8 +57,39 @@ const previewText = (scripts: FontScript[]): string => {
   return 'Aa Always Curious'
 }
 
+const WEIGHT_FROM_NAME: Record<string, string> = {
+  thin: '100',
+  hairline: '100',
+  extralight: '200',
+  ultralight: '200',
+  light: '300',
+  regular: '400',
+  normal: '400',
+  medium: '500',
+  semibold: '600',
+  demibold: '600',
+  bold: '700',
+  extrabold: '800',
+  ultrabold: '800',
+  black: '900',
+  heavy: '900'
+}
+
+const guessWeightAndStyle = (
+  filePath: string
+): { weight: string; style: 'normal' | 'italic' } => {
+  const name = filePath.split(/[\\/]/).pop()?.replace(/\.woff2$/i, '') || ''
+  const isItalic = /\bitalic\b/i.test(name)
+  const weight = Object.entries(WEIGHT_FROM_NAME).find(([key]) => {
+    const re = new RegExp(`(?:[-_]|\\b)${key}(?:[-_]|\\b|$)`, 'i')
+    return re.test(name)
+  })?.[1] || '400'
+  return { weight, style: isItalic ? 'italic' : 'normal' }
+}
+
 export function FontsPage(): React.JSX.Element {
   const { success, error } = useToastStore()
+  const t = useT()
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [previewReady, setPreviewReady] = useState(false)
@@ -85,9 +98,37 @@ export function FontsPage(): React.JSX.Element {
   const [family, setFamily] = useState('')
   const [category, setCategory] = useState('sans')
   const [role, setRole] = useState('both')
-  const [scripts, setScripts] = useState('')
-  const [weight, setWeight] = useState('400')
-  const [filePaths, setFilePaths] = useState<string[]>([])
+  const [scripts, setScripts] = useState('mixed')
+  const [fileEntries, setFileEntries] = useState<
+    Array<{ path: string; weight: string; style: 'normal' | 'italic' }>
+  >([])
+  const [uploadOpen, setUploadOpen] = useState(false)
+
+  const roleToLabel = (r: FontRole[]): string => {
+    const hasTitle = r.includes('title')
+    const hasBody = r.includes('body')
+    if (hasTitle && hasBody) return t('fonts.roleBoth')
+    if (hasTitle) return t('fonts.roleTitle')
+    if (hasBody) return t('fonts.roleBody')
+    return t('fonts.roleNone')
+  }
+
+  const scriptsToLabel = (s: FontScript[]): string => {
+    const hasLatin = s.includes('latin')
+    const hasCjk = s.includes('cjk')
+    if (hasLatin && hasCjk) return t('fonts.scriptsMixed')
+    if (hasCjk) return t('fonts.scriptsCjk')
+    if (hasLatin) return t('fonts.scriptsLatin')
+    return t('fonts.scriptsNone')
+  }
+
+  const categoryLabels: Record<string, string> = {
+    sans: t('fonts.categorySans'),
+    serif: t('fonts.categorySerif'),
+    display: t('fonts.categoryDisplay'),
+    handwriting: t('fonts.categoryHandwriting'),
+    monospace: t('fonts.categoryMonospace')
+  }
 
   const loadFonts = async (): Promise<void> => {
     setLoading(true)
@@ -96,8 +137,8 @@ export function FontsPage(): React.JSX.Element {
       setGoogleFonts(result.googleFonts)
       setUserFonts(result.userFonts)
     } catch (err) {
-      error('字体加载失败', {
-        description: err instanceof Error ? err.message : '请稍后重试'
+      error(t('fonts.loadFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
       })
     } finally {
       setLoading(false)
@@ -127,38 +168,53 @@ export function FontsPage(): React.JSX.Element {
     void loadPreviewCss()
   }, [])
 
-  const selectedFileLabel = useMemo(() => {
-    if (filePaths.length === 0) return null
-    if (filePaths.length === 1) return filePaths[0].split(/[\\/]/).pop() || filePaths[0]
-    return `${filePaths.length} 个文件`
-  }, [filePaths])
-
   const handleChooseFiles = async (): Promise<void> => {
     try {
       const result = await ipc.chooseFontFiles()
-      if (!result.canceled) setFilePaths(result.filePaths || [])
+      if (!result.canceled) {
+        setFileEntries(
+          (result.filePaths || []).map((p) => ({ path: p, ...guessWeightAndStyle(p) }))
+        )
+      }
     } catch (err) {
-      error('选择字体失败', {
-        description: err instanceof Error ? err.message : '请稍后重试'
+      error(t('fonts.chooseFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
       })
     }
+  }
+
+  const updateFileEntry = (
+    index: number,
+    field: 'weight' | 'style',
+    value: string
+  ): void => {
+    setFileEntries((prev) =>
+      prev.map((e, i) =>
+        i === index
+          ? { ...e, [field]: field === 'style' ? (value as 'normal' | 'italic') : value }
+          : e
+      )
+    )
+  }
+
+  const removeFileEntry = (index: number): void => {
+    setFileEntries((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleUpload = async (): Promise<void> => {
     const familyText = family.trim()
     if (!familyText) {
-      error('请填写字体族名称')
+      error(t('fonts.fillFamily'))
       return
     }
-    if (filePaths.length === 0) {
-      error('请选择 .woff2 字体文件')
+    if (fileEntries.length === 0) {
+      error(t('fonts.selectFile'))
       return
     }
     if (!scripts) {
-      error('请选择适用文字')
+      error(t('fonts.selectScripts'))
       return
     }
-    const parsedWeight = Number.parseInt(weight, 10)
     setUploading(true)
     try {
       await ipc.uploadFont({
@@ -166,24 +222,27 @@ export function FontsPage(): React.JSX.Element {
         category,
         role: roleFromValue(role),
         scripts: scriptsFromValue(scripts),
-        files: filePaths.map((filePath) => ({
-          path: filePath,
-          weight: Number.isFinite(parsedWeight) ? parsedWeight : 400,
-          style: 'normal'
-        }))
+        files: fileEntries.map((entry) => {
+          const w = Number.parseInt(entry.weight, 10)
+          return {
+            path: entry.path,
+            weight: Number.isFinite(w) ? w : 400,
+            style: entry.style
+          }
+        })
       })
-      success('字体已上传')
+      success(t('fonts.uploaded'))
+      setUploadOpen(false)
       setFamily('')
       setCategory('sans')
       setRole('both')
       setScripts('')
-      setWeight('400')
-      setFilePaths([])
+      setFileEntries([])
       await loadFonts()
       void loadPreviewCss()
     } catch (err) {
-      error('字体上传失败', {
-        description: err instanceof Error ? err.message : '请稍后重试'
+      error(t('fonts.uploadFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
       })
     } finally {
       setUploading(false)
@@ -193,12 +252,12 @@ export function FontsPage(): React.JSX.Element {
   const handleDelete = async (font: FontListItem): Promise<void> => {
     try {
       await ipc.deleteFont(font.id)
-      success('字体已删除')
+      success(t('fonts.deleted'))
       await loadFonts()
       void loadPreviewCss()
     } catch (err) {
-      error('字体删除失败', {
-        description: err instanceof Error ? err.message : '请稍后重试'
+      error(t('fonts.deleteFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
       })
     }
   }
@@ -206,84 +265,102 @@ export function FontsPage(): React.JSX.Element {
   return (
     <div className="mx-auto w-full max-w-6xl p-6">
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Fonts</p>
+        <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{t('fonts.eyebrow')}</p>
         <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="organic-serif text-[32px] font-semibold leading-none text-[#3e4a32]">
-            字体管理
+            {t('fonts.title')}
           </h1>
-          <Button size="sm" variant="outline" onClick={() => void ipc.revealFontsFolder()}>
-            <FolderOpen className="mr-2 h-4 w-4" />
-            打开字体目录
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => void ipc.revealFontsFolder()}>
+              <FolderOpen className="mr-2 h-4 w-4" />
+              {t('fonts.openFolder')}
+            </Button>
+            <Button size="sm" className="border-[#7ea06f]/45" onClick={() => setUploadOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" />
+              {t('fonts.upload')}
+            </Button>
+          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          管理本机上传字体，生成时在首页选择字体方案，默认自动匹配。
+          {t('fonts.description')}
         </p>
       </div>
 
       <div className="space-y-4">
-        {/* Upload card */}
-        <Card>
-          <CardHeader className="flex-row items-center justify-between p-5 pb-3">
-            <CardTitle className="text-base">上传字体</CardTitle>
-            <span className="text-[11px] text-muted-foreground">仅支持 .woff2</span>
-          </CardHeader>
-          <CardContent className="space-y-3 p-5 pt-0">
-            <div className="grid gap-3 sm:grid-cols-[1fr_120px_120px_80px]">
+        {/* Upload dialog */}
+        <Dialog open={uploadOpen} onOpenChange={(open) => {
+          setUploadOpen(open)
+          if (!open) {
+            setFamily('')
+            setCategory('sans')
+            setRole('both')
+            setScripts('mixed')
+            setFileEntries([])
+          }
+        }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{t('fonts.uploadDialogTitle')}</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground/70">
+                {t('fonts.uploadDialogDescription')}{' '}
+                {t('fonts.uploadDialogDownloadPre')}{' '}
+                <a
+                  href="https://gwfh.mranftl.com/fonts"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#5a7a4e] underline underline-offset-2 hover:text-[#3e5a34]"
+                >
+                  {t('fonts.googleFontsHelperLink')}
+                </a>{' '}
+                {t('fonts.uploadDialogDownloadPost')}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-[1fr_160px_160px]">
               <div>
-                <label className="mb-1 block text-sm font-medium">字体族名称</label>
+                <label className="mb-1 block text-sm font-medium">{t('fonts.familyName')}</label>
                 <Input
-                  placeholder="My Brand Sans"
+                  placeholder={t('fonts.familyNamePlaceholder')}
                   value={family}
                   onChange={(e) => setFamily(e.target.value)}
                   className="h-9"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">适用位置</label>
+                <label className="mb-1 block text-sm font-medium">{t('fonts.role')}</label>
                 <Select value={role} onValueChange={setRole}>
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="both">标题和正文</SelectItem>
-                    <SelectItem value="title">标题</SelectItem>
-                    <SelectItem value="body">正文</SelectItem>
+                    <SelectItem value="both">{t('fonts.roleBoth')}</SelectItem>
+                    <SelectItem value="title">{t('fonts.roleTitle')}</SelectItem>
+                    <SelectItem value="body">{t('fonts.roleBody')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">适用文字</label>
+                <label className="mb-1 block text-sm font-medium">{t('fonts.scripts')}</label>
                 <Select value={scripts} onValueChange={setScripts}>
                   <SelectTrigger className="h-9">
-                    <SelectValue placeholder="请选择" />
+                    <SelectValue placeholder={t('fonts.scriptsPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="latin">英文</SelectItem>
-                    <SelectItem value="cjk">中文</SelectItem>
-                    <SelectItem value="mixed">中英混排</SelectItem>
+                    <SelectItem value="latin">{t('fonts.scriptsLatin')}</SelectItem>
+                    <SelectItem value="cjk">{t('fonts.scriptsCjk')}</SelectItem>
+                    <SelectItem value="mixed">{t('fonts.scriptsMixed')}</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">字重</label>
-                <Input
-                  value={weight}
-                  inputMode="numeric"
-                  onChange={(e) => setWeight(e.target.value)}
-                  className="h-9"
-                />
               </div>
             </div>
             <div className="flex flex-wrap items-end gap-3">
-              <div className="w-32">
-                <label className="mb-1 block text-sm font-medium">分类</label>
+              <div className="w-40">
+                <label className="mb-1 block text-sm font-medium">{t('fonts.category')}</label>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(categoryLabel).map(([value, label]) => (
+                    {Object.entries(categoryLabels).map(([value, label]) => (
                       <SelectItem key={value} value={value}>
                         {label}
                       </SelectItem>
@@ -291,55 +368,109 @@ export function FontsPage(): React.JSX.Element {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 border-[#7ea06f]/45"
-                  onClick={() => void handleChooseFiles()}
-                >
-                  <Type className="mr-1.5 h-3.5 w-3.5" />
-                  选择文件
-                </Button>
-                {selectedFileLabel && (
-                  <span className="truncate text-xs text-muted-foreground">{selectedFileLabel}</span>
-                )}
-              </div>
-              <div className="ml-auto">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 min-w-[96px]"
-                  onClick={() => void handleUpload()}
-                  disabled={uploading}
-                >
-                  {uploading ? (
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  上传
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 border-[#7ea06f]/45"
+                onClick={() => void handleChooseFiles()}
+              >
+                <Type className="mr-1.5 h-3.5 w-3.5" />
+                {t('fonts.chooseFiles')}
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#d8ccb5]/60 text-xs text-muted-foreground">
+                  <th className="pb-1.5 text-left font-medium">File</th>
+                  <th className="pb-1.5 text-center font-medium" style={{ width: 72 }}>Font Weight</th>
+                  <th className="pb-1.5 text-center font-medium" style={{ width: 110 }}>Style</th>
+                  <th className="pb-1.5 font-medium" style={{ width: 32 }}></th>
+                </tr>
+              </thead>
+              {fileEntries.length > 0 && (
+                <tbody>
+                  {fileEntries.map((entry, i) => (
+                    <tr key={entry.path} className="border-b border-[#d8ccb5]/30 align-middle">
+                      <td className="py-1.5 pr-2">
+                        <span className="block truncate text-[#33402a]">
+                          {entry.path.split(/[\\/]/).pop() || entry.path}
+                        </span>
+                      </td>
+                      <td className="py-1.5">
+                        <Input
+                          value={entry.weight}
+                          inputMode="numeric"
+                          onChange={(e) => updateFileEntry(i, 'weight', e.target.value)}
+                          className="h-7 w-[64px] text-center text-sm"
+                        />
+                      </td>
+                      <td className="py-1.5 text-center">
+                        <Select
+                          value={entry.style}
+                          onValueChange={(v) => updateFileEntry(i, 'style', v)}
+                        >
+                          <SelectTrigger className="h-7 w-[110px] text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="normal">Normal</SelectItem>
+                            <SelectItem value="italic">Italic</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="py-1.5 text-center">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeFileEntry(i)}
+                          aria-label={t('fonts.removeFile')}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              )}
+            </table>
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 min-w-[120px]"
+                onClick={() => void handleUpload()}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {t('fonts.uploadButton')}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* User fonts */}
         <Card>
           <CardHeader className="p-5 pb-3">
-            <CardTitle className="text-base">已上传字体</CardTitle>
+            <CardTitle className="text-base">{t('fonts.uploadedFonts')}</CardTitle>
             {userFonts.length > 0 && (
-              <p className="mt-1 text-xs text-muted-foreground">{userFonts.length} 个字体</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('fonts.fontCount', { count: userFonts.length })}
+              </p>
             )}
           </CardHeader>
           <CardContent className="p-5 pt-0">
             {loading ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">加载中...</p>
+              <p className="py-4 text-center text-sm text-muted-foreground">{t('fonts.loading')}</p>
             ) : userFonts.length === 0 ? (
               <div className="rounded-lg border border-dashed border-[#d8ccb5]/85 bg-[#fff9ef]/70 py-6 text-center text-sm text-muted-foreground">
-                还没有上传字体，在上方表单添加你的品牌字体。
+                {t('fonts.emptyUpload')}
               </div>
             ) : (
               <div className="space-y-2">
@@ -366,10 +497,10 @@ export function FontsPage(): React.JSX.Element {
                           {scriptsToLabel(font.scripts)}
                         </span>
                         <span className="rounded-md border border-[#d5cfc5]/60 bg-[#f9f6f1] px-1.5 py-0.5 text-[#6b6560]">
-                          {categoryLabel[font.category] || font.category}
+                          {categoryLabels[font.category] || font.category}
                         </span>
                         <span className="text-muted-foreground">
-                          {font.files?.length || 0} 文件
+                          {t('fonts.fileCount', { count: font.files?.length || 0 })}
                         </span>
                       </div>
                     </div>
@@ -379,7 +510,7 @@ export function FontsPage(): React.JSX.Element {
                       variant="ghost"
                       className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                       onClick={() => void handleDelete(font)}
-                      aria-label={`删除 ${font.family}`}
+                      aria-label={t('fonts.deleteLabel', { family: font.family })}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -395,9 +526,9 @@ export function FontsPage(): React.JSX.Element {
           <CardHeader className="p-5 pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">内置 Google Fonts</CardTitle>
+                <CardTitle className="text-base">{t('fonts.googleFontsTitle')}</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  本地内置，生成时自动匹配或手动选择。
+                  {t('fonts.googleFontsDesc')}
                 </p>
               </div>
               <span className="rounded-full bg-[#e9efde] px-2.5 py-0.5 text-[11px] font-medium text-[#506141]">
