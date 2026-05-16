@@ -260,6 +260,7 @@ export async function executeAddPageGeneration(
         apiKey: context.apiKey,
         model: context.model,
         baseUrl: context.providerBaseUrl,
+        maxTokens: context.maxTokens,
         modelTimeoutMs: context.modelTimeouts.agent,
         temperature: PAGE_GENERATION_TEMPERATURE,
         styleId: context.styleId,

@@ -62,6 +62,13 @@ export const BASE_PAGE_STYLE_TAG = `<style id="ppt-page-guard-style">
     align-items: stretch;
     overflow: hidden;
     font-size: 16px;
+    font-family: var(--ppt-body-font, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif);
+  }
+  .ppt-page-content h1,
+  .ppt-page-content h2,
+  .ppt-page-content [data-role="title"],
+  .ppt-page-content [data-block-id="title"] {
+    font-family: var(--ppt-title-font, var(--ppt-body-font, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif));
   }
   .ppt-page-content .text-xs,
   .ppt-page-content .text-sm {

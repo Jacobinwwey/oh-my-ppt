@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS model_configs (
   model TEXT NOT NULL,
   api_key TEXT NOT NULL DEFAULT '',
   base_url TEXT NOT NULL DEFAULT '',
+  max_tokens INTEGER NOT NULL DEFAULT 4096,
   active INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
@@ -313,6 +314,7 @@ const enforceModelConfigsSchema = async (client: LibSqlClient): Promise<void> =>
       model TEXT NOT NULL,
       api_key TEXT NOT NULL DEFAULT '',
       base_url TEXT NOT NULL DEFAULT '',
+      max_tokens INTEGER NOT NULL DEFAULT 4096,
       active INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL

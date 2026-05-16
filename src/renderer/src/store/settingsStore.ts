@@ -36,6 +36,7 @@ interface SettingsStore {
     apiKey: string,
     model: string,
     baseUrl: string,
+    maxTokens: number,
     timeoutMs: number
   ) => Promise<boolean>
   chooseStoragePath: () => Promise<string | null>
@@ -143,13 +144,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   setVerificationMessage: (message) => set({ verificationMessage: message }),
 
-  verifyApiKey: async (provider, apiKey, model, baseUrl, timeoutMs) => {
+  verifyApiKey: async (provider, apiKey, model, baseUrl, maxTokens, timeoutMs) => {
     try {
       const { valid, message } = await ipc.verifyApiKey({
         provider,
         apiKey,
         model,
         baseUrl,
+        maxTokens,
         timeoutMs
       })
       set({ verificationMessage: message || null })

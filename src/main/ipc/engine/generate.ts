@@ -310,8 +310,9 @@ const buildDesignContractRetryUserPrompt = (userPrompt: string, previousError: s
     'Design contract retry requirement:',
     `- The previous design contract response failed validation: ${previousError}`,
     '- Retry now and return only a raw JSON object. Do not wrap it in Markdown. Do not add explanations.',
-    '- Use exactly these fields: theme, background, palette, titleStyle, layoutMotif, chartStyle, shapeLanguage.',
+    '- Use exactly these fields: theme, background, palette, titleStyle, layoutMotif, chartStyle, shapeLanguage, fonts.',
     '- palette must be an array with 3-6 color strings.',
+    '- fonts must be a comma-separated string of font names from the font list in the original system prompt.',
     '- titleStyle should usually use text-4xl or text-5xl and must not use text-6xl, text-7xl, or text-8xl.'
   ].join('\n')
 
@@ -657,7 +658,8 @@ export const buildDesignContractWithLLM = async (args: {
       'titleStyle',
       'layoutMotif',
       'chartStyle',
-      'shapeLanguage'
+      'shapeLanguage',
+      'fonts'
     ]
     const missingKeys = requiredKeys.filter(
       (key) => record[key] === undefined || record[key] === ''
