@@ -8,12 +8,14 @@ import { PPTDatabase } from './db/database'
 import { AgentManager } from './agent'
 import { setupIPC, registerLocalAssetProtocol } from './ipc'
 import { setStyleDb } from './utils/style-skills'
+import { createTray, destroyTray, showTrayHideBalloon } from './tray'
 import type { UpdateAvailablePayload } from '@shared/app-update'
 
 let mainWindow: BrowserWindow | null = null
 let db: PPTDatabase | null = null
 let agentManager: AgentManager | null = null
 let isShuttingDown = false
+let isTrayEnabled = false
 
 const APP_NAME = 'OhMyPPT'
 const DEFAULT_WINDOW_WIDTH = 1200
@@ -211,6 +213,14 @@ function createWindow(): BrowserWindow {
   })
   mainWindow = window
 
+  window.on('close', (e) => {
+    if (process.platform === 'win32' && isTrayEnabled && !isShuttingDown) {
+      e.preventDefault()
+      window.hide()
+      showTrayHideBalloon()
+    }
+  })
+
   log.info('[app] creating window', {
     preloadPath,
     contextIsolation: true,
@@ -249,6 +259,7 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   configureLogging()
+  electronApp.setAppUserModelId('com.ohmyppt.app')
 
   const dbPath = is.dev ? join(process.cwd(), 'ohmyppt.dev.db') : undefined
   db = new PPTDatabase(dbPath)
@@ -262,14 +273,16 @@ app.whenReady().then(async () => {
 
   const mainWindow = createWindow()
 
+  if (process.platform === 'win32') {
+    isTrayEnabled = createTray(mainWindow)
+  }
+
   registerLocalAssetProtocol()
 
   if (mainWindow && db && agentManager) {
     setupIPC(mainWindow, db, agentManager)
     scheduleUpdateNotification(mainWindow)
   }
-
-  electronApp.setAppUserModelId('com.ohmyppt.app')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -281,14 +294,15 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  // macOS 上点 X 只会关闭窗口，不应关闭数据库连接；
-  // 否则后续 activate 重开窗口时会命中 CLIENT_CLOSED。
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform === 'darwin') return
+  // Windows: 托盘模式下不退出，用户通过托盘菜单退出
+  if (!isTrayEnabled) app.quit()
 })
 
 app.on('before-quit', () => {
   if (isShuttingDown) return
   isShuttingDown = true
+  destroyTray()
   if (db) {
     void db.close().catch((error) => {
       log.warn('[app] failed to close database on before-quit', {

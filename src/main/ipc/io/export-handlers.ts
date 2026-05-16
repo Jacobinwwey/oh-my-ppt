@@ -400,7 +400,7 @@ export function registerExportHandlers(ctx: IpcContext): void {
         if (isCrossPlatform && t.os === 'darwin') {
           const innerName = `${sessionName}-${t.platform}`
           const permissionZip = zipSync(
-            { [innerName]: [new Uint8Array(output), { attrs: 0o100755 << 16 }] as any }
+            { [innerName]: [new Uint8Array(output), { os: 3, attrs: 0o755 << 16 }] as any }
           )
           const zipOutputName = `${sessionName}-${t.platform}.zip`
           fs.writeFileSync(path.join(outputFolder, zipOutputName), Buffer.from(permissionZip))

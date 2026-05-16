@@ -93,7 +93,6 @@ export async function executeRetryFailedPages(
   }
 
   const indexPath = path.join(context.entry.projectDir, 'index.html')
-  await ensureHistoryBaselineSafe(db, context.sessionId, context.entry.projectDir)
   const emitRetryChunk = createDeckProgressEmitter(context.sessionId, context.appLocale)
   let savedDesignContract: DesignContract | undefined
   const sessionRecord = (context.session || {}) as Record<string, unknown>
@@ -101,6 +100,7 @@ export async function executeRetryFailedPages(
   if (sessionPages.length === 0) {
     throw new Error('session_pages is empty after migration; cannot retry this session')
   }
+  await ensureHistoryBaselineSafe(db, context.sessionId, context.entry.projectDir)
   const latestPageSnapshot = await db.listLatestGenerationPageSnapshot(context.sessionId)
   const failedSessionPages = sessionPages.filter((page) => page.status !== 'completed')
   const retryRecords = failedSessionPages.map((page) => {

@@ -18,6 +18,13 @@ files:
 asarUnpack:
   - resources/**
   - node_modules/@node-rs/**/*.node
+extraResources:
+  - from: build/icons/icon.ico
+    to: icons/icon.ico
+  - from: build/icons/32x32.png
+    to: icons/32x32.png
+  - from: build/icons/16x16.png
+    to: icons/16x16.png
 forceCodeSigning: false
 win:
   target:

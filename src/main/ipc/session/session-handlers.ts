@@ -10,6 +10,7 @@ import { resolveActiveModelConfig } from '../config/model-config-utils'
 import { readAppLocale, uiText } from '../config/locale-utils'
 import { normalizeFontSelection } from '@shared/generation'
 import { ensureSessionRuntimeCompatible } from './runtime-assets'
+import { GitHistoryService } from '../../history/git-history-service'
 
 export function registerSessionHandlers(ctx: IpcContext): void {
   const {
@@ -219,6 +220,14 @@ export function registerSessionHandlers(ctx: IpcContext): void {
     }
     const projectDir = await resolveSessionProjectDir(sessionId)
     await ensureSessionRuntimeCompatible(ctx, projectDir)
+    if (!(await db.hasAnyOperationPageSnapshots(sessionId))) {
+      await new GitHistoryService(db).ensureBaseline(sessionId, projectDir).catch((error) => {
+        log.warn('[session:get] ensure history baseline failed', {
+          sessionId,
+          message: error instanceof Error ? error.message : String(error)
+        })
+      })
+    }
     for (const sp of sessionPages) {
       const htmlPath = resolvePageHtmlPath(projectDir, sp.file_slug, sp.html_path)
       let html = ''
