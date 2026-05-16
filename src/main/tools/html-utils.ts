@@ -156,8 +156,16 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
   if (/<title[\s>]/i.test(html) || /<\/title>/i.test(html)) {
     errors.push('检测到 <title> 标签。页面片段中禁止包含标题标签。')
   }
-  if (/<link[\s>]/i.test(html)) {
-    errors.push('检测到 <link> 标签。页面片段中禁止包含外部资源链接。')
+  const linkTags = Array.from(html.matchAll(/<link\b[^>]*>/gi)).map((m) => m[0])
+  const disallowedLinks = linkTags.filter(
+    (tag) =>
+      !/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)/.test(tag) ||
+      /\brel\s*=\s*["'](?:icon|preload|prefetch|preconnect)["']/i.test(tag)
+  )
+  if (disallowedLinks.length > 0) {
+    errors.push(
+      '检测到 <link> 标签。仅允许 Google Fonts CDN (<link href="https://fonts.googleapis.com/css2?family=...">)，其他外部资源链接被禁止。'
+    )
   }
   if (/data-ppt-guard-root\s*=\s*["']1["']/i.test(html)) {
     errors.push('检测到 data-ppt-guard-root。禁止传入页面骨架根节点，请仅传主体片段。')
@@ -261,7 +269,12 @@ export const validatePersistedPageHtml = (
     errors.push('仍包含页面占位文案')
   }
   if (REMOTE_SCRIPT_OR_LINK_RE.test(html)) {
-    errors.push('包含远程 script/link 资源')
+    // Allow Google Fonts CDN; block everything else
+    const allRemote = Array.from(html.matchAll(/<(?:script|link)\b[^>]*(?:src|href)\s*=\s*["'](?:https?:)?\/\/[^"']+["'][^>]*>/gi)).map(m => m[0])
+    const nonGoogleFonts = allRemote.filter(tag => !/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)/.test(tag))
+    if (nonGoogleFonts.length > 0) {
+      errors.push('包含远程 script/link 资源（仅允许 Google Fonts CDN）')
+    }
   }
 
   const $ = cheerio.load(html, { scriptingEnabled: false })

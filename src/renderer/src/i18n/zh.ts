@@ -101,6 +101,8 @@ export const zh = {
     sourceDocument: '文档创建',
     sourceAi: 'AI 创建',
     statusComplete: '已完成',
+    statusPartialComplete: '部分完成',
+    statusPartialCompleteTip: '可进入编辑页修复错误页面',
     statusContinuable: '可继续生成',
     statusRegenerate: '需重新生成',
     actionEnter: '进入会话',
@@ -313,7 +315,8 @@ export const zh = {
     failedRetry: '生成失败，请重试。',
     continueRemaining: '继续生成剩余页',
     backToSessions: '返回会话列表',
-    regenerate: '重新生成'
+    regenerate: '重新生成',
+    enterEditor: '可进入编辑页修复'
   },
   sessionDetail: {
     sessionFallback: '会话',
