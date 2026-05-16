@@ -7,6 +7,8 @@ import type { IpcContext } from '../context'
 import {
   AVAILABLE_GOOGLE_FONTS,
   assertFontFamilyNameAvailableForUpload,
+  cssEscapeString,
+  getBundledFontsRoot,
   getUserFontFilesRoot,
   getUserFontsRoot,
   readUserFontRegistry,
@@ -208,5 +210,42 @@ export function registerFontHandlers(_ctx: IpcContext): void {
     }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return { canceled: result.canceled, filePaths: result.filePaths }
+  })
+
+  ipcMain.handle('fonts:previewCss', async () => {
+    const cssBlocks: string[] = []
+    const dirName = (family: string) => family.replace(/ /g, '_')
+
+    // Google fonts: read faces.css, rewrite url("./...") to local-asset://
+    const bundledRoot = getBundledFontsRoot()
+    for (const font of Object.values(AVAILABLE_GOOGLE_FONTS)) {
+      const facesCssPath = path.join(bundledRoot, dirName(font.family), 'faces.css')
+      try {
+        const raw = await fs.promises.readFile(facesCssPath, 'utf-8')
+        const fontDir = path.join(bundledRoot, dirName(font.family))
+        // Rewrite url("./xxx.woff2") → url("local-asset:///abs/path/xxx.woff2")
+        const rewritten = raw.replace(
+          /url\(\s*"\.\/([^"]+)"\s*\)/g,
+          (_, fileName) => `url("local-asset://${encodeURI(path.join(fontDir, fileName))}")`
+        )
+        cssBlocks.push(rewritten)
+      } catch {
+        // Skip fonts whose files aren't available yet
+      }
+    }
+
+    // User-uploaded fonts: generate @font-face with local-asset:// URLs
+    const registry = await readUserFontRegistry()
+    for (const entry of registry.fonts) {
+      const fontDir = path.join(getUserFontFilesRoot(), entry.id)
+      for (const file of entry.files) {
+        const fileUrl = `local-asset://${encodeURI(path.join(fontDir, file.file))}`
+        cssBlocks.push(
+          `@font-face{font-family:"${cssEscapeString(entry.family)}";src:url("${cssEscapeString(fileUrl)}") format("woff2");font-weight:${file.weight};font-style:${file.style};font-display:swap}`
+        )
+      }
+    }
+
+    return cssBlocks.join('\n')
   })
 }

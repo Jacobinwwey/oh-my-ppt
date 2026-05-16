@@ -120,12 +120,12 @@ const isAllowedRuntimeAsset = (src: string): boolean => {
     clean.endsWith('/assets/tailwindcss.v3.js') ||
     clean.endsWith('./assets/tailwindcss.v3.js') ||
     clean.endsWith('assets/tailwindcss.v3.js') ||
-    clean.endsWith('/assets/katex.min.js') ||
-    clean.endsWith('./assets/katex.min.js') ||
-    clean.endsWith('assets/katex.min.js') ||
-    clean.endsWith('/assets/katex-auto-render.min.js') ||
-    clean.endsWith('./assets/katex-auto-render.min.js') ||
-    clean.endsWith('assets/katex-auto-render.min.js')
+    clean.endsWith('/assets/katex/katex.min.js') ||
+    clean.endsWith('./assets/katex/katex.min.js') ||
+    clean.endsWith('assets/katex/katex.min.js') ||
+    clean.endsWith('/assets/katex/katex-auto-render.min.js') ||
+    clean.endsWith('./assets/katex/katex-auto-render.min.js') ||
+    clean.endsWith('assets/katex/katex-auto-render.min.js')
   )
 }
 
@@ -268,35 +268,13 @@ export const validatePersistedPageHtml = (
   }
   const $ = cheerio.load(html, { scriptingEnabled: false })
   if (REMOTE_SCRIPT_OR_LINK_RE.test(html)) {
-    $('script[src], link[href]').each((_, node) => {
-      const el = $(node)
-      const tagName = String(node.tagName || '').toLowerCase()
-      const rawUrl = String(el.attr(tagName === 'script' ? 'src' : 'href') || '').trim()
-      if (!/^(?:https?:)?\/\//i.test(rawUrl)) return undefined
-      if (tagName !== 'link') {
-        errors.push('包含远程 script 资源')
-        return undefined
-      }
-      try {
-        const parsed = new URL(rawUrl, 'https://placeholder.local')
-        const isAllowedGoogleFonts =
-          el.attr('data-ppt-fonts') === 'google' &&
-          parsed.protocol === 'https:' &&
-          parsed.hostname === 'fonts.googleapis.com' &&
-          parsed.pathname.startsWith('/css2')
-        if (!isAllowedGoogleFonts) {
-          errors.push('包含未授权的远程 link 资源（仅允许系统注入的 Google Fonts CSS）')
-        }
-      } catch {
-        errors.push('包含格式无效的远程 link 资源')
-      }
-      return undefined
-    })
+    errors.push('包含远程资源引用（字体已改为本地加载，禁止 CDN 链接）')
   }
   $('style').each((_, node) => {
     const el = $(node)
     const css = el.text()
-    if (/@font-face\b/i.test(css) && el.attr('data-ppt-fonts') !== 'user') {
+    const fontMarker = el.attr('data-ppt-fonts')
+    if (/@font-face\b/i.test(css) && fontMarker !== 'user' && fontMarker !== 'google') {
       errors.push('@font-face 只能由系统字体注入块声明')
       return false
     }
@@ -304,8 +282,12 @@ export const validatePersistedPageHtml = (
       errors.push('样式块中包含远程 URL')
       return false
     }
-    if (/url\(\s*["']?(?!\.\/assets\/fonts\/user\/)[^)]+/i.test(css) && el.attr('data-ppt-fonts') === 'user') {
-      errors.push('@font-face 只能引用 ./assets/fonts/user/ 下的字体文件')
+    if (/url\(\s*"(?!\.\/assets\/fonts\/user-fonts\/)[^)]+/i.test(css) && fontMarker === 'user') {
+      errors.push('@font-face 只能引用 ./assets/fonts/user-fonts/ 下的字体文件')
+      return false
+    }
+    if (/url\(\s*"(?!\.\/assets\/fonts\/google-fonts\/)[^)]+/i.test(css) && fontMarker === 'google') {
+      errors.push('Google 字体只能引用 ./assets/fonts/google-fonts/ 下的字体文件')
       return false
     }
     return undefined

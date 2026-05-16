@@ -362,6 +362,7 @@ export const ipc = {
   revealFontsFolder: () => getIpc().invoke('fonts:revealFolder') as Promise<{ success: true }>,
   chooseFontFiles: () =>
     getIpc().invoke('fonts:chooseFiles') as Promise<{ canceled: boolean; filePaths: string[] }>,
+  loadFontPreviewCss: () => getIpc().invoke('fonts:previewCss') as Promise<string>,
   saveSettings: (settings: Record<string, unknown>) =>
     getIpc().invoke('settings:save', settings) as Promise<{ success: boolean }>,
   upsertModelConfig: (payload: {

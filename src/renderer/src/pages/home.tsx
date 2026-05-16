@@ -187,14 +187,11 @@ export function HomePage(): ReactElement {
         buildPair('Montserrat', 'Inter'),
         buildPair('Montserrat', 'Poppins'),
         buildPair('Space Grotesk', 'Inter'),
-        buildPair('Raleway', 'Open Sans'),
-        buildPair('Oswald', 'Lato'),
         // 拉丁：衬线搭配
-        buildPair('Playfair Display', 'Lato'),
-        buildPair('Merriweather', 'Nunito'),
+        buildPair('Playfair Display', 'Inter'),
+        buildPair('Merriweather', 'Poppins'),
         // 拉丁：展示/手写 + 正文
         buildPair('Bebas Neue', 'Inter'),
-        buildPair('Righteous', 'Lato'),
         buildPair('Caveat', 'Inter'),
         buildPair('Dancing Script', 'Poppins'),
         // 拉丁：等宽
@@ -202,9 +199,7 @@ export function HomePage(): ReactElement {
         // 中文
         buildPair('Noto Serif SC', 'Noto Sans SC'),
         buildPair('ZCOOL XiaoWei', 'Noto Sans SC'),
-        buildPair('ZCOOL QingKe HuangYou', 'Noto Sans SC'),
-        buildPair('Ma Shan Zheng', 'Noto Sans SC'),
-        buildPair('Liu Jian Mao Cao', 'Noto Sans SC')
+        buildPair('Ma Shan Zheng', 'Noto Sans SC')
       ].filter((item): item is NonNullable<typeof item> => Boolean(item))
       const uploaded = userFonts.map((font) => ({
         id: `${font.source}:${font.id}|${font.source}:${font.id}`,

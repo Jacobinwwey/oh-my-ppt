@@ -50,16 +50,11 @@ const scriptsClassName = (scripts: FontScript[]): string => {
 }
 
 const categoryLabel: Record<string, string> = {
-  brand: '品牌',
-  'sans-body': '无衬线正文',
-  'sans-title': '无衬线标题',
-  serif: '衬线',
-  display: '展示',
-  handwriting: '手写',
-  mono: '等宽',
-  'cjk-sans': '中文无衬线',
-  'cjk-serif': '中文衬线',
-  'cjk-display': '中文展示'
+  sans: '无衬线字体',
+  serif: '衬线体',
+  display: '标题字体',
+  handwriting: '手写体',
+  monospace: '等宽字体'
 }
 
 const roleFromValue = (value: string): FontRole[] => {
@@ -74,14 +69,21 @@ const scriptsFromValue = (value: string): FontScript[] => {
   return ['latin', 'cjk']
 }
 
+const previewText = (scripts: FontScript[]): string => {
+  const hasCjk = scripts.includes('cjk')
+  if (hasCjk) return 'Aa 永远好奇'
+  return 'Aa Always Curious'
+}
+
 export function FontsPage(): React.JSX.Element {
   const { success, error } = useToastStore()
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [previewReady, setPreviewReady] = useState(false)
   const [googleFonts, setGoogleFonts] = useState<FontListItem[]>([])
   const [userFonts, setUserFonts] = useState<FontListItem[]>([])
   const [family, setFamily] = useState('')
-  const [category, setCategory] = useState('brand')
+  const [category, setCategory] = useState('sans')
   const [role, setRole] = useState('both')
   const [scripts, setScripts] = useState('')
   const [weight, setWeight] = useState('400')
@@ -102,8 +104,27 @@ export function FontsPage(): React.JSX.Element {
     }
   }
 
+  const loadPreviewCss = async (): Promise<void> => {
+    try {
+      const css = await ipc.loadFontPreviewCss()
+      if (!css) return
+      const id = 'font-preview-styles'
+      let el = document.getElementById(id) as HTMLStyleElement | null
+      if (!el) {
+        el = document.createElement('style')
+        el.id = id
+        document.head.appendChild(el)
+      }
+      el.textContent = css
+      setPreviewReady(true)
+    } catch {
+      // Preview is non-critical
+    }
+  }
+
   useEffect(() => {
     void loadFonts()
+    void loadPreviewCss()
   }, [])
 
   const selectedFileLabel = useMemo(() => {
@@ -153,12 +174,13 @@ export function FontsPage(): React.JSX.Element {
       })
       success('字体已上传')
       setFamily('')
-      setCategory('brand')
+      setCategory('sans')
       setRole('both')
       setScripts('')
       setWeight('400')
       setFilePaths([])
       await loadFonts()
+      void loadPreviewCss()
     } catch (err) {
       error('字体上传失败', {
         description: err instanceof Error ? err.message : '请稍后重试'
@@ -173,6 +195,7 @@ export function FontsPage(): React.JSX.Element {
       await ipc.deleteFont(font.id)
       success('字体已删除')
       await loadFonts()
+      void loadPreviewCss()
     } catch (err) {
       error('字体删除失败', {
         description: err instanceof Error ? err.message : '请稍后重试'
@@ -325,8 +348,16 @@ export function FontsPage(): React.JSX.Element {
                     key={font.id}
                     className="group flex items-center justify-between gap-3 rounded-lg border border-[#d8ccb5]/80 bg-[#fffdf8]/78 p-3 transition-all hover:border-[#c4b89e]/90 hover:shadow-[0_8px_20px_rgba(90,72,52,0.1)]"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-[#33402a]">{font.family}</p>
+                      {previewReady && (
+                        <p
+                          className="mt-1 truncate text-lg text-[#5a6650]/80"
+                          style={{ fontFamily: `"${font.family}", sans-serif` }}
+                        >
+                          {previewText(font.scripts)}
+                        </p>
+                      )}
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
                         <span className={`rounded-md border px-1.5 py-0.5 font-medium ${roleClassName(font.role)}`}>
                           {roleToLabel(font.role)}
@@ -366,7 +397,7 @@ export function FontsPage(): React.JSX.Element {
               <div>
                 <CardTitle className="text-base">内置 Google Fonts</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  通过 CDN 加载，生成时自动匹配或手动选择。
+                  本地内置，生成时自动匹配或手动选择。
                 </p>
               </div>
               <span className="rounded-full bg-[#e9efde] px-2.5 py-0.5 text-[11px] font-medium text-[#506141]">
@@ -382,6 +413,14 @@ export function FontsPage(): React.JSX.Element {
                     key={font.id}
                     className="rounded-lg border border-[#d8ccb5]/60 bg-[#fffdf8]/50 px-3 py-2.5 transition-colors hover:border-[#c4b89e]/80 hover:bg-[#fffdf8]"
                   >
+                    {previewReady && (
+                      <p
+                        className="truncate text-lg text-[#5a6650]/80"
+                        style={{ fontFamily: `"${font.family}", sans-serif` }}
+                      >
+                        {previewText(font.scripts)}
+                      </p>
+                    )}
                     <p className="text-sm font-medium text-[#33402a]">{font.family}</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
                       <span className={`rounded-md border px-1.5 py-0.5 font-medium ${roleClassName(font.role)}`}>

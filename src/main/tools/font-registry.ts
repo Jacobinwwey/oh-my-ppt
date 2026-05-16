@@ -1,8 +1,9 @@
 /**
- * Font registry: Google Fonts CDN URL mapping + user-uploaded fonts infrastructure.
+ * Font registry: bundled Google Fonts (local-first) + user-uploaded fonts infrastructure.
  * Used by buildScaffoldDocument to auto-inject font loading + CSS variables.
  */
 
+import { is } from '@electron-toolkit/utils'
 import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
@@ -49,8 +50,6 @@ export interface FontRegistryFile {
 export interface GoogleFontEntry {
   id: string
   family: string
-  /** Google Fonts CSS API URL with weights and display=swap */
-  url: string
   /** Category for AI selection guidance */
   category: string
   role: FontRole[]
@@ -58,15 +57,14 @@ export interface GoogleFontEntry {
 }
 
 /**
- * Built-in Google Fonts catalog.
+ * Built-in Google Fonts catalog (local-first).
  * Key = font family name (must match titleFont/bodyFont in design contract).
- * Value = pre-built Google Fonts CDN URL and AI selection metadata.
+ * Woff2 files live in resources/google-fonts/{FamilyName}/.
  */
 const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   Poppins: {
     id: 'google:poppins',
     family: 'Poppins',
-    url: 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap',
     category: 'sans-body',
     role: ['body', 'title'],
     scripts: ['latin']
@@ -74,23 +72,13 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   Inter: {
     id: 'google:inter',
     family: 'Inter',
-    url: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap',
     category: 'sans-body',
     role: ['body', 'title'],
-    scripts: ['latin']
-  },
-  Lato: {
-    id: 'google:lato',
-    family: 'Lato',
-    url: 'https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap',
-    category: 'sans-body',
-    role: ['body'],
     scripts: ['latin']
   },
   Montserrat: {
     id: 'google:montserrat',
     family: 'Montserrat',
-    url: 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap',
     category: 'sans-title',
     role: ['title'],
     scripts: ['latin']
@@ -98,47 +86,13 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   'Space Grotesk': {
     id: 'google:space-grotesk',
     family: 'Space Grotesk',
-    url: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap',
     category: 'sans-title',
     role: ['title', 'body'],
-    scripts: ['latin']
-  },
-  Quicksand: {
-    id: 'google:quicksand',
-    family: 'Quicksand',
-    url: 'https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&display=swap',
-    category: 'sans-title',
-    role: ['title', 'body'],
-    scripts: ['latin']
-  },
-  Raleway: {
-    id: 'google:raleway',
-    family: 'Raleway',
-    url: 'https://fonts.googleapis.com/css2?family=Raleway:wght@400;700&display=swap',
-    category: 'sans-title',
-    role: ['title'],
-    scripts: ['latin']
-  },
-  Oswald: {
-    id: 'google:oswald',
-    family: 'Oswald',
-    url: 'https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&display=swap',
-    category: 'display',
-    role: ['title'],
     scripts: ['latin']
   },
   'Bebas Neue': {
     id: 'google:bebas-neue',
     family: 'Bebas Neue',
-    url: 'https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap',
-    category: 'display',
-    role: ['title'],
-    scripts: ['latin']
-  },
-  Righteous: {
-    id: 'google:righteous',
-    family: 'Righteous',
-    url: 'https://fonts.googleapis.com/css2?family=Righteous&display=swap',
     category: 'display',
     role: ['title'],
     scripts: ['latin']
@@ -146,7 +100,6 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   'Playfair Display': {
     id: 'google:playfair-display',
     family: 'Playfair Display',
-    url: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap',
     category: 'serif',
     role: ['title'],
     scripts: ['latin']
@@ -154,15 +107,6 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   Merriweather: {
     id: 'google:merriweather',
     family: 'Merriweather',
-    url: 'https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap',
-    category: 'serif',
-    role: ['body', 'title'],
-    scripts: ['latin']
-  },
-  Lora: {
-    id: 'google:lora',
-    family: 'Lora',
-    url: 'https://fonts.googleapis.com/css2?family=Lora:wght@400;700&display=swap',
     category: 'serif',
     role: ['body', 'title'],
     scripts: ['latin']
@@ -170,23 +114,6 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   Caveat: {
     id: 'google:caveat',
     family: 'Caveat',
-    url: 'https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&display=swap',
-    category: 'handwriting',
-    role: ['title'],
-    scripts: ['latin']
-  },
-  Kalam: {
-    id: 'google:kalam',
-    family: 'Kalam',
-    url: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap',
-    category: 'handwriting',
-    role: ['title'],
-    scripts: ['latin']
-  },
-  'Patrick Hand': {
-    id: 'google:patrick-hand',
-    family: 'Patrick Hand',
-    url: 'https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap',
     category: 'handwriting',
     role: ['title'],
     scripts: ['latin']
@@ -194,23 +121,13 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   'Dancing Script': {
     id: 'google:dancing-script',
     family: 'Dancing Script',
-    url: 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&display=swap',
     category: 'handwriting',
-    role: ['title'],
-    scripts: ['latin']
-  },
-  Pacifico: {
-    id: 'google:pacifico',
-    family: 'Pacifico',
-    url: 'https://fonts.googleapis.com/css2?family=Pacifico&display=swap',
-    category: 'display',
     role: ['title'],
     scripts: ['latin']
   },
   'Fira Code': {
     id: 'google:fira-code',
     family: 'Fira Code',
-    url: 'https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap',
     category: 'mono',
     role: ['body'],
     scripts: ['latin']
@@ -218,7 +135,6 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   'Noto Sans SC': {
     id: 'google:noto-sans-sc',
     family: 'Noto Sans SC',
-    url: 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap',
     category: 'cjk-sans',
     role: ['body', 'title'],
     scripts: ['cjk', 'latin']
@@ -226,7 +142,6 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   'Noto Serif SC': {
     id: 'google:noto-serif-sc',
     family: 'Noto Serif SC',
-    url: 'https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap',
     category: 'cjk-serif',
     role: ['body', 'title'],
     scripts: ['cjk', 'latin']
@@ -234,15 +149,6 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   'ZCOOL XiaoWei': {
     id: 'google:zcool-xiaowei',
     family: 'ZCOOL XiaoWei',
-    url: 'https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap',
-    category: 'cjk-display',
-    role: ['title'],
-    scripts: ['cjk']
-  },
-  'ZCOOL QingKe HuangYou': {
-    id: 'google:zcool-qingke-huangyou',
-    family: 'ZCOOL QingKe HuangYou',
-    url: 'https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&display=swap',
     category: 'cjk-display',
     role: ['title'],
     scripts: ['cjk']
@@ -250,15 +156,6 @@ const GOOGLE_FONTS: Record<string, GoogleFontEntry> = {
   'Ma Shan Zheng': {
     id: 'google:ma-shan-zheng',
     family: 'Ma Shan Zheng',
-    url: 'https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap',
-    category: 'cjk-display',
-    role: ['title'],
-    scripts: ['cjk']
-  },
-  'Liu Jian Mao Cao': {
-    id: 'google:liu-jian-mao-cao',
-    family: 'Liu Jian Mao Cao',
-    url: 'https://fonts.googleapis.com/css2?family=Liu+Jian+Mao+Cao&display=swap',
     category: 'cjk-display',
     role: ['title'],
     scripts: ['cjk']
@@ -270,13 +167,22 @@ export const AVAILABLE_GOOGLE_FONTS = GOOGLE_FONTS
 const DEFAULT_REGISTRY: FontRegistryFile = { version: 1, fonts: [] }
 
 const normalizeFamily = (value: string): string => value.replace(/\s+/g, ' ').trim()
-const cssEscapeString = (value: string): string => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-const htmlEscape = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+export const cssEscapeString = (value: string): string => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+
+/** Resolve resources/ root (dev vs production). */
+function getResourcesRoot(): string {
+  return is.dev
+    ? path.join(process.cwd(), 'resources')
+    : path.join(process.resourcesPath, 'app.asar.unpacked', 'resources')
+}
+
+/** Bundled Google Fonts directory: resources/google-fonts/ */
+export function getBundledFontsRoot(): string {
+  return path.join(getResourcesRoot(), 'google-fonts')
+}
+
+/** Directory name for a font family: "Noto Sans SC" → "Noto_Sans_SC" */
+const familyDirName = (family: string): string => family.replace(/ /g, '_')
 
 export function getUserFontsRoot(): string {
   return path.join(app.getPath('userData'), 'userFonts')
@@ -442,7 +348,7 @@ export async function ensureUserFontsForProject(
 
   for (const entry of userFonts) {
     const sourceDir = path.join(getUserFontFilesRoot(), entry.id)
-    const targetDir = path.join(projectDir, 'assets', 'fonts', 'user', entry.id)
+    const targetDir = path.join(projectDir, 'assets', 'fonts', 'user-fonts', entry.id)
     await fs.promises.mkdir(targetDir, { recursive: true })
     for (const file of entry.files) {
       const sourcePath = path.join(sourceDir, file.file)
@@ -450,6 +356,71 @@ export async function ensureUserFontsForProject(
       await fs.promises.copyFile(sourcePath, targetPath)
     }
   }
+}
+
+/**
+ * Copy bundled Google Fonts woff2 files into the project assets directory.
+ * Returns the list of relative woff2 file paths copied.
+ */
+async function ensureGoogleFontsForProject(
+  fontFamilies: string[],
+  projectDir: string
+): Promise<void> {
+  const uniqueFamilies = Array.from(new Set(fontFamilies.map(normalizeFamily).filter(Boolean)))
+  if (uniqueFamilies.length === 0) return
+
+  const bundledRoot = getBundledFontsRoot()
+  for (const family of uniqueFamilies) {
+    const google = GOOGLE_FONTS[family]
+    if (!google) continue
+    const sourceDir = path.join(bundledRoot, familyDirName(family))
+    const targetDir = path.join(projectDir, 'assets', 'fonts', 'google-fonts', familyDirName(family))
+    // Read woff2 files from bundled resources
+    let woff2Files: string[]
+    try {
+      woff2Files = (await fs.promises.readdir(sourceDir)).filter((f) => f.endsWith('.woff2'))
+    } catch {
+      throw new Error(`内置字体文件缺失：${family}（期望目录：${sourceDir}）`)
+    }
+    if (woff2Files.length === 0) {
+      throw new Error(`内置字体目录为空：${family}`)
+    }
+    await fs.promises.mkdir(targetDir, { recursive: true })
+    for (const file of woff2Files) {
+      const src = path.join(sourceDir, file)
+      const dst = path.join(targetDir, file)
+      try {
+        await fs.promises.copyFile(src, dst)
+      } catch (err) {
+        // Skip if already exists (e.g. race condition on parallel builds)
+        if ((err as NodeJS.ErrnoException)?.code !== 'EEXIST') throw err
+      }
+    }
+  }
+}
+
+/**
+ * Build @font-face CSS text from a bundled Google Font's faces.css,
+ * rewriting ./ paths to the project-relative assets path.
+ */
+async function buildGoogleFontFaceTags(family: string, _projectDir: string): Promise<string[]> {
+  const bundledRoot = getBundledFontsRoot()
+  const sourceDir = path.join(bundledRoot, familyDirName(family))
+  const facesCssPath = path.join(sourceDir, 'faces.css')
+  const cssRaw = await fs.promises.readFile(facesCssPath, 'utf-8')
+  const relPrefix = `./assets/fonts/google-fonts/${familyDirName(family)}/`
+
+  // Parse each @font-face block, rewrite url("./...") to project-relative path
+  const blocks = cssRaw.split(/@font-face\s*\{/).slice(1)
+  return blocks.map((block) => {
+    const body = block.slice(0, block.indexOf('}')).trim()
+    // Replace url("./...") with the project-relative path
+    const rewritten = body.replace(
+      /url\(\s*"\.\/([^"]+)"\s*\)/g,
+      (_, fileName) => `url("${relPrefix}${fileName}")`
+    )
+    return `<style data-ppt-fonts="google">@font-face{${rewritten}}</style>`
+  })
 }
 
 /**
@@ -465,6 +436,9 @@ export async function buildFontHeadTags(args: {
   const bodyFont = normalizeFamily(args.bodyFont)
   await assertFontFamilyAvailable(titleFont, 'titleFont')
   await assertFontFamilyAvailable(bodyFont, 'bodyFont')
+
+  // Copy font files to project assets
+  await ensureGoogleFontsForProject([titleFont, bodyFont], args.projectDir)
   await ensureUserFontsForProject([titleFont, bodyFont], args.projectDir)
 
   const userRegistry = await readUserFontRegistry()
@@ -474,15 +448,14 @@ export async function buildFontHeadTags(args: {
   for (const family of families) {
     const google = GOOGLE_FONTS[family]
     if (google) {
-      tags.push(
-        `<link rel="stylesheet" href="${htmlEscape(google.url)}" data-ppt-fonts="google" />`
-      )
+      const faceTags = await buildGoogleFontFaceTags(family, args.projectDir)
+      tags.push(...faceTags)
       continue
     }
     const uploaded = userRegistry.fonts.find((entry) => entry.family === family)
     if (!uploaded) throw new Error(`字体不在可用字体列表中：${family}`)
     for (const file of uploaded.files) {
-      const fontUrl = `./assets/fonts/user/${uploaded.id}/${file.file}`
+      const fontUrl = `./assets/fonts/user-fonts/${uploaded.id}/${file.file}`
       tags.push(
         `<style data-ppt-fonts="user">@font-face{font-family:"${cssEscapeString(uploaded.family)}";src:url("${cssEscapeString(fontUrl)}") format("woff2");font-weight:${file.weight};font-style:${file.style};font-display:swap}</style>`
       )

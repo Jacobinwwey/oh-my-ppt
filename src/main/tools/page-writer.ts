@@ -453,17 +453,12 @@ function stripCanvasInlineSizes(styleAttr: string): string {
 const REMOTE_RUNTIME_RESOURCE_RE =
   /<(script|link)\b[^>]*(?:src|href)\s*=\s*["'](?:https?:)?\/\/[^"']+["'][^>]*>/gi
 
-const GOOGLE_FONTS_DOMAIN_RE =
-  /(?:fonts\.googleapis\.com|fonts\.gstatic\.com)/
-
 export function extractRemoteRuntimeResources(content: string): string[] {
   const hits: string[] = []
   let match: RegExpExecArray | null
   REMOTE_RUNTIME_RESOURCE_RE.lastIndex = 0
   while ((match = REMOTE_RUNTIME_RESOURCE_RE.exec(content)) !== null) {
     const raw = match[0].replace(/\s+/g, ' ').trim()
-    // Allow Google Fonts CDN
-    if (GOOGLE_FONTS_DOMAIN_RE.test(raw)) continue
     hits.push(raw.length > 200 ? `${raw.slice(0, 200)}…` : raw)
     if (hits.length >= 8) break
   }
