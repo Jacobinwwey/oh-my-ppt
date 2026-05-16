@@ -1,4 +1,5 @@
 import { CONTENT_LANGUAGE_RULES } from './shared'
+import { FONT_MAP_FOR_PROMPT } from '../tools/font-registry'
 
 export function buildPlanningSystemPrompt(totalPages: number = 0): string {
   return [
@@ -45,14 +46,19 @@ export function buildDesignContractSystemPrompt(styleSkill?: string | null): str
     'Field semantics:',
     '- theme describes the visual mood/design direction, not the deck content topic. Do not repeat the topic, title, year, or industry name.',
     '- background, palette, titleStyle, layoutMotif, chartStyle, and shapeLanguage must be derived from the style specification.',
+    '- fonts: pick 1-2 font names from the list below. The first becomes the title font, the second the body font.',
     '- The design contract should keep the deck visually coherent while allowing slide-level variation in composition, density, and emphasis.',
     '- Avoid over-prescribing exact placements, repeated templates, or one layout that every page must copy.',
     '- Keep fields concrete and actionable, but phrase them as ranges, tendencies, and reusable tokens when the source style allows flexibility.',
     '',
+    'fonts must be a comma-separated string of font names from the list below:',
+    JSON.stringify(FONT_MAP_FOR_PROMPT),
+    '',
     'Return only a JSON object. Do not add explanations, Markdown, or extra text.',
-    'Use exactly these fields: theme, background, palette, titleStyle, layoutMotif, chartStyle, shapeLanguage.',
+    'Use exactly these fields: theme, background, palette, titleStyle, layoutMotif, chartStyle, shapeLanguage, fonts.',
     'palette must contain 3-6 color strings.',
+    'fonts must be a comma-separated string of font names from the list above.',
     'titleStyle should usually use text-4xl or text-5xl depending on content density. Do not use text-6xl, text-7xl, or text-8xl.',
-    'Format example: {"theme":"calm editorial analytics","background":"root uses warm white with subtle green wash","palette":["#f7f3e8","#5f7550","#d39d5c"],"titleStyle":"text-5xl font-semibold text-[#2f3a2a]","layoutMotif":"spacious editorial grids with organic dividers","chartStyle":"muted lines, no neon, readable labels","shapeLanguage":"8px radius, light borders, subtle shadows"}'
+    'Format example: {"theme":"calm editorial analytics","background":"root uses warm white with subtle green wash","palette":["#f7f3e8","#5f7550","#d39d5c"],"titleStyle":"text-5xl font-semibold text-[#2f3a2a]","layoutMotif":"spacious editorial grids with organic dividers","chartStyle":"muted lines, no neon, readable labels","shapeLanguage":"8px radius, light borders, subtle shadows","fonts":"Montserrat, Poppins"}'
   ].join('\n')
 }

@@ -3,6 +3,7 @@ import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import * as cheerio from 'cheerio'
 import log from 'electron-log/main.js'
+import { buildGoogleFontLinks } from './font-registry'
 import type { SessionDeckGenerationContext } from './types'
 import { validateHtmlContent, validatePersistedPageHtml } from './html-utils'
 import { buildSessionAssetHeadTags } from '../ipc/engine/page-assets'
@@ -60,6 +61,12 @@ export const BASE_PAGE_STYLE_TAG = `<style id="ppt-page-guard-style">
     justify-content: flex-start;
     align-items: stretch;
     overflow: hidden;
+    font-size: 16px;
+  }
+  .ppt-page-content .text-xs,
+  .ppt-page-content .text-sm {
+    font-size: 1rem !important;
+    line-height: 1.5 !important;
   }
   .ppt-page-content > [data-page-scaffold="1"] {
     width: 100%;
@@ -439,12 +446,17 @@ function stripCanvasInlineSizes(styleAttr: string): string {
 const REMOTE_RUNTIME_RESOURCE_RE =
   /<(script|link)\b[^>]*(?:src|href)\s*=\s*["'](?:https?:)?\/\/[^"']+["'][^>]*>/gi
 
+const GOOGLE_FONTS_DOMAIN_RE =
+  /(?:fonts\.googleapis\.com|fonts\.gstatic\.com)/
+
 export function extractRemoteRuntimeResources(content: string): string[] {
   const hits: string[] = []
   let match: RegExpExecArray | null
   REMOTE_RUNTIME_RESOURCE_RE.lastIndex = 0
   while ((match = REMOTE_RUNTIME_RESOURCE_RE.exec(content)) !== null) {
     const raw = match[0].replace(/\s+/g, ' ').trim()
+    // Allow Google Fonts CDN
+    if (GOOGLE_FONTS_DOMAIN_RE.test(raw)) continue
     hits.push(raw.length > 200 ? `${raw.slice(0, 200)}…` : raw)
     if (hits.length >= 8) break
   }
@@ -622,12 +634,17 @@ function preprocessPageHtml(html: string): string {
   }
 }
 
-const normalizeAndInjectPageRuntime = (content: string, pageId: string): string => {
+const normalizeAndInjectPageRuntime = (
+  content: string,
+  pageId: string,
+  fontFamilies?: string[]
+): string => {
   const fragment = normalizeCreativePageFragment(preprocessPageHtml(content))
   const output = buildScaffoldDocument({
     pageId,
     innerContent: fragment,
-    includeDefaultMotion: !hasCustomPageAnimation(content)
+    includeDefaultMotion: !hasCustomPageAnimation(content),
+    fontFamilies
   })
   return syncRootBackgroundFromScaffold(output)
 }
@@ -636,15 +653,20 @@ function buildScaffoldDocument(args: {
   pageId: string
   innerContent: string
   includeDefaultMotion: boolean
+  fontFamilies?: string[]
 }): string {
-  const { pageId, innerContent, includeDefaultMotion } = args
+  const { pageId, innerContent, includeDefaultMotion, fontFamilies } = args
   const motionScript = includeDefaultMotion ? `\n    ${DEFAULT_MOTION_SCRIPT}` : ''
+  const googleFontInjection =
+    fontFamilies && fontFamilies.length > 0
+      ? `\n    ${buildGoogleFontLinks(fontFamilies)}`
+      : ''
   return `<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    ${buildSessionAssetHeadTags()}
+    ${buildSessionAssetHeadTags()}${googleFontInjection}
     ${BASE_PAGE_STYLE_TAG}
   </head>
   <body data-page-id="${pageId}">
@@ -796,7 +818,11 @@ export function createPageWriteTools(args: {
       agentName
     })
     const result = await serializedWrite(context.projectDir, async () => {
-      const normalized = normalizeAndInjectPageRuntime(content, resolvedPageId)
+      const fontsStr = context.designContract?.fonts
+      const fontFamilies = fontsStr
+        ? fontsStr.split(',').map((f) => f.trim()).filter(Boolean)
+        : undefined
+      const normalized = normalizeAndInjectPageRuntime(content, resolvedPageId, fontFamilies)
       const persistedValidation = validatePersistedPageHtml(normalized, resolvedPageId)
       if (!persistedValidation.valid) {
         emitNormalizedToolStatus(config, {

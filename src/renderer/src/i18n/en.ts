@@ -107,6 +107,8 @@ export const en = {
     sourceDocument: 'Document',
     sourceAi: 'AI created',
     statusComplete: 'Complete',
+    statusPartialComplete: 'Partially complete',
+    statusPartialCompleteTip: 'Enter editor to fix error pages',
     statusContinuable: 'Can continue',
     statusRegenerate: 'Regenerate needed',
     actionEnter: 'Open session',
@@ -326,7 +328,8 @@ Business presentations, product introductions, project summaries — formal but 
     failedRetry: 'Generation failed. Please retry.',
     continueRemaining: 'Continue remaining pages',
     backToSessions: 'Back to sessions',
-    regenerate: 'Regenerate'
+    regenerate: 'Regenerate',
+    enterEditor: 'Enter Editor to Fix'
   },
   sessionDetail: {
     sessionFallback: 'Session',

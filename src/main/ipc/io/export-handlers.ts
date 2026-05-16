@@ -333,10 +333,13 @@ export function registerExportHandlers(ctx: IpcContext): void {
         : path.join(process.resourcesPath, 'app.asar.unpacked', 'resources')
 
       const targets = [
-        { platform: 'macos-arm64', bin: 'slide-pack-darwin-arm64', ext: '' },
-        { platform: 'macos-amd64', bin: 'slide-pack-darwin-amd64', ext: '' },
-        { platform: 'windows-amd64', bin: 'slide-pack-windows-amd64.exe', ext: '.exe' }
+        { platform: 'macos-arm64', bin: 'slide-pack-darwin-arm64', ext: '', os: 'darwin', arch: 'arm64' },
+        { platform: 'macos-amd64', bin: 'slide-pack-darwin-amd64', ext: '', os: 'darwin', arch: 'x64' },
+        { platform: 'windows-amd64', bin: 'slide-pack-windows-amd64.exe', ext: '.exe', os: 'win32', arch: 'x64' }
       ]
+
+      const currentPlatform = process.platform
+      const currentArch = process.arch
 
       const rawTitle = typeof session.title === 'string' && session.title.trim() ? session.title.trim() : 'slides'
       const sessionName = rawTitle.replace(/[<>:"/\\|?*]/g, '').trim()
@@ -388,16 +391,30 @@ export function registerExportHandlers(ctx: IpcContext): void {
 
         const viewerData = fs.readFileSync(viewerPath)
         const outputName = `${sessionName}-${t.platform}${t.ext}`
-        const outputPath = path.join(outputFolder, outputName)
 
         // Trailer: uint64 LE = ZIP data length
         const trailer = Buffer.alloc(8)
         trailer.writeBigUInt64LE(BigInt(zipData.byteLength))
 
         const output = Buffer.concat([viewerData, Buffer.from(zipData), trailer])
-        fs.writeFileSync(outputPath, output)
-        fs.chmodSync(outputPath, 0o755)
-        generatedFiles.push(outputName)
+
+        // For cross-platform darwin binaries: wrap in a zip with Unix permissions
+        // so macOS can execute after extracting (Windows chmod is a no-op for Unix perms)
+        const isCrossPlatform = t.os !== currentPlatform || t.arch !== currentArch
+        if (isCrossPlatform && t.os === 'darwin') {
+          const innerName = `${sessionName}-${t.platform}`
+          const permissionZip = zipSync(
+            { [innerName]: [new Uint8Array(output), { attrs: 0o100755 << 16 }] as any }
+          )
+          const zipOutputName = `${sessionName}-${t.platform}.zip`
+          fs.writeFileSync(path.join(outputFolder, zipOutputName), Buffer.from(permissionZip))
+          generatedFiles.push(zipOutputName)
+        } else {
+          const outputPath = path.join(outputFolder, outputName)
+          fs.writeFileSync(outputPath, output)
+          fs.chmodSync(outputPath, 0o755)
+          generatedFiles.push(outputName)
+        }
       }
 
       // Write README.txt
@@ -407,12 +424,12 @@ export function registerExportHandlers(ctx: IpcContext): void {
 双击对应平台的文件即可在浏览器中打开演示。
 
 文件说明：
-  *-macos-arm64       → Apple Silicon Mac (M1/M2/M3/M4)
-  *-macos-amd64       → Intel Mac
-  *-windows-amd64.exe → Windows 电脑
+  *-macos-arm64(.zip)       → Apple Silicon Mac (M1/M2/M3/M4)
+  *-macos-amd64(.zip)       → Intel Mac
+  *-windows-amd64.exe       → Windows 电脑
 
 使用方法：
-  macOS：双击文件打开，或在终端运行 ./文件名
+  macOS：若为 .zip 文件请先解压，再双击解压后的文件打开
   Windows：双击 .exe 文件打开
   如果提示"无法打开"，请右键 → 打开 → 确认打开
 

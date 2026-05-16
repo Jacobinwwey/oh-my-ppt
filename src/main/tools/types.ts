@@ -29,6 +29,7 @@ export interface DesignContract {
   layoutMotif: string;
   chartStyle: string;
   shapeLanguage: string;
+  fonts?: string;
 }
 
 export type DeckEditScope = "page" | "deck" | "presentation-container";

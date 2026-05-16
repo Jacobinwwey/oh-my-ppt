@@ -157,7 +157,8 @@ const DEFAULT_DESIGN_CONTRACT: DesignContract = {
   layoutMotif:
     'varied 16:9 editorial layouts with flexible title placement inside the content area',
   chartStyle: 'readable Chart.js v4 charts with restrained colors and stable canvas height',
-  shapeLanguage: '8px radius, light borders, subtle shadows'
+  shapeLanguage: '8px radius, light borders, subtle shadows',
+  fonts: 'Poppins'
 }
 
 const normalizeDesignContract = (value: unknown): DesignContract => {
@@ -169,7 +170,7 @@ const normalizeDesignContract = (value: unknown): DesignContract => {
     const text = String(record[key] ?? '')
       .replace(/\s+/g, ' ')
       .trim()
-    const fallback = DEFAULT_DESIGN_CONTRACT[key]
+    const fallback = DEFAULT_DESIGN_CONTRACT[key] ?? ''
     const resolved = text || fallback
     return resolved.length > 220 ? `${resolved.slice(0, 220).trimEnd()}…` : resolved
   }
@@ -189,7 +190,8 @@ const normalizeDesignContract = (value: unknown): DesignContract => {
     titleStyle: readText('titleStyle'),
     layoutMotif: readText('layoutMotif'),
     chartStyle: readText('chartStyle'),
-    shapeLanguage: readText('shapeLanguage')
+    shapeLanguage: readText('shapeLanguage'),
+    fonts: readText('fonts')
   }
 }
 
