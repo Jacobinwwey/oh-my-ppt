@@ -263,6 +263,7 @@ export function SettingsPage(): React.JSX.Element {
         modelForm.apiKey,
         modelForm.model,
         modelForm.baseUrl,
+        modelForm.maxTokens,
         resolveModelTimeoutMs(undefined, 'verify')
       )
       const verifyMessage = useSettingsStore.getState().verificationMessage

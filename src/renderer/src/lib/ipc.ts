@@ -330,6 +330,7 @@ export const ipc = {
     apiKey: string
     model: string
     baseUrl: string
+    maxTokens?: number
     timeoutMs: number
   }) =>
     getIpc().invoke('settings:verifyApiKey', payload) as Promise<{
