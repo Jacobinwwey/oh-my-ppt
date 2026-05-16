@@ -206,7 +206,7 @@ export function HomePage(): ReactElement {
         title: font,
         body: font
       }))
-      setFontOptions([...curated, ...uploaded])
+      setFontOptions([...uploaded, ...curated])
     } catch {
       setFontOptions([])
     }
@@ -695,12 +695,27 @@ export function HomePage(): ReactElement {
                   <SelectItem value="auto">{t('home.fontSchemeAuto')}</SelectItem>
                   {fontOptions.map((option) => {
                     const same = option.title.family === option.body.family
+                    const isUploaded = option.title.source === 'uploaded'
+                    const sourceLabel = isUploaded
+                      ? t('home.fontSourceUploaded')
+                      : t('home.fontSourceBuiltIn')
                     const label = same
                       ? `${option.title.family} ${t('home.fontPairBoth')}`
                       : `${option.title.family} ${t('home.fontPairTitle')} · ${option.body.family} ${t('home.fontPairBody')}`
                     return (
                       <SelectItem key={option.id} value={option.id}>
-                        {label}
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-medium ${
+                              isUploaded
+                                ? 'bg-[#eef9ec] text-[#4a7a46]'
+                                : 'bg-[#eef6ff] text-[#3e6685]'
+                            }`}
+                          >
+                            {sourceLabel}
+                          </span>
+                          <span className="truncate">{label}</span>
+                        </span>
                       </SelectItem>
                     )
                   })}
