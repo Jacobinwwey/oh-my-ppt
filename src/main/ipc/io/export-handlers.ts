@@ -37,6 +37,17 @@ const parseImageOnly = (payload: unknown): boolean =>
 const sanitizeExportBaseName = (value: string, fallback: string): string =>
   value.replace(/[\\/:*?"<>|]/g, '_').slice(0, 120) || fallback
 
+const isSameOrChildPath = async (candidatePath: string, parentPath: string): Promise<boolean> => {
+  const resolveRealPath = async (value: string): Promise<string> =>
+    fs.promises.realpath(value).catch(() => path.resolve(value))
+
+  const candidate = path.resolve(await resolveRealPath(candidatePath))
+  const parent = path.resolve(await resolveRealPath(parentPath))
+  const relative = path.relative(parent, candidate)
+
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
 const buildPngFileName = (pageNumber: number, title: string | undefined): string => {
   const paddedNumber = String(pageNumber).padStart(2, '0')
   const sanitizedTitle = sanitizeExportBaseName(String(title || '').trim(), `page-${paddedNumber}`)
@@ -71,7 +82,7 @@ export function registerExportHandlers(ctx: IpcContext): void {
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? mainWindow
     const saveResult = await dialog.showSaveDialog(ownerWindow, {
       title: '导出 PDF',
-      defaultPath: path.join(projectDir, `${sanitizedBaseName}.pdf`),
+      defaultPath: path.join(path.dirname(projectDir), `${sanitizedBaseName}.pdf`),
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation']
     })
@@ -150,7 +161,7 @@ export function registerExportHandlers(ctx: IpcContext): void {
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? mainWindow
     const directoryResult = await dialog.showOpenDialog(ownerWindow, {
       title: '选择 PNG 导出目录',
-      defaultPath: projectDir,
+      defaultPath: path.dirname(projectDir),
       buttonLabel: '导出到此目录',
       properties: ['openDirectory', 'createDirectory']
     })
@@ -235,7 +246,7 @@ export function registerExportHandlers(ctx: IpcContext): void {
       BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? mainWindow
     const saveResult = await dialog.showSaveDialog(ownerWindow, {
       title: '导出 PPTX',
-      defaultPath: path.join(projectDir, `${sanitizedBaseName}.pptx`),
+      defaultPath: path.join(path.dirname(projectDir), `${sanitizedBaseName}.pptx`),
       filters: [{ name: 'PowerPoint', extensions: ['pptx'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation']
     })
@@ -316,7 +327,7 @@ export function registerExportHandlers(ctx: IpcContext): void {
   })
 
   // Export: slide-pack (standalone executable with embedded slides)
-  ipcMain.handle('export:slidePack', async (_event, payload: unknown) => {
+  ipcMain.handle('export:slidePack', async (event, payload: unknown) => {
     const sessionId = parseSessionId(payload)
     if (!sessionId) throw new Error('Missing sessionId')
 
@@ -341,8 +352,11 @@ export function registerExportHandlers(ctx: IpcContext): void {
       const sessionName = rawTitle.replace(/[<>:"/\\|?*]/g, '').trim()
 
       // Let user choose save directory
-      const saveResult = await dialog.showOpenDialog({
+      const ownerWindow =
+        BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? mainWindow
+      const saveResult = await dialog.showOpenDialog(ownerWindow, {
         title: '选择打包导出目录',
+        defaultPath: path.dirname(projectDir),
         properties: ['openDirectory', 'createDirectory'],
         buttonLabel: '导出到此目录'
       })
@@ -350,8 +364,13 @@ export function registerExportHandlers(ctx: IpcContext): void {
         return { success: false, cancelled: true }
       }
 
+      const outputParentDir = saveResult.filePaths[0]
+      if (await isSameOrChildPath(outputParentDir, projectDir)) {
+        throw new Error('打包导出目录不能选择当前会话目录或其子目录，请选择会话目录外的位置。')
+      }
+
       // Create output folder
-      const outputFolder = path.join(saveResult.filePaths[0], `ohmyppt-${nanoid(8)}`)
+      const outputFolder = path.join(outputParentDir, `ohmyppt-${nanoid(8)}`)
       fs.mkdirSync(outputFolder, { recursive: true })
 
       log.info('[export:slidePack] starting', { sessionId, projectDir, outputFolder })
