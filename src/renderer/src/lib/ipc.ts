@@ -497,6 +497,7 @@ export const ipc = {
     pageId: string
     dragEdits: unknown[]
     textEdits: unknown[]
+    propertyEdits?: unknown[]
     deletes?: unknown[]
     addElements?: unknown[]
     prompt?: string
@@ -505,8 +506,10 @@ export const ipc = {
       success: boolean
       dragCount: number
       textCount: number
+      propertyCount?: number
       deleteCount: number
       addCount: number
+      warnings?: string[]
     }>,
   openFile: (filePath: string, sessionId?: string) =>
     getIpc().invoke('file:open', { path: filePath, sessionId }) as Promise<string>,
