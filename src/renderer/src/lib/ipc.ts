@@ -59,6 +59,7 @@ export interface StyleListItem {
   source?: 'builtin' | 'custom' | 'override'
   editable?: boolean
   styleCase?: string
+  previewPath?: string | null
   createdAt?: number
   updatedAt?: number
 }

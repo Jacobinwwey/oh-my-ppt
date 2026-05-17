@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import log from 'electron-log/main.js'
 import { customAlphabet } from 'nanoid'
+import { is } from '@electron-toolkit/utils'
 import {
   listStyleCatalog,
   getStyleDetail,
@@ -20,6 +21,17 @@ import { isSupportedImageMimeType, normalizeImageMimeType } from '@shared/image-
 
 const nanoidLower = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 12)
 const MAX_STYLE_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
+
+function resolvePreviewHtmlPath(styleKey: string): string {
+  return is.dev
+    ? path.join(process.cwd(), 'resources', 'styleHtml', `${styleKey}.html`)
+    : path.join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'styleHtml', `${styleKey}.html`)
+}
+
+function resolvePreviewPath(styleKey: string): string | null {
+  const htmlPath = resolvePreviewHtmlPath(styleKey)
+  return fs.existsSync(htmlPath) ? htmlPath : null
+}
 
 type StyleBasePayload = {
   label: string
@@ -85,6 +97,7 @@ export function registerStyleHandlers(ctx: IpcContext): void {
         editable: row.source !== 'builtin',
         version: row.version,
         styleCase: row.styleCase,
+        previewPath: resolvePreviewPath(row.style),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt
       }))
