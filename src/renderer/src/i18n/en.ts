@@ -49,6 +49,8 @@ export const en = {
     fontSchemeAuto: 'Auto match',
     fontSchemeAutoHint: 'AI will choose title and body fonts based on the topic and style.',
     fontSchemeManualHint: 'Uses the selected fonts as title and body fonts.',
+    fontSchemePartialHint:
+      'Choose both title and body fonts to lock the pair; otherwise AI will keep matching fonts automatically.',
     fontPairTitle: 'Title',
     fontPairBody: 'Body',
     fontPairBoth: 'Title/Body',
