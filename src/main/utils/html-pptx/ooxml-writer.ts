@@ -93,10 +93,33 @@ function buildTextShape(id: number, tb: HtmlToPptxTextBox): string {
     if (tb.align && tb.align !== 'left') {
       pPrParts.push(` algn="${mapAlign(tb.align)}"`)
     }
+    if (tb.bullet) {
+      const level = Math.max(0, Math.min(8, Math.floor(tb.bullet.level || 0)))
+      const marL = 342900 + level * 228600
+      const indent = -171450
+      pPrParts.push(` marL="${marL}" indent="${indent}"`)
+    }
+    if (tb.paragraphSpacingBefore && tb.paragraphSpacingBefore > 0) {
+      pPrParts.push(
+        `<a:spcBef><a:spcPts val="${Math.round(tb.paragraphSpacingBefore * 100)}"/></a:spcBef>`
+      )
+    }
+    if (tb.paragraphSpacingAfter && tb.paragraphSpacingAfter > 0) {
+      pPrParts.push(
+        `<a:spcAft><a:spcPts val="${Math.round(tb.paragraphSpacingAfter * 100)}"/></a:spcAft>`
+      )
+    }
     if (tb.lineSpacing && tb.lineSpacing > 0) {
       pPrParts.push(
         `<a:lnSpc><a:spcPts val="${Math.round(tb.lineSpacing * 100)}"/></a:lnSpc>`
       )
+    }
+    if (tb.bullet?.type === 'number') {
+      const startAt = Math.max(1, Math.min(32767, Math.floor(tb.bullet.startAt || 1)))
+      pPrParts.push(`<a:buAutoNum type="arabicPeriod" startAt="${startAt}"/>`)
+    } else if (tb.bullet?.type === 'bullet') {
+      pPrParts.push('<a:buFont typeface="Arial"/>')
+      pPrParts.push('<a:buChar char="•"/>')
     }
     const pPr = pPrParts.length > 0
       ? `<a:pPr${pPrParts.filter(p => !p.startsWith('<')).join('')}>${pPrParts.filter(p => p.startsWith('<')).join('')}</a:pPr>`
@@ -160,6 +183,8 @@ function buildTextShape(id: number, tb: HtmlToPptxTextBox): string {
   const autoFit = tb.wrap
     ? '<a:normAutofit fontScale="100000"/>'
     : '<a:noAutofit/>'
+  const anchor =
+    tb.verticalAlign === 'middle' ? 'ctr' : tb.verticalAlign === 'bottom' ? 'b' : 't'
 
   return `<p:sp>
     <p:nvSpPr>
@@ -176,7 +201,7 @@ function buildTextShape(id: number, tb: HtmlToPptxTextBox): string {
       <a:noFill/>
     </p:spPr>
     <p:txBody>
-      <a:bodyPr wrap="${wrap}" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">${autoFit}</a:bodyPr>
+      <a:bodyPr wrap="${wrap}" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${anchor}">${autoFit}</a:bodyPr>
       <a:lstStyle/>
 ${paragraphs}
     </p:txBody>
@@ -306,10 +331,17 @@ function buildTableXml(id: number, table: HtmlToPptxTable): string {
 
   // Build occupied grid for merge handling
   const totalRows = table.rows.length
-  const occupied: boolean[][] = Array.from({ length: totalRows }, () => new Array<boolean>(maxCols).fill(false))
-  const cellGrid: (HtmlToPptxTableCell | null)[][] = Array.from(
+  type TableGridEntry = {
+    cell: HtmlToPptxTableCell
+    origin: boolean
+    rowSpan: number
+    colSpan: number
+    hMerge: boolean
+    vMerge: boolean
+  }
+  const cellGrid: (TableGridEntry | null)[][] = Array.from(
     { length: totalRows },
-    () => new Array<HtmlToPptxTableCell | null>(maxCols).fill(null)
+    () => new Array<TableGridEntry | null>(maxCols).fill(null)
   )
 
   for (let r = 0; r < totalRows; r++) {
@@ -317,15 +349,23 @@ function buildTableXml(id: number, table: HtmlToPptxTable): string {
     for (const cell of table.rows[r]) {
       const rs = Math.max(1, cell.rowspan || 1)
       const cs = Math.max(1, cell.colspan || 1)
-      while (col < maxCols && occupied[r][col]) col++
+      while (col < maxCols && cellGrid[r][col]) col++
       if (col >= maxCols) break
-      cellGrid[r][col] = cell
-      for (let dr = 0; dr < rs && r + dr < totalRows; dr++) {
-        for (let dc = 0; dc < cs && col + dc < maxCols; dc++) {
-          occupied[r + dr][col + dc] = true
+      const rowSpan = Math.min(rs, totalRows - r)
+      const colSpan = Math.min(cs, maxCols - col)
+      for (let dr = 0; dr < rowSpan; dr++) {
+        for (let dc = 0; dc < colSpan; dc++) {
+          cellGrid[r + dr][col + dc] = {
+            cell,
+            origin: dr === 0 && dc === 0,
+            rowSpan,
+            colSpan,
+            hMerge: dc > 0,
+            vMerge: dr > 0
+          }
         }
       }
-      col += cs
+      col += colSpan
     }
   }
 
@@ -339,17 +379,37 @@ function buildTableXml(id: number, table: HtmlToPptxTable): string {
     .join('\n      ')
 
   // Build rows
-  const rowsXml = table.rows.map((row, rIdx) => {
+  const emptyCellXml = (attrs = ''): string => `<a:tc${attrs}>
+          <a:txBody>
+            <a:bodyPr/>
+            <a:lstStyle/>
+            <a:p><a:endParaRPr lang="zh-CN"/></a:p>
+          </a:txBody>
+          <a:tcPr/>
+        </a:tc>`
+
+  const rowsXml = table.rows.map((_row, rIdx) => {
     const rowHeight = table.rowHeights[rIdx] || (table.h / totalRows)
     const cellsXml: string[] = []
-    let colIdx = 0
 
-    for (const cell of row) {
-      while (colIdx < maxCols && cellGrid[rIdx][colIdx] !== cell) colIdx++
-      if (colIdx >= maxCols) break
+    for (let colIdx = 0; colIdx < maxCols; colIdx++) {
+      const gridEntry = cellGrid[rIdx][colIdx]
+      if (!gridEntry) {
+        cellsXml.push(emptyCellXml())
+        continue
+      }
+      if (!gridEntry.origin) {
+        const mergeAttrs = [
+          gridEntry.hMerge ? 'hMerge="1"' : '',
+          gridEntry.vMerge ? 'vMerge="1"' : ''
+        ].filter(Boolean).join(' ')
+        cellsXml.push(emptyCellXml(mergeAttrs ? ` ${mergeAttrs}` : ''))
+        continue
+      }
 
-      const cs = Math.max(1, cell.colspan || 1)
-      const rs = Math.max(1, cell.rowspan || 1)
+      const cell = gridEntry.cell
+      const cs = gridEntry.colSpan
+      const rs = gridEntry.rowSpan
 
       const gridSpanAttr = cs > 1 ? ` gridSpan="${cs}"` : ''
       const rowSpanAttr = rs > 1 ? ` rowSpan="${rs}"` : ''
@@ -384,10 +444,11 @@ function buildTableXml(id: number, table: HtmlToPptxTable): string {
 
       // Cell properties
       const tcPrParts: string[] = []
+      const tcPrAttrs: string[] = []
 
-      // Vertical alignment
-      if (cell.valign === 'middle') tcPrParts.push('<a:vAlign val="ctr"/>')
-      else if (cell.valign === 'bottom') tcPrParts.push('<a:vAlign val="b"/>')
+      // DrawingML table cells use the tcPr anchor attribute for vertical alignment.
+      if (cell.valign === 'middle') tcPrAttrs.push('anchor="ctr"')
+      else if (cell.valign === 'bottom') tcPrAttrs.push('anchor="b"')
 
       // Fill
       if (cell.fill) {
@@ -425,8 +486,8 @@ function buildTableXml(id: number, table: HtmlToPptxTable): string {
         )
       }
 
-      const tcPrXml = tcPrParts.length > 0
-        ? `<a:tcPr>${tcPrParts.join('')}</a:tcPr>`
+      const tcPrXml = tcPrParts.length > 0 || tcPrAttrs.length > 0
+        ? `<a:tcPr${tcPrAttrs.length > 0 ? ` ${tcPrAttrs.join(' ')}` : ''}>${tcPrParts.join('')}</a:tcPr>`
         : ''
 
       cellsXml.push(`<a:tc${gridSpanAttr}${rowSpanAttr}>
@@ -437,31 +498,33 @@ function buildTableXml(id: number, table: HtmlToPptxTable): string {
           </a:txBody>
           ${tcPrXml}
         </a:tc>`)
-
-      colIdx += cs
     }
 
     return `<a:tr h="${inToEmu(rowHeight)}">\n      ${cellsXml.join('\n      ')}\n    </a:tr>`
   }).join('\n    ')
 
   return `<p:graphicFrame>
-    <p:nvGrpFrPr>
+    <p:nvGraphicFramePr>
       <p:cNvPr id="${id}" name="Table ${id}"/>
-      <p:cNvGrpFrPr/>
+      <p:cNvGraphicFramePr/>
       <p:nvPr/>
-    </p:nvGrpFrPr>
+    </p:nvGraphicFramePr>
     <p:xfrm>
       <a:off x="${inToEmu(table.x)}" y="${inToEmu(table.y)}"/>
       <a:ext cx="${inToEmu(table.w)}" cy="${inToEmu(table.h)}"/>
     </p:xfrm>
-    <a:tbl>
-      <a:tblPr firstRow="0" lastRow="0" firstCol="0" lastCol="0" noBandRow="1" noBandCol="1">
-      </a:tblPr>
-      <a:tblGrid>
-      ${gridColsXml}
-      </a:tblGrid>
-    ${rowsXml}
-    </a:tbl>
+    <a:graphic>
+      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+        <a:tbl>
+          <a:tblPr firstRow="0" lastRow="0" firstCol="0" lastCol="0" noBandRow="1" noBandCol="1">
+          </a:tblPr>
+          <a:tblGrid>
+          ${gridColsXml}
+          </a:tblGrid>
+        ${rowsXml}
+        </a:tbl>
+      </a:graphicData>
+    </a:graphic>
   </p:graphicFrame>`
 }
 
@@ -864,10 +927,10 @@ function buildSlideRelsXml(imageRels: ImageRel[]): string {
 // ─── Media helpers ───────────────────────────────────────────────────
 
 function dataUriToBuffer(dataUri: string): { buffer: Uint8Array; ext: string } | null {
-  const match = dataUri.match(/^data:image\/(png|jpeg|jpg|gif|svg\+xml);base64,(.+)$/i)
+  const match = dataUri.match(/^data:image\/(png|jpeg|jpg|gif);base64,(.+)$/i)
   if (!match) return null
   const rawExt = match[1].toLowerCase()
-  const ext = rawExt === 'jpg' ? 'jpg' : rawExt === 'svg+xml' ? 'svg' : rawExt
+  const ext = rawExt === 'jpg' ? 'jpg' : rawExt
   const raw = atob(match[2])
   const buffer = new Uint8Array(raw.length)
   for (let i = 0; i < raw.length; i++) {

@@ -456,7 +456,7 @@ Business presentations, product introductions, project summaries — formal but 
     pngExported: 'PNG exported ({count} images)',
     pptxPreparingEditable: 'Preparing editable PPTX',
     pptxPreparingEditableDescription:
-      'Preserving all elements editable where possible, including text, shapes, images, and tables.',
+      'Export may take longer while fonts are embedded. Please wait. Preserving all elements editable where possible, including text, shapes, images, and tables.',
     pptxPreparingImage: 'Preparing image PPTX',
     pptxPreparingImageDescription: 'Each page is exported as a high-resolution image for pixel-perfect fidelity.',
     pptxExported: 'PPTX exported ({count} pages)',

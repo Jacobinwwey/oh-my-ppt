@@ -437,7 +437,8 @@ export const zh = {
     exportPngDescription: '会将所有页面按顺序保存为高清图片，适合发文档、Notion 或社媒。',
     pngExported: 'PNG 已导出（{count} 张）',
     pptxPreparingEditable: '正在准备可编辑 PPTX',
-    pptxPreparingEditableDescription: '尽量保留所有元素可编辑，包括文字、形状、图片和表格。',
+    pptxPreparingEditableDescription:
+      '导出时间可能因为字体导出时间很长，请等待。尽量保留所有元素可编辑，包括文字、形状、图片和表格。',
     pptxPreparingImage: '正在准备纯图版 PPTX',
     pptxPreparingImageDescription: '每页导出为高清图片，版式100%还原。',
     pptxExported: 'PPTX 已导出（{count} 页）',

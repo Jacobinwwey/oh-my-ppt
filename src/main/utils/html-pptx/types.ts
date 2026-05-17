@@ -29,6 +29,14 @@ export interface HtmlToPptxTextBox {
   rotate?: number
   lineSpacing?: number
   charSpacing?: number
+  paragraphSpacingBefore?: number
+  paragraphSpacingAfter?: number
+  verticalAlign?: 'top' | 'middle' | 'bottom'
+  bullet?: {
+    type: 'bullet' | 'number'
+    level?: number
+    startAt?: number
+  }
   wrap?: boolean
   runs?: HtmlToPptxTextRun[]
   order?: number

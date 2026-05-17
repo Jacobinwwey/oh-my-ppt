@@ -342,7 +342,10 @@ export const ipc = {
     getIpc().invoke('export:pdf', { sessionId }) as Promise<ExportDeckResult>,
   exportPng: (sessionId: string) =>
     getIpc().invoke('export:png', { sessionId }) as Promise<ExportDeckResult>,
-  exportPptx: (sessionId: string, options?: { imageOnly?: boolean }) =>
+  exportPptx: (
+    sessionId: string,
+    options?: { imageOnly?: boolean; embedFonts?: boolean | 'auto' | 'always' | 'never' }
+  ) =>
     getIpc().invoke('export:pptx', { sessionId, ...options }) as Promise<ExportDeckResult>,
   exportSlidePack: (sessionId: string) =>
     getIpc().invoke('export:slidePack', { sessionId }) as Promise<ExportDeckResult>,

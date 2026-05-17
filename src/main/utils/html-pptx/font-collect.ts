@@ -234,8 +234,17 @@ const scanFontDirectory = (projectDir: string): Map<string, FontVariant[]> => {
 
 export const collectEmbeddedFonts = async (
   projectDir: string,
-  slides: HtmlToPptxSlide[]
+  slides: HtmlToPptxSlide[],
+  options: {
+    mode?: 'auto' | 'always' | 'never'
+    maxTotalBytes?: number
+  } = {}
 ): Promise<HtmlToPptxEmbeddedFont[]> => {
+  const mode = options.mode || 'auto'
+  if (mode === 'never') {
+    log.info('[font-embed] disabled by export option')
+    return []
+  }
   if (slides.length === 0) return []
 
   // 1. Collect used font faces from extracted text
@@ -311,6 +320,19 @@ export const collectEmbeddedFonts = async (
           error: String(err)
         })
       }
+    }
+  }
+
+  if (mode === 'auto') {
+    const maxTotalBytes = options.maxTotalBytes ?? 20 * 1024 * 1024
+    const totalBytes = embeddedFonts.reduce((sum, item) => sum + item.ttfBuffer.byteLength, 0)
+    if (totalBytes > maxTotalBytes) {
+      log.warn('[font-embed] skipped embedded fonts in auto mode because payload is too large', {
+        totalBytes,
+        maxTotalBytes,
+        count: embeddedFonts.length
+      })
+      return []
     }
   }
 
