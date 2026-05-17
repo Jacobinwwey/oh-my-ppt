@@ -46,6 +46,7 @@ export const zh = {
     fontSchemeAuto: '自动匹配',
     fontSchemeAutoHint: 'AI 将根据主题和风格自动选择标题和正文字体。',
     fontSchemeManualHint: '将使用所选方案中的字体作为标题和正文字体。',
+    fontSchemePartialHint: '标题和正文字体都选择后才会固定字体；否则继续由 AI 自动匹配。',
     fontPairTitle: '标题',
     fontPairBody: '正文',
     fontPairBoth: '标题/正文',
