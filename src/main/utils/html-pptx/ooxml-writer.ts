@@ -8,7 +8,8 @@ import type {
   HtmlToPptxShape,
   HtmlToPptxImage,
   HtmlToPptxTable,
-  HtmlToPptxTableCell
+  HtmlToPptxTableCell,
+  HtmlToPptxEmbeddedFont
 } from './types'
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -611,7 +612,11 @@ function buildSlideXml(
 
 // ─── Package-level XML ───────────────────────────────────────────────
 
-function buildContentTypesXml(slideCount: number, mediaExtensions: Set<string>): string {
+function buildContentTypesXml(
+  slideCount: number,
+  mediaExtensions: Set<string>,
+  hasEmbeddedFonts: boolean = false
+): string {
   const overrides: string[] = [
     `<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>`,
     `<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`,
@@ -628,6 +633,9 @@ function buildContentTypesXml(slideCount: number, mediaExtensions: Set<string>):
     `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
     `<Default Extension="xml" ContentType="application/xml"/>`
   ]
+  if (hasEmbeddedFonts) {
+    defaults.push(`<Default Extension="fntdata" ContentType="application/x-fontdata"/>`)
+  }
   for (const ext of mediaExtensions) {
     const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'svg' ? 'image/svg+xml' : `image/${ext}`
     defaults.push(`<Default Extension="${ext}" ContentType="${mime}"/>`)
@@ -645,32 +653,87 @@ function buildRootRelsXml(): string {
 </Relationships>`
 }
 
-function buildPresentationXml(slideCount: number): string {
+function buildPresentationXml(
+  slideCount: number,
+  embeddedFonts: HtmlToPptxEmbeddedFont[] = [],
+  fontRelIds: Map<string, string> = new Map()
+): string {
   const sldIds: string[] = []
   for (let i = 1; i <= slideCount; i++) {
     sldIds.push(`<p:sldId id="${255 + i}" r:id="rId${i}"/>`)
   }
+
+  let embeddedFontLstXml = ''
+  if (embeddedFonts.length > 0) {
+    const fontsByFace = new Map<string, HtmlToPptxEmbeddedFont[]>()
+    for (const ef of embeddedFonts) {
+      const existing = fontsByFace.get(ef.fontFace) || []
+      existing.push(ef)
+      fontsByFace.set(ef.fontFace, existing)
+    }
+    const styleOrder: HtmlToPptxEmbeddedFont['style'][] = [
+      'regular',
+      'bold',
+      'italic',
+      'boldItalic'
+    ]
+    const fontEntries: string[] = []
+    for (const [fontFace, variants] of fontsByFace) {
+      const variantXml: string[] = []
+      for (const style of styleOrder) {
+        const ef = variants.find((candidate) => candidate.style === style)
+        if (!ef) continue
+        const rId = fontRelIds.get(`${ef.fontFace}::${ef.style}`)
+        if (!rId) continue
+        variantXml.push(`    <p:${style} r:id="${rId}"/>`)
+      }
+      if (variantXml.length === 0) continue
+      const charset = /[\u3400-\u9fff]|(?:Noto Sans SC|Ma Shan Zheng|Source Han|PingFang|Microsoft YaHei)/i.test(fontFace)
+        ? '134'
+        : '0'
+      fontEntries.push(
+        `  <p:embeddedFont>
+    <p:font typeface="${escapeXml(fontFace)}" panose="0 0 0 0 0 0 0 0 0 0" pitchFamily="34" charset="${charset}"/>
+${variantXml.join('\n')}
+  </p:embeddedFont>`
+      )
+    }
+    if (fontEntries.length > 0) {
+      embeddedFontLstXml = `\n<p:embeddedFontLst>\n${fontEntries.join('\n')}\n</p:embeddedFontLst>`
+    }
+  }
+
   return `${XML_HEADER}<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
                 xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-                xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:sldIdLst>
-    ${sldIds.join('\n    ')}
-  </p:sldIdLst>
+                xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                embedTrueTypeFonts="1"
+                saveSubsetFonts="1">
   <p:sldMasterIdLst>
     <p:sldMasterId id="2147483648" r:id="rIdSm"/>
   </p:sldMasterIdLst>
+  <p:sldIdLst>
+    ${sldIds.join('\n    ')}
+  </p:sldIdLst>
   <p:sldSz cx="${SLIDE_WIDTH_EMU}" cy="${SLIDE_HEIGHT_EMU}" type="wide"/>
-  <p:notesSz cx="${SLIDE_HEIGHT_EMU}" cy="${SLIDE_WIDTH_EMU}"/>
+  <p:notesSz cx="${SLIDE_HEIGHT_EMU}" cy="${SLIDE_WIDTH_EMU}"/>${embeddedFontLstXml}
 </p:presentation>`
 }
 
-function buildPresentationRelsXml(slideCount: number): string {
+function buildPresentationRelsXml(
+  slideCount: number,
+  fontRelEntries: Array<{ key: string; rId: string; fontFile: string }> = []
+): string {
   const rels: string[] = [
     `<Relationship Id="rIdSm" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>`
   ]
   for (let i = 1; i <= slideCount; i++) {
     rels.push(
       `<Relationship Id="rId${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i}.xml"/>`
+    )
+  }
+  for (const entry of fontRelEntries) {
+    rels.push(
+      `<Relationship Id="${entry.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="fonts/${entry.fontFile}"/>`
     )
   }
   return `${XML_HEADER}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -821,6 +884,7 @@ export const writePptxDocument = async (
 ): Promise<void> => {
   const slides = document.slides.length > 0 ? document.slides : [{ texts: [] }]
   const slideCount = slides.length
+  const embeddedFonts = document.embeddedFonts || []
 
   // 1. Collect all unique images across all slides → assign media file names
   const dataUriToMedia = new Map<string, { mediaFile: string; ext: string }>()
@@ -869,14 +933,41 @@ export const writePptxDocument = async (
     mediaExtensions.add(media.ext)
   }
 
-  // 4. Build ZIP
+  // 4. Embedded font rels: assign rId and font file names
+  const fontRelIds = new Map<string, string>() // "fontFace::style" → rId
+  const fontRelEntries: Array<{ key: string; rId: string; fontFile: string }> = []
+  const fontFileMap = new Map<string, Uint8Array>() // fontFile → font buffer
+  let fontRelIndex = slideCount + 1 // rIds after slide refs
+  let fontFileIndex = 1
+
+  for (const ef of embeddedFonts) {
+    const key = `${ef.fontFace}::${ef.style}`
+    if (fontRelIds.has(key)) continue
+    const rId = `rId${fontRelIndex}`
+    const fontFile = `font${fontFileIndex}.fntdata`
+    fontRelIds.set(key, rId)
+    fontRelEntries.push({ key, rId, fontFile })
+    fontFileMap.set(fontFile, ef.ttfBuffer)
+    fontRelIndex++
+    fontFileIndex++
+  }
+
+  const hasEmbeddedFonts = fontRelEntries.length > 0
+
+  // 5. Build ZIP
   const files: Record<string, Uint8Array> = {}
 
   // Global XML
-  files['[Content_Types].xml'] = strToU8(buildContentTypesXml(slideCount, mediaExtensions))
+  files['[Content_Types].xml'] = strToU8(
+    buildContentTypesXml(slideCount, mediaExtensions, hasEmbeddedFonts)
+  )
   files['_rels/.rels'] = strToU8(buildRootRelsXml())
-  files['ppt/presentation.xml'] = strToU8(buildPresentationXml(slideCount))
-  files['ppt/_rels/presentation.xml.rels'] = strToU8(buildPresentationRelsXml(slideCount))
+  files['ppt/presentation.xml'] = strToU8(
+    buildPresentationXml(slideCount, embeddedFonts, fontRelIds)
+  )
+  files['ppt/_rels/presentation.xml.rels'] = strToU8(
+    buildPresentationRelsXml(slideCount, fontRelEntries)
+  )
 
   // Theme, slideMaster, slideLayout (required by Office)
   files['ppt/theme/theme1.xml'] = strToU8(buildThemeXml())
@@ -902,7 +993,12 @@ export const writePptxDocument = async (
     }
   }
 
-  // 5. Generate ZIP and write
+  // Font files
+  for (const [fontFile, ttfBuffer] of fontFileMap) {
+    files[`ppt/fonts/${fontFile}`] = ttfBuffer
+  }
+
+  // 6. Generate ZIP and write
   const zipped = zipSync(files, { level: 6 })
   writeFileSync(outputPath, zipped)
 }

@@ -115,10 +115,17 @@ export interface HtmlToPptxSlide {
   overlayImages?: HtmlToPptxImage[]
 }
 
+export interface HtmlToPptxEmbeddedFont {
+  fontFace: string
+  style: 'regular' | 'bold' | 'italic' | 'boldItalic'
+  ttfBuffer: Uint8Array
+}
+
 export interface HtmlToPptxDocument {
   title: string
   author?: string
   slides: HtmlToPptxSlide[]
+  embeddedFonts?: HtmlToPptxEmbeddedFont[]
 }
 
 export interface HtmlToPptxExtractOptions {

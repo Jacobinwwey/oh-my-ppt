@@ -7,7 +7,7 @@ import { nanoid } from 'nanoid'
 import { zipSync } from 'fflate'
 import { PDFDocument } from 'pdf-lib'
 import type { IpcContext } from '../context'
-import { writeHtmlToPptx, type HtmlToPptxSlide } from '../../utils/html-pptx'
+import { writeHtmlToPptx, collectEmbeddedFonts, type HtmlToPptxSlide } from '../../utils/html-pptx'
 import {
   captureHtmlPageToPptxImageSlide,
   extractHtmlPageToPptxSlide
@@ -236,7 +236,7 @@ export function registerExportHandlers(ctx: IpcContext): void {
       typeof session.title === 'string' && session.title.trim().length > 0
         ? session.title.trim()
         : `ohmyppt-${sessionId}`
-    const prefix = imageOnly ? '【图片版】' : '【可编辑版】'
+    const prefix = imageOnly ? '【Image】' : '【Edit】'
     const sanitizedBaseName = sanitizeExportBaseName(
       `${prefix}${sessionTitle}`,
       `ohmyppt-${sessionId}`
@@ -291,10 +291,16 @@ export function registerExportHandlers(ctx: IpcContext): void {
         }
       }
 
+      // Collect embedded fonts (editable mode only)
+      const embeddedFonts = imageOnly
+        ? []
+        : await collectEmbeddedFonts(projectDir, slides)
+
       await writeHtmlToPptx(saveResult.filePath, {
         title: sessionTitle,
         author: 'OhMyPPT',
-        slides
+        slides,
+        embeddedFonts: embeddedFonts.length > 0 ? embeddedFonts : undefined
       })
       const project = await db.getProject(sessionId)
       if (project?.id) {

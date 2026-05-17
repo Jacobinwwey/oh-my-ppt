@@ -14,7 +14,8 @@ export type {
   HtmlToPptxSlide,
   HtmlToPptxDocument,
   HtmlToPptxExtractOptions,
-  HtmlToPptxExtractedSlide
+  HtmlToPptxExtractedSlide,
+  HtmlToPptxEmbeddedFont
 } from './types'
 
 import type {
@@ -254,7 +255,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     if (Number(style.opacity || '1') < 0.04) return false;
     if (rect.width < 2 || rect.height < 2) return false;
     if (rect.bottom < 0 || rect.right < 0 || rect.left > pageWidthPx || rect.top > pageHeightPx) return false;
-    if (element.closest('script, style, noscript, .katex, .katex-mathml')) return false;
+    if (element.closest('script, style, noscript, .katex, .katex-mathml, [data-pptx-formula-block]')) return false;
     return true;
   };
 
@@ -415,7 +416,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
   };
 
   // ========== Shapes: skip consumed table elements ==========
-  const shapeNodes = Array.from(pageElement.querySelectorAll('section,main,article,header,footer,aside,div,figure,figcaption,table,td,th'));
+  const shapeNodes = Array.from(pageElement.querySelectorAll('section,main,article,header,footer,aside,div,figure,figcaption,table,td,th,span'));
   const shapes = [];
   const minShapeArea = layoutWidthPx * layoutHeightPx * 0.005;
   for (const element of shapeNodes) {
@@ -603,7 +604,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     const children = Array.from(element.children || []);
     for (const child of children) {
       const text = normalize(child.innerText || child.textContent);
-      if (!text || child.closest?.('script, style, noscript, svg, canvas, video, iframe, .katex, .katex-mathml')) continue;
+      if (!text || child.closest?.('script, style, noscript, svg, canvas, video, iframe, .katex, .katex-mathml, [data-pptx-formula-block]')) continue;
       const childStyle = window.getComputedStyle(child);
       const childRect = child.getBoundingClientRect();
       if (!isVisible(child, childStyle, childRect)) continue;
@@ -692,6 +693,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
   const shouldExportElementText = (element, style, text) => {
     if (!text) return false;
     if (element.querySelector?.('.katex')) return false;
+    if (element.closest?.('[data-pptx-formula-block]')) return false;
     if (hasNestedTextBlock(element)) return false;
     if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'CANVAS', 'VIDEO', 'IFRAME', 'MATH'].includes(element.tagName)) return false;
     const tag = element.tagName;
@@ -704,7 +706,25 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     const isBlockLike =
       ['block', 'flex', 'grid', 'table-cell', 'list-item'].includes(style.display) ||
       ['absolute', 'fixed'].includes(style.position);
-    return isBlockLike && text.length >= 6 && text.length <= 180;
+    if (!isBlockLike || text.length < 6 || text.length > 180) return false;
+    // Skip if all visible children are badge-like (own bg color, e.g. pill tags).
+    // Their backgrounds are extracted as shapes; text should be extracted per-child
+    // via traverseText so it aligns with each badge shape.
+    const children = Array.from(element.children);
+    if (children.length >= 2) {
+      let badgeCount = 0;
+      let visibleCount = 0;
+      for (const child of children) {
+        if (child.closest('script, style, noscript')) continue;
+        const cs = window.getComputedStyle(child);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity || '1') < 0.04) continue;
+        visibleCount++;
+        const bg = rgbToHex(cs.backgroundColor);
+        if (bg && bg !== backgroundColor) badgeCount++;
+      }
+      if (visibleCount >= 2 && badgeCount === visibleCount) return false;
+    }
+    return true;
   };
   const exportBlockTextElements = () => {
     const candidates = Array.from(pageElement.querySelectorAll(
@@ -712,7 +732,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     ));
     for (const element of candidates) {
       if (texts.length >= maxTextBoxes) break;
-      if (element.closest('script, style, noscript, svg, canvas, video, iframe, .katex, .katex-mathml')) continue;
+      if (element.closest('script, style, noscript, svg, canvas, video, iframe, .katex, .katex-mathml, [data-pptx-formula-block]')) continue;
       // Skip elements inside consumed tables
       if (isInsideConsumedTable(element)) continue;
       if (isInsideConsumedTextElement(element)) continue;
@@ -781,7 +801,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
   const addTextNode = (node, parentStyle, parentElement) => {
     if (texts.length >= maxTextBoxes) return;
     if (parentElement && isInsideConsumedTextElement(parentElement)) return;
-    if (parentElement && parentElement.closest?.('.katex, .katex-mathml')) return;
+    if (parentElement && parentElement.closest?.('.katex, .katex-mathml, [data-pptx-formula-block]')) return;
     // Skip text nodes inside consumed tables
     if (parentElement && isInsideConsumedTable(parentElement)) return;
     const text = clampText(node.textContent);
@@ -814,7 +834,7 @@ export const buildHtmlToPptxExtractScript = (options: HtmlToPptxExtractOptions):
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const element = node;
     if (consumedTextElements.has(element)) return;
-    if (element.closest('script, style, noscript, svg, canvas, video, iframe, .katex, .katex-mathml')) return;
+    if (element.closest('script, style, noscript, svg, canvas, video, iframe, .katex, .katex-mathml, [data-pptx-formula-block]')) return;
     // Skip elements inside consumed tables
     if (isInsideConsumedTable(element)) return;
     const style = window.getComputedStyle(element);
@@ -1183,6 +1203,8 @@ export const normalizeExtractedHtmlToPptxSlide = (
   }
 }
 // ========== Write ==========
+
+export { collectEmbeddedFonts } from './font-collect'
 
 export const writeHtmlToPptx = async (
   outputPath: string,
