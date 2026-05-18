@@ -42,6 +42,7 @@
 - [Opening Unsigned Apps](#unsigned-apps)
 - [Feedback & Requests](#feedback)
 - [Reference](#reference)
+- [Sponsors](#sponsors)
 - [Contributors](#contributors)
 - [License](#license)
 
@@ -238,6 +239,13 @@ I will keep following up and improving the experience.
 
 - [ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)
 - [html-ppt-skill](https://github.com/lewislulu/html-ppt-skill)
+
+<a id="sponsors"></a>
+## 💖 Sponsors
+
+Special thanks to everyone who has supported this project! Your generosity keeps Oh My PPT alive and growing.
+
+See [SponsorsList.md](./SponsorsList.md) for the full list of sponsors.
 
 <a id="contributors"></a>
 ## Contributors
