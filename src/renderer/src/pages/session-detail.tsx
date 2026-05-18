@@ -64,6 +64,31 @@ const EMPTY_ELEMENT_DRAFT: ElementEditDraft = {
   autoplay: false
 }
 
+type ElementPropertyStylePatch = {
+  zIndex?: number
+  opacity?: number
+  backgroundColor?: string
+  color?: string
+  fontSize?: string
+  fontWeight?: string
+  objectFit?: string
+}
+
+type ElementPropertyAttrsPatch = {
+  alt?: string
+  poster?: string
+  controls?: boolean
+  muted?: boolean
+  loop?: boolean
+  autoplay?: boolean
+}
+
+type ElementPropertyPatch = {
+  text?: string
+  style?: ElementPropertyStylePatch
+  attrs?: ElementPropertyAttrsPatch
+}
+
 function normalizePagesForSelection(
   pages: Array<{
     id: string
@@ -985,7 +1010,7 @@ export function SessionDetailPage(): React.JSX.Element {
   // Unified save: persist both drag edits and text edits for the current page
   const handleSaveAllEdits = async (): Promise<void> => {
     if (!id || !selectedPage?.pageId || !selectedPage.htmlPath) return
-    commitCurrentTextEdit()
+    commitCurrentElementEdit()
     const snapshot = editHistory.getSnapshotForPage(selectedPage.pageId)
     const hasEdits =
       snapshot.dragEdits.length > 0 ||
@@ -1103,9 +1128,9 @@ export function SessionDetailPage(): React.JSX.Element {
 
   const handleDeleteBySelector = (selector: string): void => {
     if (!selectedPage?.htmlPath || !selectedPage.pageId || !selector) return
-    // Commit any pending text edit for the element being deleted
+    // Commit any pending inspector edit for the element being deleted.
     if (textSelection && textSelection.selector === selector) {
-      commitCurrentTextEdit()
+      commitCurrentElementEdit()
     }
     editHistory.addDelete({
       pageId: selectedPage.pageId,
@@ -1119,8 +1144,8 @@ export function SessionDetailPage(): React.JSX.Element {
   }
 
   const handleElementSelected = (payload: EditSelectionPayload): void => {
-    // Commit previous edit before switching to new element
-    commitCurrentTextEdit()
+    // Commit previous edit before switching to new element.
+    commitCurrentElementEdit()
     if (!payload.snapshot) {
       setTextSelection(null)
       setTextDraft(EMPTY_ELEMENT_DRAFT)
@@ -1172,6 +1197,127 @@ export function SessionDetailPage(): React.JSX.Element {
       })
     }
   }
+
+  const getCommitFieldsForSelection = (
+    selection: EditSelectionPayload
+  ): Set<keyof ElementEditDraft> => {
+    const fields = new Set<keyof ElementEditDraft>()
+    const capabilities = selection.capabilities || []
+    if (capabilities.includes('layer')) fields.add('layoutZIndex')
+    if (capabilities.includes('appearance')) {
+      fields.add('opacity')
+      fields.add('backgroundColor')
+    }
+    if (capabilities.includes('media')) {
+      fields.add('objectFit')
+      fields.add('alt')
+      fields.add('poster')
+      fields.add('controls')
+      fields.add('muted')
+      fields.add('loop')
+      fields.add('autoplay')
+    }
+    if (capabilities.includes('text')) {
+      fields.add('text')
+      fields.add('color')
+      fields.add('fontSize')
+      fields.add('fontWeight')
+    }
+    return fields
+  }
+
+  const buildElementPropertyPatch = (
+    draft: ElementEditDraft,
+    fields?: Array<keyof ElementEditDraft>
+  ): ElementPropertyPatch | null => {
+    if (!textSelection?.snapshot) return null
+
+    const commitFields =
+      fields && fields.length > 0 ? new Set(fields) : getCommitFieldsForSelection(textSelection)
+    const initial = textSelection.snapshot
+    const style: ElementPropertyStylePatch = {}
+    const attrs: ElementPropertyAttrsPatch = {}
+    let text: string | undefined
+
+    if (commitFields.has('layoutZIndex')) {
+      const value = parseInt(draft.layoutZIndex, 10)
+      const initialValue = textSelection.zIndex ?? 10
+      if (Number.isFinite(value) && value !== initialValue) style.zIndex = value
+    }
+    if (commitFields.has('opacity')) {
+      const value = Number(draft.opacity)
+      const initialValue = Number(opacityToInput(initial.computed.opacity))
+      if (Number.isFinite(value) && value !== initialValue) style.opacity = value
+    }
+    if (
+      commitFields.has('backgroundColor') &&
+      draft.backgroundColor !== rgbToHex(initial.computed.backgroundColor)
+    ) {
+      style.backgroundColor = draft.backgroundColor
+    }
+    if (commitFields.has('objectFit') && draft.objectFit !== (initial.computed.objectFit || 'contain')) {
+      style.objectFit = draft.objectFit
+    }
+    if (commitFields.has('text') && draft.text.trim() && draft.text.trim() !== (initial.text?.value || '')) {
+      text = draft.text.trim()
+    }
+    if (commitFields.has('color') && draft.color !== rgbToHex(initial.computed.color)) {
+      style.color = draft.color
+    }
+    if (commitFields.has('fontSize') && draft.fontSize !== fontSizeToNumber(initial.computed.fontSize)) {
+      style.fontSize = draft.fontSize ? `${draft.fontSize}px` : undefined
+    }
+    if (
+      commitFields.has('fontWeight') &&
+      draft.fontWeight !== normalizeFontWeight(initial.computed.fontWeight)
+    ) {
+      style.fontWeight = draft.fontWeight
+    }
+    if (commitFields.has('alt') && draft.alt !== (initial.attrs.alt || '')) attrs.alt = draft.alt
+    if (commitFields.has('poster') && draft.poster !== (initial.attrs.poster || '')) {
+      attrs.poster = draft.poster
+    }
+    if (commitFields.has('controls') && draft.controls !== Boolean(initial.attrs.controls)) {
+      attrs.controls = draft.controls
+    }
+    if (commitFields.has('muted') && draft.muted !== Boolean(initial.attrs.muted)) {
+      attrs.muted = draft.muted
+    }
+    if (commitFields.has('loop') && draft.loop !== Boolean(initial.attrs.loop)) {
+      attrs.loop = draft.loop
+    }
+    if (commitFields.has('autoplay') && draft.autoplay !== Boolean(initial.attrs.autoplay)) {
+      attrs.autoplay = draft.autoplay
+    }
+
+    if (text === undefined && Object.keys(style).length === 0 && Object.keys(attrs).length === 0) {
+      return null
+    }
+    return {
+      text,
+      style: Object.keys(style).length > 0 ? style : undefined,
+      attrs: Object.keys(attrs).length > 0 ? attrs : undefined
+    }
+  }
+
+  const commitElementDraft = (
+    draft: ElementEditDraft,
+    fields?: Array<keyof ElementEditDraft>
+  ): boolean => {
+    if (!textSelection || !selectedPage?.pageId || !selectedPage.htmlPath) return false
+    const patch = buildElementPropertyPatch(draft, fields)
+    if (!patch) return false
+    editHistory.upsertPropertyEdit({
+      pageId: selectedPage.pageId,
+      htmlPath: selectedPage.htmlPath,
+      selector: textSelection.selector,
+      blockId: textSelection.blockId,
+      patch
+    })
+    return true
+  }
+
+  const commitCurrentElementEdit = (): boolean => commitElementDraft(textDraft)
 
   const handleTextDraftChange = (
     draft: ElementEditDraft,
@@ -1239,129 +1385,10 @@ export function SessionDetailPage(): React.JSX.Element {
         })
       }
 
-      if (options?.commit && selectedPage.htmlPath && textSelection.snapshot) {
-        const fields = new Set(options.fields || [])
-        const initial = textSelection.snapshot
-        const commitStyle: {
-          zIndex?: number
-          opacity?: number
-          backgroundColor?: string
-          color?: string
-          fontSize?: string
-          fontWeight?: string
-          objectFit?: string
-        } = {}
-        const commitAttrs: {
-          alt?: string
-          poster?: string
-          controls?: boolean
-          muted?: boolean
-          loop?: boolean
-          autoplay?: boolean
-        } = {}
-        let commitText: string | undefined
-
-        if (fields.has('layoutZIndex')) {
-          const value = parseInt(draft.layoutZIndex, 10)
-          const initialValue = textSelection.zIndex ?? 10
-          if (Number.isFinite(value) && value !== initialValue) commitStyle.zIndex = value
-        }
-        if (fields.has('opacity')) {
-          const value = Number(draft.opacity)
-          const initialValue = Number(opacityToInput(initial.computed.opacity))
-          if (Number.isFinite(value) && value !== initialValue) commitStyle.opacity = value
-        }
-        if (
-          fields.has('backgroundColor') &&
-          draft.backgroundColor !== rgbToHex(initial.computed.backgroundColor)
-        ) {
-          commitStyle.backgroundColor = draft.backgroundColor
-        }
-        if (fields.has('objectFit') && draft.objectFit !== (initial.computed.objectFit || 'contain')) {
-          commitStyle.objectFit = draft.objectFit
-        }
-        if (fields.has('text') && draft.text.trim() && draft.text.trim() !== (initial.text?.value || '')) {
-          commitText = draft.text.trim()
-        }
-        if (fields.has('color') && draft.color !== rgbToHex(initial.computed.color)) {
-          commitStyle.color = draft.color
-        }
-        if (fields.has('fontSize') && draft.fontSize !== fontSizeToNumber(initial.computed.fontSize)) {
-          commitStyle.fontSize = draft.fontSize ? `${draft.fontSize}px` : undefined
-        }
-        if (
-          fields.has('fontWeight') &&
-          draft.fontWeight !== normalizeFontWeight(initial.computed.fontWeight)
-        ) {
-          commitStyle.fontWeight = draft.fontWeight
-        }
-        if (fields.has('alt') && draft.alt !== (initial.attrs.alt || '')) commitAttrs.alt = draft.alt
-        if (fields.has('poster') && draft.poster !== (initial.attrs.poster || '')) {
-          commitAttrs.poster = draft.poster
-        }
-        if (fields.has('controls') && draft.controls !== Boolean(initial.attrs.controls)) {
-          commitAttrs.controls = draft.controls
-        }
-        if (fields.has('muted') && draft.muted !== Boolean(initial.attrs.muted)) {
-          commitAttrs.muted = draft.muted
-        }
-        if (fields.has('loop') && draft.loop !== Boolean(initial.attrs.loop)) {
-          commitAttrs.loop = draft.loop
-        }
-        if (fields.has('autoplay') && draft.autoplay !== Boolean(initial.attrs.autoplay)) {
-          commitAttrs.autoplay = draft.autoplay
-        }
-
-        if (
-          commitText !== undefined ||
-          Object.keys(commitStyle).length > 0 ||
-          Object.keys(commitAttrs).length > 0
-        ) {
-          editHistory.upsertPropertyEdit({
-            pageId: selectedPage.pageId,
-            htmlPath: selectedPage.htmlPath,
-            selector: textSelection.selector,
-            blockId: textSelection.blockId,
-            patch: {
-              text: commitText,
-              style: Object.keys(commitStyle).length > 0 ? commitStyle : undefined,
-              attrs: Object.keys(commitAttrs).length > 0 ? commitAttrs : undefined
-            }
-          })
-        }
+      if (options?.commit) {
+        commitElementDraft(draft, options.fields)
       }
     }
-  }
-
-  // When user starts editing a new element, save the previous text edit as pending
-  const commitCurrentTextEdit = (): void => {
-    if (!textSelection || !selectedPage?.pageId || !selectedPage.htmlPath) return
-    const nextText = textDraft.text.trim()
-    if (!nextText) return
-    // Skip if nothing actually changed
-    if (
-      nextText === textSelection.text &&
-      textDraft.color === rgbToHex(textSelection.style.color) &&
-      textDraft.fontSize === fontSizeToNumber(textSelection.style.fontSize) &&
-      textDraft.fontWeight === normalizeFontWeight(textSelection.style.fontWeight)
-    )
-      return
-    const patch = {
-      text: nextText,
-      style: {
-        color: textDraft.color,
-        fontSize: textDraft.fontSize ? `${textDraft.fontSize}px` : undefined,
-        fontWeight: textDraft.fontWeight
-      }
-    }
-    const entry = {
-      pageId: selectedPage.pageId,
-      htmlPath: selectedPage.htmlPath,
-      selector: textSelection.selector,
-      blockId: textSelection.blockId,
-      patch
-    }
-    editHistory.upsertPropertyEdit(entry)
   }
 
   const replayPendingEdits = (): void => {
@@ -1431,8 +1458,8 @@ export function SessionDetailPage(): React.JSX.Element {
   }
 
   const handleCancelTextEdit = (): void => {
-    // Commit current text edit before closing panel
-    commitCurrentTextEdit()
+    // Commit current inspector edit before closing panel.
+    commitCurrentElementEdit()
     previewIframeRef.current?.clearEditModeSelection()
     setTextSelection(null)
     setTextDraft(EMPTY_ELEMENT_DRAFT)

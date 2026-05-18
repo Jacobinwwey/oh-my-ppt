@@ -114,6 +114,23 @@ function takeSnapshot(
   return cloneSnapshot({ dragEdits, textEdits, propertyEdits, deletes, addElements })
 }
 
+function compactPatchObject<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
+  if (!value) return {}
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>
+}
+
+function propertyPatchEquals(a: PropertyEditItem['patch'], b: PropertyEditItem['patch']): boolean {
+  const aStyle = compactPatchObject(a.style)
+  const bStyle = compactPatchObject(b.style)
+  const aAttrs = compactPatchObject(a.attrs)
+  const bAttrs = compactPatchObject(b.attrs)
+  return (
+    a.text === b.text &&
+    JSON.stringify(aStyle) === JSON.stringify(bStyle) &&
+    JSON.stringify(aAttrs) === JSON.stringify(bAttrs)
+  )
+}
+
 // ─── Store ────────────────────────────────────────────
 
 interface EditHistoryState {
@@ -235,6 +252,9 @@ export const useEditHistoryStore = create<EditHistoryState>((set, get) => ({
           : state.propertyEdits.map((item, i) =>
               i === idx ? { ...item, ...edit, patch: mergePatch(item.patch, edit.patch) } : item
             )
+      if (idx >= 0 && propertyPatchEquals(state.propertyEdits[idx].patch, next[idx].patch)) {
+        return state
+      }
       return {
         undoStack: [...state.undoStack, snapshot],
         redoStack: [],

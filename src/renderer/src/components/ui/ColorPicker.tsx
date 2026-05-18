@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './Popover'
 interface ColorPickerProps {
   value: string | undefined
   onChange: (value: string) => void
+  onCommit?: (value: string) => void
   className?: string
 }
 
@@ -40,35 +41,46 @@ function toRgbaString(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-export function ColorPicker({ value, onChange, className }: ColorPickerProps) {
+function formatColor(hex: string, alpha: number): string {
+  if (alpha >= 1) return hex
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+export function ColorPicker({ value, onChange, onCommit, className }: ColorPickerProps) {
   const { hex, alpha } = parseColor(value)
   const [open, setOpen] = useState(false)
   const [tempHex, setTempHex] = useState(hex)
   const [tempAlpha, setTempAlpha] = useState(alpha)
   const alphaRef = useRef<HTMLInputElement>(null)
+  const latestColorRef = useRef(formatColor(hex, alpha))
 
   useEffect(() => {
     const { hex: newHex, alpha: newAlpha } = parseColor(value)
     setTempHex(newHex)
     setTempAlpha(newAlpha)
+    latestColorRef.current = formatColor(newHex, newAlpha)
   }, [value])
 
   const commitColor = (newHex: string, newAlpha: number) => {
-    if (newAlpha >= 1) {
-      onChange(newHex)
-    } else {
-      const r = parseInt(newHex.slice(1, 3), 16)
-      const g = parseInt(newHex.slice(3, 5), 16)
-      const b = parseInt(newHex.slice(5, 7), 16)
-      onChange(`rgba(${r}, ${g}, ${b}, ${newAlpha})`)
-    }
+    const nextColor = formatColor(newHex, newAlpha)
+    latestColorRef.current = nextColor
+    onChange(nextColor)
   }
 
   const displayColor = alpha >= 1 ? hex : toRgbaString(hex, alpha)
 
   return (
     <div className={className}>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen)
+          if (!nextOpen) onCommit?.(latestColorRef.current)
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"

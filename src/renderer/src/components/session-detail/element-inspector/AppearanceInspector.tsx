@@ -44,6 +44,12 @@ export function AppearanceInspector({
             <ColorPicker
               value={draft.backgroundColor || '#ffffff'}
               onChange={(v) => onDraftChange({ ...draft, backgroundColor: v })}
+              onCommit={(v) =>
+                onDraftChange(
+                  { ...draft, backgroundColor: v },
+                  { commit: true, fields: ['backgroundColor'] }
+                )
+              }
             />
             <Input
               value={draft.backgroundColor}

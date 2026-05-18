@@ -39,6 +39,9 @@ export function TextInspector({
                 <ColorPicker
                   value={draft.color || '#34402c'}
                   onChange={(v) => onDraftChange({ ...draft, color: v })}
+                  onCommit={(v) =>
+                    onDraftChange({ ...draft, color: v }, { commit: true, fields: ['color'] })
+                  }
                 />
                 <Input
                   value={draft.color}
