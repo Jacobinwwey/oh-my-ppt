@@ -67,7 +67,7 @@ export function StylesPage(): React.JSX.Element {
             </Button>
           </div>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">{t('styles.description')}</p>
+        <p className="mt-2 text-[12px] text-muted-foreground">{t('styles.description')}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
