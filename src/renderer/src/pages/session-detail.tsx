@@ -916,6 +916,34 @@ export function SessionDetailPage(): React.JSX.Element {
     }
   }
 
+  const handleExportSessionZip = async (): Promise<void> => {
+    const detailState = useSessionDetailUiStore.getState()
+    if (!id || detailState.isExportingSessionZip) return
+    detailState.setIsExportingSessionZip(true)
+    toastInfo(t('sessionDetail.sessionZipPreparing'), {
+      description: t('sessionDetail.sessionZipPreparingDescription'),
+      duration: 4000
+    })
+    try {
+      const result = await ipc.exportSessionZip(id)
+      if (result.cancelled) {
+        toastInfo(t('sessionDetail.exportCancelled'))
+        return
+      }
+      if (!result.success || !result.path) {
+        toastError(t('sessionDetail.exportFailed'))
+        return
+      }
+      toastSuccess(t('sessionDetail.sessionZipExported'), {
+        description: t('sessionDetail.sessionZipExportedDescription')
+      })
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : t('sessionDetail.exportFailed'))
+    } finally {
+      useSessionDetailUiStore.getState().setIsExportingSessionZip(false)
+    }
+  }
+
   const handleElementMoved = (payload: EditModeMovePayload): void => {
     if (!id || !selectedPage?.htmlPath || !selectedPage.pageId) return
 
@@ -1539,6 +1567,7 @@ export function SessionDetailPage(): React.JSX.Element {
                 onExportPdf={() => void handleExportPdf()}
                 onExportPng={() => void handleExportPng()}
                 onExportPptx={(options) => void handleExportPptx(options)}
+                onExportSessionZip={() => void handleExportSessionZip()}
                 onExportSlidePack={() => void handleExportSlidePack()}
                 onOpenHistory={() => void handleOpenHistory()}
                 onOpenPreview={() => void openProjectPreview()}
