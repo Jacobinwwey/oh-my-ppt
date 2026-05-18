@@ -115,7 +115,7 @@ export const en = {
     newSession: 'New session',
     importSessionFile: 'Import session file',
     importSessionFileTooltip:
-      'Supports:\n1. slide-pack files exported by OhMyPPT\n2. standard session directory ZIPs (zip the whole session-id folder)\nPPTX, RAR, and loose files from inside the session folder are not supported.',
+      'Supports importing for secondary editing:\n1. slide-pack files exported by OhMyPPT\n2. standard session directory ZIPs (zip the whole session folder)\n(Note: files exported from the editing page)',
     importing: 'Importing...',
     importDone: 'Session imported',
     importedFallbackTitle: 'Imported session',

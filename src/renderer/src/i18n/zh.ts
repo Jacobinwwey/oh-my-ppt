@@ -108,7 +108,7 @@ export const zh = {
     newSession: '新建会话',
     importSessionFile: '导入会话文件',
     importSessionFileTooltip:
-      '支持导入：\n1. OhMyPPT 打包导出的 slide-pack 文件\n2. 标准会话目录 ZIP（压缩完整 session-id 文件夹）\n不支持 PPTX、RAR 或散压的目录内部文件。',
+      '支持导入二次编辑：\n1. OhMyPPT 打包导出的 slide-pack 文件\n2. 标准会话目录 ZIP（压缩完整 session 会话文件夹）\n（注：编辑页面打包导出的文件）',
     importing: '导入中...',
     importDone: '会话导入完成',
     importedFallbackTitle: '导入的会话',
