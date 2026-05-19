@@ -1,10 +1,10 @@
 (function initPptRuntime(global) {
   if (!global || typeof global !== "object") return;
-  // @ohmyppt-ppt-runtime:arcsin1:v1.2.1
+  // @ohmyppt-ppt-runtime:arcsin1:v1.3.0
 
   var ppt = global.PPT && typeof global.PPT === "object" ? global.PPT : (global.PPT = {});
-  if (ppt.__runtimeVersion === "1.2.0") return;
-  ppt.__runtimeVersion = "1.2.0";
+  if (ppt.__runtimeVersion === "1.3.0") return;
+  ppt.__runtimeVersion = "1.3.0";
 
   function resolveSearchParams() {
     try {
@@ -423,6 +423,8 @@
     };
   }
 
+  var _activeAnimations = new Set();
+
   ppt.animate = function () {
     var args = Array.prototype.slice.call(arguments);
     if (isPrintMode) {
@@ -448,6 +450,16 @@
     if (animation && animation.finished && typeof animation.finished.then === "function") {
       trackPrintTask(animation.finished);
     }
+    if (animation && typeof animation.pause === "function") {
+      _activeAnimations.add(animation);
+      var origFinished = animation.finished;
+      if (origFinished && typeof origFinished.then === "function") {
+        origFinished.then(
+          function () { _activeAnimations.delete(animation); },
+          function () { _activeAnimations.delete(animation); }
+        );
+      }
+    }
     return animation;
   };
 
@@ -470,6 +482,215 @@
       return runtimeAnime.timeline.apply(runtimeAnime, args);
     }
     return buildTimeline(runtimeAnime).apply(null, args);
+  };
+
+  ppt.stopAnimations = function () {
+    _activeAnimations.forEach(function (anim) {
+      try { if (typeof anim.pause === "function") anim.pause(); } catch (_err) {}
+    });
+  };
+
+  ppt.resumeAnimations = function () {
+    _activeAnimations.forEach(function (anim) {
+      try { if (typeof anim.play === "function") anim.play(); } catch (_err) {}
+    });
+  };
+
+  ppt.clicks = {
+    current: 0,
+    total: 0,
+    _listeners: [],
+    _advanceListeners: [],
+    reset: function () {
+      this.current = 0;
+    },
+    setTotal: function (n) {
+      this.total = Math.max(0, Number(n) || 0);
+    },
+    advance: function () {
+      if (this.total > 0 && this.current >= this.total) return false;
+      this.current += 1;
+      this._dispatch(this.current);
+      return true;
+    },
+    on: function (clickNum, fn) {
+      this._listeners.push({ clickNum: clickNum, fn: fn });
+      if (this.current >= clickNum) {
+        try { fn(); } catch (_err) {}
+      }
+    },
+    onAdvance: function (fn) {
+      this._advanceListeners.push(fn);
+    },
+    _dispatch: function (click) {
+      var self = this;
+      this._listeners.forEach(function (entry) {
+        if (entry.clickNum === click) {
+          try { entry.fn(); } catch (_err) {}
+        }
+      });
+      this._advanceListeners.forEach(function (fn) {
+        try { fn(click, self.current, self.total); } catch (_err) {}
+      });
+    }
+  };
+
+  var DATA_ANIM_INITIAL_STYLES = {
+    "fade":       { opacity: "0" },
+    "fade-up":    { opacity: "0", transform: "translateY(20px)" },
+    "fade-down":  { opacity: "0", transform: "translateY(-20px)" },
+    "fade-left":  { opacity: "0", transform: "translateX(20px)" },
+    "fade-right": { opacity: "0", transform: "translateX(-20px)" },
+    "scale-in":   { opacity: "0", transform: "scale(0.85)" },
+    "slide-up":   { opacity: "0", transform: "translateY(40px)" },
+    "slide-left": { opacity: "0", transform: "translateX(40px)" }
+  };
+
+  function applyInitialHiddenState(el, type) {
+    var initial = DATA_ANIM_INITIAL_STYLES[type] || DATA_ANIM_INITIAL_STYLES["fade-up"];
+    // Always set opacity to 0 for click-triggered elements
+    el.style.opacity = "0";
+    // Compose with existing transform so Tailwind classes survive
+    if (initial.transform) {
+      var existing = (el.style.transform || "").trim();
+      el.style.transform = existing ? existing + " " + initial.transform : initial.transform;
+    }
+  }
+
+  function scanDataAnimElements(root) {
+    var elements = Array.from((root || document).querySelectorAll("[data-anim]"));
+    if (elements.length === 0) return null;
+
+    var animConfigs = [];
+    // Per-trigger-group counters for stagger(N) → numeric delay
+    var staggerCounters = {};
+
+    elements.forEach(function (el, index) {
+      var type = (el.getAttribute("data-anim") || "fade-up").trim();
+      if (type === "none") return;
+
+      var trigger = (el.getAttribute("data-anim-trigger") || "load").trim();
+      var duration = Number(el.getAttribute("data-anim-duration")) || 500;
+      var easing = (el.getAttribute("data-anim-easing") || "easeOutCubic").trim();
+      var delayRaw = (el.getAttribute("data-anim-delay") || "0").trim();
+      var delay = 0;
+
+      if (delayRaw.indexOf("stagger") === 0) {
+        var match = delayRaw.match(/stagger\s*\(\s*(\d+)\s*\)/);
+        var gap = match ? Number(match[1]) : 50;
+        var groupKey = trigger;
+        if (staggerCounters[groupKey] === undefined) staggerCounters[groupKey] = 0;
+        delay = staggerCounters[groupKey] * gap;
+        staggerCounters[groupKey] += 1;
+      } else {
+        delay = Number(delayRaw) || 0;
+      }
+
+      if (trigger === "click" && type !== "lottie") {
+        applyInitialHiddenState(el, type);
+        el.setAttribute("data-ppt-anim-initialized", "1");
+      }
+
+      var animDef = {
+        targets: el,
+        type: type,
+        trigger: trigger,
+        duration: Math.max(100, Math.min(2000, duration)),
+        easing: easing,
+        delay: delay,
+        order: index
+      };
+
+      // Lottie hook — parse additional attributes, store in config.
+      if (type === "lottie") {
+        animDef.lottieSrc = (el.getAttribute("data-anim-lottie-src") || "").trim();
+        animDef.lottieLoop = el.getAttribute("data-anim-lottie-loop") !== "false";
+        animDef.lottieAutoplay = el.getAttribute("data-anim-lottie-autoplay") !== "false";
+      }
+
+      animConfigs.push(animDef);
+    });
+
+    var loadAnims = animConfigs.filter(function (a) { return a.trigger === "load"; });
+    var clickAnims = animConfigs.filter(function (a) { return a.trigger === "click"; });
+
+    if (clickAnims.length > 0) {
+      ppt.clicks.setTotal(clickAnims.length);
+    }
+
+    return { load: loadAnims, click: clickAnims, all: animConfigs };
+  }
+
+  function executeDataAnimConfig(config) {
+    if (!config || config.length === 0) return;
+
+    config.forEach(function (animDef) {
+      // Lottie hook — delegate to dedicated player when available.
+      // Falls through to no-op until lottie runtime is injected.
+      if (animDef.type === "lottie") {
+        if (typeof ppt.playLottie === "function") {
+          ppt.playLottie(animDef.targets, animDef);
+        }
+        return;
+      }
+
+      var params = {
+        duration: animDef.duration,
+        easing: animDef.easing,
+        delay: animDef.delay
+      };
+
+      switch (animDef.type) {
+        case "fade":
+          params.opacity = [0, 1];
+          break;
+        case "fade-up":
+          params.opacity = [0, 1];
+          params.translateY = [20, 0];
+          break;
+        case "fade-down":
+          params.opacity = [0, 1];
+          params.translateY = [-20, 0];
+          break;
+        case "fade-left":
+          params.opacity = [0, 1];
+          params.translateX = [20, 0];
+          break;
+        case "fade-right":
+          params.opacity = [0, 1];
+          params.translateX = [-20, 0];
+          break;
+        case "scale-in":
+          params.opacity = [0, 1];
+          params.scale = [0.85, 1];
+          break;
+        case "slide-up":
+          params.opacity = [0, 1];
+          params.translateY = [40, 0];
+          break;
+        case "slide-left":
+          params.opacity = [0, 1];
+          params.translateX = [40, 0];
+          break;
+        default:
+          params.opacity = [0, 1];
+          params.translateY = [20, 0];
+      }
+
+      // Unified path: print-mode, task tracking, stopAnimations()
+      ppt.animate(animDef.targets, params);
+    });
+  }
+
+  // no-op until lottie-web injected
+  ppt.playLottie = function (_el, _animDef) {};
+
+  ppt.scanDataAnim = function (root) {
+    return scanDataAnimElements(root);
+  };
+
+  ppt.executeDataAnim = function (config) {
+    return executeDataAnimConfig(config);
   };
 
   ppt.createChart = function (target, config) {
