@@ -101,6 +101,19 @@
     } catch (_) {}
   }
 
+  function bindFrameClick(frame) {
+    try {
+      var frameWindow = frame.contentWindow;
+      if (!frameWindow || frame.__ohmypptClickWindow === frameWindow) return;
+      frameWindow.addEventListener('click', function () {
+        if (!tryForwardClickToFrame()) {
+          gotoOffset(1);
+        }
+      });
+      frame.__ohmypptClickWindow = frameWindow;
+    } catch (_) {}
+  }
+
   // Load or reload a page iframe so slide-level animations replay on revisit.
   function ensureFrameLoaded(pageId, forceReload) {
     var page = pages.find(function (p) { return getPageKey(p) === pageId; });
@@ -113,6 +126,7 @@
     frame.src = pageUrl.toString();
     frame.addEventListener('load', function () {
       bindFrameKeyboard(frame);
+      bindFrameClick(frame);
       if (pageId === currentPageId) scheduleFitFrame();
     }, { once: true });
   }
@@ -360,17 +374,6 @@
   } catch (_) {}
 
   injectTransitionStyles();
-
-  // Mouse click on viewport: forward to iframe for in-slide animations;
-  // when no in-slide step is consumed, advance to the next slide.
-  if (frameViewport) {
-    frameViewport.addEventListener('click', function (event) {
-      if (event.target !== frameViewport) return;
-      if (!tryForwardClickToFrame()) {
-        gotoOffset(1);
-      }
-    });
-  }
 
   bindThumbEvents();
   if (prevBtn) prevBtn.addEventListener('click', function () { gotoOffset(-1); });

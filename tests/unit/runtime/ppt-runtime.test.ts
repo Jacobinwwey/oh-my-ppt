@@ -299,12 +299,34 @@ describe('PPT.executeDataAnim (routed through PPT.animate)', () => {
     animateSpy.mockRestore()
   })
 
+  it('slide-up params include opacity for click reveal visibility', () => {
+    const animateSpy = vi.spyOn(PPT, 'animate' as never)
+    const el = document.getElementById('el1')!
+    const config = [{ targets: el, type: 'slide-up', duration: 500, easing: 'easeOutCubic', delay: 0 }]
+    ;(PPT.executeDataAnim as Function)(config)
+    expect(animateSpy).toHaveBeenCalled()
+    const callArgs = animateSpy.mock.calls[0]
+    // First arg is targets (el), second arg is params
+    const params = callArgs[1] as Record<string, unknown>
+    expect(params.opacity).toEqual([0, 1])
+    expect(params.translateY).toEqual([40, 0])
+    animateSpy.mockRestore()
+  })
+
+  it('slide-left params include opacity for click reveal visibility', () => {
+    const animateSpy = vi.spyOn(PPT, 'animate' as never)
+    const el = document.getElementById('el1')!
+    const config = [{ targets: el, type: 'slide-left', duration: 500, easing: 'easeOutCubic', delay: 0 }]
+    ;(PPT.executeDataAnim as Function)(config)
+    const params = animateSpy.mock.calls[0][1] as Record<string, unknown>
+    expect(params.opacity).toEqual([0, 1])
+    expect(params.translateX).toEqual([40, 0])
+    animateSpy.mockRestore()
+  })
+
   it('passes through print mode via PPT.animate', () => {
-    // PPT.animate checks isPrintMode internally — executeDataAnim
-    // delegates to it, so print-mode behavior is unified.
     const el = document.getElementById('el1')!
     const config = [{ targets: el, type: 'fade', duration: 500, easing: 'linear', delay: 0 }]
-    // Should not throw
     expect(() => (PPT.executeDataAnim as Function)(config)).not.toThrow()
   })
 

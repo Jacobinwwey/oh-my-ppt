@@ -125,6 +125,41 @@ describe('Reduced motion guard', () => {
   })
 })
 
+describe('hasDataAnim / hasCustomPageAnimation coexistence logic', () => {
+  function hasDataAnim(html: string): boolean {
+    return /\bdata-anim\b/i.test(html)
+  }
+  function hasCustomPageAnimation(html: string): boolean {
+    return (
+      /(?:anime\s*\(|anime\.(?:createTimeline|timeline|animate|stagger)\s*\()/m.test(html) ||
+      /PPT\.(?:animate|stagger|createTimeline)\s*\(/m.test(html) ||
+      /data-(?:anime|animate)\b/i.test(html)
+    )
+  }
+  function shouldIncludeDefaultMotion(html: string): boolean {
+    return hasDataAnim(html) || !hasCustomPageAnimation(html)
+  }
+
+  it('includes default motion when only data-anim present', () => {
+    expect(shouldIncludeDefaultMotion('<div data-anim="fade-up">Hello</div>')).toBe(true)
+  })
+  it('includes default motion when neither data-anim nor PPT.animate present', () => {
+    expect(shouldIncludeDefaultMotion('<div class="card">Plain</div>')).toBe(true)
+  })
+  it('excludes default motion when only PPT.animate present (no data-anim)', () => {
+    expect(shouldIncludeDefaultMotion('<script>PPT.animate(".card", { opacity: [0,1] })</script>')).toBe(false)
+  })
+  it('includes default motion when BOTH data-anim and PPT.animate coexist', () => {
+    const html = '<div data-anim="fade-up">A</div><script>PPT.animate(".b", {})</script>'
+    expect(shouldIncludeDefaultMotion(html)).toBe(true)
+  })
+  it('data-anim is detected as separate from data-anime/data-animate', () => {
+    expect(hasDataAnim('<div data-anim="fade-up">A</div>')).toBe(true)
+    expect(hasDataAnim('<div data-anime="true">B</div>')).toBe(false)
+    expect(hasDataAnim('<div data-animate="true">C</div>')).toBe(false)
+  })
+})
+
 describe('Transition config JSON round-trip', () => {
   it('all 7 types survive JSON round-trip', () => {
     const types = ['fade', 'slide-left', 'slide-up', 'push', 'wipe', 'zoom', 'none']

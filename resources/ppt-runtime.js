@@ -666,9 +666,11 @@
           params.scale = [0.85, 1];
           break;
         case "slide-up":
+          params.opacity = [0, 1];
           params.translateY = [40, 0];
           break;
         case "slide-left":
+          params.opacity = [0, 1];
           params.translateX = [40, 0];
           break;
         default:

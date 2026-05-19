@@ -280,7 +280,7 @@ const DEFAULT_MOTION_SCRIPT = `<script id="ppt-default-motion">
     }
 
     // Wire click-triggered animations
-    if (config.click.length > 0) {
+    if (config.click.length > 0 && pptApi.clicks && typeof pptApi.clicks.on === "function") {
       var clickDefs = config.click;
       clickDefs.forEach(function (animDef, idx) {
         var clickNum = idx + 1;
@@ -554,6 +554,10 @@ function hasFixedChartHeightStyle(styleRaw: string): boolean {
   )
 }
 
+function hasDataAnim(html: string): boolean {
+  return /\bdata-anim\b/i.test(html)
+}
+
 function hasCustomPageAnimation(html: string): boolean {
   return (
     /(?:anime\s*\(|anime\.(?:createTimeline|timeline|animate|stagger)\s*\()/m.test(html) ||
@@ -704,7 +708,7 @@ const normalizeAndInjectPageRuntime = (
   return buildScaffoldDocument({
     pageId,
     innerContent: fragment,
-    includeDefaultMotion: !hasCustomPageAnimation(content),
+    includeDefaultMotion: hasDataAnim(content) || !hasCustomPageAnimation(content),
     projectDir,
     designFonts
   }).then(syncRootBackgroundFromScaffold)
