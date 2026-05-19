@@ -243,10 +243,18 @@ describe('PPT.scanDataAnim', () => {
     expect(el5.style.opacity).toBe('0')
   })
 
-  it('does NOT hide load-triggered elements (PPT.animate handles that)', () => {
+  it('marks click-triggered elements with data-ppt-anim-initialized', () => {
+    const el4 = document.getElementById('el4')!
+    const root = document.querySelector('.ppt-page-root')!
+    ;(PPT.scanDataAnim as Function)(root)
+    expect(el4.getAttribute('data-ppt-anim-initialized')).toBe('1')
+  })
+
+  it('does NOT mark load-triggered elements with initialization marker', () => {
     const el1 = document.getElementById('el1')!
     const root = document.querySelector('.ppt-page-root')!
     ;(PPT.scanDataAnim as Function)(root)
+    expect(el1.getAttribute('data-ppt-anim-initialized')).toBeNull()
     expect(el1.style.opacity).toBe('')
   })
 

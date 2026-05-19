@@ -586,9 +586,9 @@
         delay = Number(delayRaw) || 0;
       }
 
-      // Apply initial hidden state for click-triggered elements.
       if (trigger === "click" && type !== "lottie") {
         applyInitialHiddenState(el, type);
+        el.setAttribute("data-ppt-anim-initialized", "1");
       }
 
       var animDef = {
