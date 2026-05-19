@@ -35,7 +35,8 @@ describe('buildSlideTiming', () => {
     expect(result).toContain('<p:timing>')
     expect(result).toContain('<p:tnLst>')
     expect(result).toContain('<p:seq')
-    expect(result).toContain('<p:animEffect transition="in" filter="fade">')
+    expect(result).toContain('presetID="10"')
+    expect(result).toContain('presetClass="entr"')
     expect(result).toContain('<p:spTgt spid="5"/>')
     expect(result).toContain('dur="400"')
     expect(result).toContain('</p:timing>')
@@ -53,55 +54,64 @@ describe('buildSlideTiming', () => {
     expect(spid20Index).toBeLessThan(spid10Index)
   })
 
-  it('maps fade-up to fly-in-bottom with fade filter', () => {
+  it('emits presetSubtype for directional fade-up (fly from bottom)', () => {
     const result = buildSlideTiming({
       elements: [makeAnim({ type: 'fade-up' })]
     })
+    expect(result).toContain('presetID="7"')
+    expect(result).toContain('presetClass="entr"')
+    expect(result).toContain('presetSubtype="8"')
+    // fade-up also gets a companion filter element
     expect(result).toContain('filter="fade"')
   })
 
-  it('maps fade-down to fly-in-top with fade filter', () => {
+  it('emits presetSubtype for fade-down (fly from top)', () => {
     const result = buildSlideTiming({
       elements: [makeAnim({ type: 'fade-down' })]
     })
+    expect(result).toContain('presetSubtype="1"')
     expect(result).toContain('filter="fade"')
   })
 
-  it('maps fade-left to fly-in-left with fade filter', () => {
+  it('emits presetSubtype for fade-left (fly from left)', () => {
     const result = buildSlideTiming({
       elements: [makeAnim({ type: 'fade-left' })]
     })
+    expect(result).toContain('presetSubtype="2"')
     expect(result).toContain('filter="fade"')
   })
 
-  it('maps fade-right to fly-in-right with fade filter', () => {
+  it('emits presetSubtype for fade-right (fly from right)', () => {
     const result = buildSlideTiming({
       elements: [makeAnim({ type: 'fade-right' })]
     })
+    expect(result).toContain('presetSubtype="3"')
     expect(result).toContain('filter="fade"')
   })
 
-  it('maps scale-in to entrance effect without fade filter', () => {
+  it('scale-in uses presetID 31 (zoom) without filter', () => {
     const result = buildSlideTiming({
       elements: [makeAnim({ type: 'scale-in' })]
     })
-    expect(result).toContain('<p:animEffect transition="in">')
+    expect(result).toContain('presetID="31"')
     expect(result).not.toContain('filter="fade"')
   })
 
-  it('maps slide-up to entrance effect without fade filter', () => {
+  it('slide-up uses presetID 7 subtype 8 without filter', () => {
     const result = buildSlideTiming({
       elements: [makeAnim({ type: 'slide-up' })]
     })
-    expect(result).toContain('<p:animEffect transition="in">')
+    expect(result).toContain('presetID="7"')
+    expect(result).toContain('presetSubtype="8"')
     expect(result).not.toContain('filter="fade"')
   })
 
-  it('maps slide-left to entrance effect without fade filter', () => {
+  it('slide-left uses presetID 7 subtype 2 without filter', () => {
     const result = buildSlideTiming({
       elements: [makeAnim({ type: 'slide-left' })]
     })
-    expect(result).toContain('<p:animEffect transition="in">')
+    expect(result).toContain('presetID="7"')
+    expect(result).toContain('presetSubtype="2"')
     expect(result).not.toContain('filter="fade"')
   })
 
@@ -132,7 +142,6 @@ describe('buildSlideTiming', () => {
       elements: [makeAnim({ spid: 2 })]
     })
     expect(first).not.toBe(second)
-    // IDs should differ (different node IDs generated)
     expect(first.match(/id="(\d+)"/g)).not.toEqual(second.match(/id="(\d+)"/g))
   })
 
@@ -144,8 +153,16 @@ describe('buildSlideTiming', () => {
         makeAnim({ spid: 3, order: 2, type: 'slide-up' })
       ]
     })
-    const spidMatches = result.match(/spid="\d+"/g)
-    expect(spidMatches).toHaveLength(3)
+    // All three spid values appear (filter companions may duplicate some spids)
+    expect(result).toContain('spid="1"')
+    expect(result).toContain('spid="2"')
+    expect(result).toContain('spid="3"')
+    // Order: spid=1 (order 0) before spid=2 (order 1) before spid=3 (order 2)
+    const i1 = result.indexOf('spid="1"')
+    const i2 = result.indexOf('spid="2"')
+    const i3 = result.indexOf('spid="3"')
+    expect(i1).toBeLessThan(i2)
+    expect(i2).toBeLessThan(i3)
   })
 })
 

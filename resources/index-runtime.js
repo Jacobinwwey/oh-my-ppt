@@ -52,9 +52,11 @@
     if (!frame) return false;
     try {
       var frameWindow = frame.contentWindow;
-      if (frameWindow && frameWindow.PPT && frameWindow.PPT.clicks && typeof frameWindow.PPT.clicks.advance === "function") {
-        frameWindow.PPT.clicks.advance();
-        return true;
+      var clicks = frameWindow && frameWindow.PPT && frameWindow.PPT.clicks;
+      // Only forward when the page actually has click-triggered animation steps.
+      // clicks.total === 0 means no data-anim-trigger="click" elements on this page.
+      if (clicks && clicks.total > 0 && typeof clicks.advance === "function") {
+        return clicks.advance(); // true if a step was consumed, false if exhausted
       }
     } catch (_) {}
     return false;
