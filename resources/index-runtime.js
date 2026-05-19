@@ -53,6 +53,8 @@
     try {
       var frameWindow = frame.contentWindow;
       var clicks = frameWindow && frameWindow.PPT && frameWindow.PPT.clicks;
+      // total>0 means scanDataAnim found click-triggered elements.
+      // Without this guard, every page (all have ppt-runtime) traps nav.
       if (clicks && clicks.total > 0 && typeof clicks.advance === "function") {
         return clicks.advance(); // true if a step was consumed, false if exhausted
       }
@@ -104,6 +106,7 @@
       var frameWindow = frame.contentWindow;
       if (!frameWindow || frame.__ohmypptClickWindow === frameWindow) return;
       frameWindow.addEventListener('click', function () {
+        if (!presentMode) return;
         if (!tryForwardClickToFrame()) {
           gotoOffset(1);
         }

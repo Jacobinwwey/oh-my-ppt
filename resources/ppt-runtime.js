@@ -454,7 +454,10 @@
       _activeAnimations.add(animation);
       var origFinished = animation.finished;
       if (origFinished && typeof origFinished.then === "function") {
-        origFinished.then(function () { _activeAnimations.delete(animation); });
+        origFinished.then(
+          function () { _activeAnimations.delete(animation); },
+          function () { _activeAnimations.delete(animation); }
+        );
       }
     }
     return animation;
@@ -547,7 +550,7 @@
     var initial = DATA_ANIM_INITIAL_STYLES[type] || DATA_ANIM_INITIAL_STYLES["fade-up"];
     // Always set opacity to 0 for click-triggered elements
     el.style.opacity = "0";
-    // Compose transform: prepend existing so it survives the hidden state
+    // Compose with existing transform so Tailwind classes survive
     if (initial.transform) {
       var existing = (el.style.transform || "").trim();
       el.style.transform = existing ? existing + " " + initial.transform : initial.transform;

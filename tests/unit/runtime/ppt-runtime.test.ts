@@ -149,7 +149,7 @@ describe('PPT.clicks state machine', () => {
     expect(c.current).toBe(2)       // never goes past total
   })
 
-  it('advance returns false when total=0 before any click (no steps defined)', () => {
+  it('advance returns true in unbounded auto mode when total=0', () => {
     const c = getClicks(PPT)
     expect(c.total).toBe(0)
     expect(c.advance()).toBe(true)
