@@ -68,14 +68,14 @@ describe('tryForwardClickToFrame (total > 0 guard)', () => {
   })
 
   it('returns false when all steps exhausted', () => {
-    const clicks = makeClicks(2, false)
+    const clicks = makeClicks(2)
     clicks.advance() // → 1
     clicks.advance() // → 2
     expect(tryForwardClickToFrame(clicks)).toBe(false) // exhausted, nav should proceed
   })
 
   it('allows nav after last click step exhausted', () => {
-    const clicks = makeClicks(1, false)
+    const clicks = makeClicks(1)
     expect(tryForwardClickToFrame(clicks)).toBe(true)  // consumed step 1
     expect(tryForwardClickToFrame(clicks)).toBe(false) // exhausted → navigate
   })

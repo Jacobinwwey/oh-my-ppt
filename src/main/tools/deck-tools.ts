@@ -389,8 +389,8 @@ export function createSessionBoundDeckTools(context: SessionDeckGenerationContex
         if (!fs.existsSync(context.indexPath)) {
           throw new Error(`index.html 缺失：${context.indexPath}`)
         }
-        const validTypes = ['none', 'fade', 'slide-left', 'slide-up', 'push', 'wipe', 'zoom'];
-        const transitionType = validTypes.includes(type) ? type : 'fade';
+        const validTypes = ['none', 'fade', 'slide-left', 'slide-up', 'push', 'wipe', 'zoom']
+        const transitionType = validTypes.includes(type) ? type : 'fade'
         const current = await fs.promises.readFile(context.indexPath, 'utf-8')
         const next = patchIndexTransitionStyle(current, {
           type: transitionType,
