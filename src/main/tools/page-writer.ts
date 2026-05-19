@@ -267,15 +267,6 @@ const DEFAULT_MOTION_SCRIPT = `<script id="ppt-default-motion">
     });
   }
 
-  function resolveStagger(raw) {
-    if (!raw) return 0;
-    var trimmed = String(raw).trim();
-    var match = trimmed.match(/^stagger\\s*\\(\\s*(\\d+)\\s*\\)$/i);
-    if (match) return { kind: "stagger", gap: Number(match[1]) || 50 };
-    var num = Number(trimmed);
-    if (Number.isFinite(num)) return { kind: "fixed", value: num };
-    return 0;
-  }
 
   function runDataAnimMotion(root) {
     var pptApi = globalThis.PPT;

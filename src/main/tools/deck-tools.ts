@@ -108,7 +108,8 @@ function patchIndexTransitionStyle(
   )
 
   if (args.type === 'none') {
-    return withoutOldConfig
+    const configScript = `<script id="ppt-index-transition-config" type="application/json">${JSON.stringify({ type: 'none', durationMs: 0 })}</script>`
+    return withoutOldConfig.replace(/<\/head>/i, `${configScript}\n  </head>`)
   }
   const durationMs = clampTransitionDuration(args.durationMs)
   const style = `

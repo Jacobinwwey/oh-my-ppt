@@ -505,12 +505,12 @@
       this.total = Math.max(0, Number(n) || 0);
     },
     advance: function () {
-      if (this.total > 0 && this.current >= this.total) return;
+      if (this.total > 0 && this.current >= this.total) return false;
       this.current += 1;
       this._dispatch(this.current);
+      return true;
     },
     on: function (clickNum, fn) {
-      var self = this;
       this._listeners.push({ clickNum: clickNum, fn: fn });
       if (this.current >= clickNum) {
         try { fn(); } catch (_err) {}
@@ -522,7 +522,7 @@
     _dispatch: function (click) {
       var self = this;
       this._listeners.forEach(function (entry) {
-        if (entry.clickNum === click || entry.clickNum <= click) {
+        if (entry.clickNum === click) {
           try { entry.fn(); } catch (_err) {}
         }
       });
@@ -530,6 +530,17 @@
         try { fn(click, self.current, self.total); } catch (_err) {}
       });
     }
+  };
+
+  var DATA_ANIM_INITIAL_STYLES = {
+    "fade":       { opacity: "0" },
+    "fade-up":    { opacity: "0", transform: "translateY(20px)" },
+    "fade-down":  { opacity: "0", transform: "translateY(-20px)" },
+    "fade-left":  { opacity: "0", transform: "translateX(20px)" },
+    "fade-right": { opacity: "0", transform: "translateX(-20px)" },
+    "scale-in":   { opacity: "0", transform: "scale(0.85)" },
+    "slide-up":   { transform: "translateY(40px)" },
+    "slide-left": { transform: "translateX(40px)" }
   };
 
   function scanDataAnimElements(root) {
@@ -558,6 +569,16 @@
         delay = Number(delayRaw) || 0;
       }
 
+      // Apply initial hidden state for click-triggered elements so they
+      // are invisible until their click step fires.  Load-triggered
+      // elements rely on PPT.animate() to set the initial state.
+      if (trigger === "click" && type !== "lottie") {
+        var initial = DATA_ANIM_INITIAL_STYLES[type] || DATA_ANIM_INITIAL_STYLES["fade-up"];
+        Object.keys(initial).forEach(function (prop) {
+          el.style[prop] = initial[prop];
+        });
+      }
+
       var animDef = {
         targets: el,
         type: type,
@@ -567,6 +588,14 @@
         delay: delay,
         order: index
       };
+
+      // Lottie hook — parse additional attributes, store in config.
+      // When lottie runtime is injected, PPT.playLottie() will consume these.
+      if (type === "lottie") {
+        animDef.lottieSrc = (el.getAttribute("data-anim-lottie-src") || "").trim();
+        animDef.lottieLoop = el.getAttribute("data-anim-lottie-loop") !== "false";
+        animDef.lottieAutoplay = el.getAttribute("data-anim-lottie-autoplay") !== "false";
+      }
 
       animConfigs.push(animDef);
     });
@@ -584,9 +613,16 @@
   function executeDataAnimConfig(config) {
     if (!config || config.length === 0) return;
 
-    // Group by trigger type for load animations (fire all at once)
-    var timeline = ppt.createTimeline();
     config.forEach(function (animDef) {
+      // Lottie hook — delegate to dedicated player when available.
+      // Falls through to no-op until lottie runtime is injected.
+      if (animDef.type === "lottie") {
+        if (typeof ppt.playLottie === "function") {
+          ppt.playLottie(animDef.targets, animDef);
+        }
+        return;
+      }
+
       var params = {
         duration: animDef.duration,
         easing: animDef.easing,
@@ -628,9 +664,17 @@
           params.translateY = [20, 0];
       }
 
-      timeline.add({ targets: animDef.targets }, params);
+      // Route through PPT.animate() so declarative and imperative
+      // animations share print-mode resolution, print-task tracking,
+      // and active-animation registration for stopAnimations().
+      ppt.animate(animDef.targets, params);
     });
   }
+
+  // Lottie placeholder — no-op until lottie-web/bodymovin runtime is injected.
+  // Contract: called with (element, animDef) where animDef contains
+  // lottieSrc, lottieLoop, lottieAutoplay from data-anim-* attributes.
+  ppt.playLottie = function (_el, _animDef) {};
 
   ppt.scanDataAnim = function (root) {
     return scanDataAnimElements(root);
