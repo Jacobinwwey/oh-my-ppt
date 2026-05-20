@@ -285,33 +285,31 @@ export function SpeechScriptDrawer({
 
           {/* Footer actions */}
           {!isGenerating && script && (
-            <div className="flex shrink-0 flex-col gap-1.5 px-3 pb-3">
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-1.5 text-xs"
-                  onClick={() => void handleCopy()}
-                >
-                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copied
-                    ? t('sessionDetail.speechScriptCopied')
-                    : t('sessionDetail.speechScriptCopy')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-1.5 text-xs"
-                  onClick={handleDownload}
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  {t('sessionDetail.speechScriptDownload')}
-                </Button>
-              </div>
+            <div className="flex shrink-0 gap-2 px-3 pb-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5 text-xs"
+                onClick={() => void handleCopy()}
+              >
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied
+                  ? t('sessionDetail.speechScriptCopied')
+                  : t('sessionDetail.speechScriptCopy')}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5 text-xs"
+                onClick={handleDownload}
+              >
+                <Download className="h-3.5 w-3.5" />
+                {t('sessionDetail.speechScriptDownload')}
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full gap-1.5 text-xs"
+                className="flex-1 gap-1.5 text-xs"
                 onClick={() => { setScript(null); setTab('config') }}
               >
                 <RefreshCw className="h-3.5 w-3.5" />
