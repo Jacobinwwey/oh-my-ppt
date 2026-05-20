@@ -192,10 +192,10 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
     errors.push(`检测到不允许的 script src：${preview}。页面片段禁止引入脚本资源，运行时已预注入。`)
   }
   if (/anime\s*\(\s*\{[\s\S]{0,240}?targets\s*:/im.test(html)) {
-    errors.push('检测到旧版 anime({ targets, ... }) 写法，请统一改为 PPT.animate(...)（v4）')
+    errors.push('检测到旧版 anime({ targets, ... }) 写法；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.animate(targets, params)')
   }
   if (/(^|[^\w$])anime\.(?:animate|stagger|createTimeline|timeline)\s*\(/i.test(html)) {
-    errors.push('检测到直接 anime.* 调用，请统一改为 PPT.animate/PPT.stagger/PPT.createTimeline')
+    errors.push('检测到直接 anime.* 调用；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.animate/PPT.stagger/PPT.createTimeline')
   }
   if (/PPT\.animate\s*\(\s*\{[\s\S]{0,240}?targets\s*:/im.test(html)) {
     errors.push('检测到 PPT.animate({ targets, ... }) 写法，请改为 PPT.animate(targets, params)')
@@ -205,7 +205,7 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
     hasUnqualifiedCall('stagger') ||
     hasUnqualifiedCall('createTimeline')
   ) {
-    errors.push('检测到未命名空间的动画调用（animate/stagger/createTimeline），请统一改为 PPT.*')
+    errors.push('检测到未命名空间的动画调用（animate/stagger/createTimeline）；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.*')
   }
   if (/new\s+Chart\s*\(/i.test(html)) {
     errors.push(
