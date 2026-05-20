@@ -12,7 +12,7 @@ describe('validateHtmlContent animation validation', () => {
     `)
 
     expect(result.errors).not.toContain(
-      '检测到未命名空间的动画调用（animate/stagger/createTimeline），请统一改为 PPT.*'
+      '检测到未命名空间的动画调用（animate/stagger/createTimeline）；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.*'
     )
   })
 
@@ -25,7 +25,7 @@ describe('validateHtmlContent animation validation', () => {
     `)
 
     expect(result.errors).toContain(
-      '检测到未命名空间的动画调用（animate/stagger/createTimeline），请统一改为 PPT.*'
+      '检测到未命名空间的动画调用（animate/stagger/createTimeline）；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.*'
     )
   })
 })
