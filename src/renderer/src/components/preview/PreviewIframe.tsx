@@ -96,10 +96,25 @@ const buildThumbnailFreezeScript = (): string => `
     }
   });
 
-  root.querySelectorAll("[data-ppt-anim-initialized='1'], [data-anim]").forEach((el) => {
+  const resetInlineMotion = (el, force) => {
     if (!(el instanceof HTMLElement)) return;
-    el.style.opacity = "";
-    el.style.transform = "";
+    const inlineOpacity = el.style.opacity.trim();
+    const inlineTransform = el.style.transform.trim();
+    if (force || (inlineOpacity && Number(inlineOpacity) < 1)) {
+      el.style.opacity = "";
+    }
+    if (force || /translate(?:3d|X|Y)?\(|scale(?:3d|X|Y)?\(/.test(inlineTransform)) {
+      el.style.transform = "";
+    }
+  };
+
+  root.querySelectorAll("[data-ppt-anim-initialized='1'], [data-anim]").forEach((el) => {
+    resetInlineMotion(el, true);
+  });
+
+  const defaultMotionSelector = ".opacity-0, [data-anime], [data-animate], h1, h2, h3, p, li, .card, .panel, .text-section, .diagram-section, .timeline-node, section, section > *";
+  root.querySelectorAll(defaultMotionSelector).forEach((el) => {
+    resetInlineMotion(el, false);
   });
 })();
 `
@@ -224,6 +239,22 @@ export const PreviewIframe = forwardRef<
       .map((segment) => encodeURIComponent(segment))
       .join('/')
 
+  const applyPreviewUrlParams = (inputUrl: string): string => {
+    const url = new URL(inputUrl)
+    // PreviewIframe already does 1600x900 viewport scaling.
+    // Disable page-level auto-fit to avoid double-scaling on specific pages.
+    url.searchParams.set('fit', 'off')
+    if (thumbnail) {
+      // Historical page files contain an injected default-motion script that starts
+      // many normal text/card nodes at opacity 0. Print mode makes PPT.animate
+      // apply final states immediately and makes default motion scripts skip.
+      url.searchParams.set('print', '1')
+      url.searchParams.set('thumbnail', '1')
+      if (pageId) url.searchParams.set('pageId', pageId)
+    }
+    return url.toString()
+  }
+
   const toFileUrl = (absolutePath: string): string => {
     const normalizedPath = absolutePath.replace(/\\/g, '/')
     const fileUrl = /^[a-zA-Z]:\//.test(normalizedPath)
@@ -231,19 +262,11 @@ export const PreviewIframe = forwardRef<
       : normalizedPath.startsWith('/')
         ? `file://${encodePathSegments(normalizedPath)}`
         : `file:///${encodePathSegments(normalizedPath)}`
-    const url = new URL(fileUrl)
-    // PreviewIframe already does 1600x900 viewport scaling.
-    // Disable page-level auto-fit to avoid double-scaling on specific pages.
-    url.searchParams.set('fit', 'off')
-    return url.toString()
+    return applyPreviewUrlParams(fileUrl)
   }
 
   const withPreviewParams = (inputUrl: string): string => {
-    const url = new URL(inputUrl)
-    // PreviewIframe already does 1600x900 viewport scaling.
-    // Disable page-level auto-fit to avoid double-scaling on specific pages.
-    url.searchParams.set('fit', 'off')
-    return url.toString()
+    return applyPreviewUrlParams(inputUrl)
   }
 
   // Always preview concrete page file (<pageId>.html). index.html is only for external full-deck preview.
