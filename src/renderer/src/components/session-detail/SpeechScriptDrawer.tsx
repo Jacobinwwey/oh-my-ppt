@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, Download, Loader2, RefreshCw, X } from 'lucide-react'
+import { Check, Copy, Download, Loader2, X } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { Button } from '../ui/Button'
 import {
@@ -305,15 +305,6 @@ export function SpeechScriptDrawer({
               >
                 <Download className="h-3.5 w-3.5" />
                 {t('sessionDetail.speechScriptDownload')}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 gap-1.5 text-xs"
-                onClick={() => { setScript(null); setTab('config') }}
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                {t('sessionDetail.speechScriptRegenerate')}
               </Button>
             </div>
           )}
