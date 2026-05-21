@@ -1,6 +1,7 @@
 import type { PPTDatabase } from "./db/database";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "@langchain/openai";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { FilesystemBackend, createDeepAgent, type EditResult } from "deepagents";
 import log from "electron-log/main.js";
@@ -244,6 +245,14 @@ export function resolveModel(
         temperature: resolvedTemperature,
         maxTokens: resolvedMaxTokens,
         anthropicApiUrl: resolvedBaseUrl || undefined,
+      });
+    case "google":
+      return new ChatGoogleGenerativeAI({
+        model: resolvedModel,
+        apiKey,
+        temperature: resolvedTemperature ?? undefined,
+        maxOutputTokens: resolvedMaxTokens,
+        baseUrl: resolvedBaseUrl || undefined,
       });
     default:
       throw new Error(`Unknown provider: ${provider}`);

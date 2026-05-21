@@ -178,7 +178,7 @@ export interface CreateSessionPayload {
 export interface ModelConfig {
   id: string
   name: string
-  provider: 'anthropic' | 'openai'
+  provider: 'anthropic' | 'openai' | 'google'
   model: string
   apiKey: string
   baseUrl: string
@@ -394,7 +394,7 @@ export const ipc = {
   upsertModelConfig: (payload: {
     id?: string
     name: string
-    provider: 'anthropic' | 'openai'
+    provider: 'anthropic' | 'openai' | 'google'
     model: string
     apiKey: string
     baseUrl: string
