@@ -7,18 +7,16 @@ import { ThinkingChat } from '../components/thinking/ThinkingChat'
 import { ThinkingPageCards } from '../components/thinking/ThinkingPageCards'
 import { GenerationConfirmDialog } from '../components/thinking/GenerationConfirmDialog'
 import { useT } from '../i18n'
-import { FileText, MessagesSquare } from 'lucide-react'
-import type { ThinkingChatMessage, ThinkingSource, ThinkingPrepareGenerationResult, ThinkingStage } from '@shared/thinking'
+import { FileText } from 'lucide-react'
+import type {
+  ThinkingChatMessage,
+  ThinkingSource,
+  ThinkingPrepareGenerationResult
+} from '@shared/thinking'
 
-const STAGE_I18N_KEYS: Record<ThinkingStage, string> = {
-  collect: 'thinking.stageCollect',
-  outline: 'thinking.stageOutline',
-  draft: 'thinking.stageDraft',
-  refine: 'thinking.stageRefine',
-  ready: 'thinking.stageReady'
-}
-
-const buildWelcomeMessage = (t: (key: 'thinking.welcomeMessage') => string): ThinkingChatMessage => ({
+const buildWelcomeMessage = (
+  t: (key: 'thinking.welcomeMessage') => string
+): ThinkingChatMessage => ({
   role: 'assistant',
   content: t('thinking.welcomeMessage'),
   timestamp: Date.now()
@@ -211,31 +209,24 @@ export function ThinkingDetailPage(): ReactElement {
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#f5f1e8] text-foreground">
       <div className="shrink-0 border-b border-[#e0d8c8] bg-[#f5f1e8]/90 px-6 py-4 backdrop-blur">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5%_95%_10%_90%/85%_15%_85%_15%] bg-[#8fbc8f] text-white">
-              <MessagesSquare className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="organic-serif truncate text-[22px] font-semibold leading-none text-[#3e4a32]">
-                {t('thinking.title')}
-              </h2>
-              <div className="mt-1 flex items-center gap-2 text-[11px] text-[#7a806c]">
-                <FileText className="h-3.5 w-3.5" />
-                <button
-                  type="button"
-                  className="rounded-full px-2 py-0.5 font-mono transition-colors hover:bg-[#d4e4c1] hover:text-[#3e4a32]"
-                  onClick={() => void handleRevealWorkspace()}
-                  title={t('thinking.revealWorkspace')}
-                >
-                  {thinkingId}
-                </button>
-              </div>
-            </div>
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+            {t('thinking.eyebrow')}
+          </p>
+          <h1 className="organic-serif mt-2 truncate text-[32px] font-semibold leading-none text-[#3e4a32]">
+            {t('thinking.title')}
+          </h1>
+          <div className="mt-2 flex items-center gap-2 text-[11px] text-[#7a806c]">
+            <FileText className="h-3.5 w-3.5" />
+            <button
+              type="button"
+              className="rounded-full px-2 py-0.5 font-mono transition-colors hover:bg-[#d4e4c1] hover:text-[#3e4a32]"
+              onClick={() => void handleRevealWorkspace()}
+              title={t('thinking.revealWorkspace')}
+            >
+              {thinkingId}
+            </button>
           </div>
-          <span className="shrink-0 rounded-full bg-[#d4e4c1] px-4 py-1.5 text-[12px] font-semibold text-[#3e4a32]">
-            {t(STAGE_I18N_KEYS[stage] as Parameters<typeof t>[0])}
-          </span>
         </div>
       </div>
 

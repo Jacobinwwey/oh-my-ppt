@@ -19,10 +19,7 @@ import { useToastStore } from '../store'
 import { ipc, type FontListItem, type StyleParseResult } from '@renderer/lib/ipc'
 import type { FontSelection } from '@shared/generation'
 import { useT } from '../i18n'
-import {
-  isSupportedImageMimeType,
-  normalizeImageMimeType
-} from '@shared/image-mime'
+import { isSupportedImageMimeType, normalizeImageMimeType } from '@shared/image-mime'
 
 const MIN_PAGE_COUNT = 1
 const MAX_PAGE_COUNT = 40
@@ -47,7 +44,8 @@ const getImageMimeTypeFromFileName = (name: string): string => {
 const isSupportedImageFile = (file: File): boolean =>
   isSupportedImageMimeType(file.type) || isImageFileName(file.name || '')
 
-const delay = (ms: number): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, ms))
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => window.setTimeout(resolve, ms))
 
 const buildNeutralInitialPrompt = (args: {
   topic: string
@@ -136,7 +134,8 @@ export function SessionCreatePage(): ReactElement {
       try {
         const { items } = await ipc.listStyles()
         const sorted = [...items].sort(
-          (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || (b.createdAt || 0) - (a.createdAt || 0)
+          (a, b) =>
+            (b.updatedAt || 0) - (a.updatedAt || 0) || (b.createdAt || 0) - (a.createdAt || 0)
         )
         const options = sorted.map((item) => ({
           id: item.id,
@@ -167,8 +166,12 @@ export function SessionCreatePage(): ReactElement {
       const options = [...userFonts, ...googleFonts]
       setFontOptions(options)
       const ids = new Set(options.map((font) => `${font.source}:${font.id}`))
-      setSelectedTitleFontId((current) => (current === 'auto' || ids.has(current) ? current : 'auto'))
-      setSelectedBodyFontId((current) => (current === 'auto' || ids.has(current) ? current : 'auto'))
+      setSelectedTitleFontId((current) =>
+        current === 'auto' || ids.has(current) ? current : 'auto'
+      )
+      setSelectedBodyFontId((current) =>
+        current === 'auto' || ids.has(current) ? current : 'auto'
+      )
     } catch {
       setFontOptions([])
       setSelectedTitleFontId('auto')
@@ -205,21 +208,22 @@ export function SessionCreatePage(): ReactElement {
       fontOptions.find((font) => `${font.source}:${font.id}` === id)
     const selectedTitleFont = findFontBySelectId(selectedTitleFontId)
     const selectedBodyFont = findFontBySelectId(selectedBodyFontId)
-    const fontSelection: FontSelection = selectedTitleFont && selectedBodyFont
-      ? {
-          mode: 'pair',
-          title: {
-            source: selectedTitleFont.source,
-            family: selectedTitleFont.family,
-            id: selectedTitleFont.id
-          },
-          body: {
-            source: selectedBodyFont.source,
-            family: selectedBodyFont.family,
-            id: selectedBodyFont.id
+    const fontSelection: FontSelection =
+      selectedTitleFont && selectedBodyFont
+        ? {
+            mode: 'pair',
+            title: {
+              source: selectedTitleFont.source,
+              family: selectedTitleFont.family,
+              id: selectedTitleFont.id
+            },
+            body: {
+              source: selectedBodyFont.source,
+              family: selectedBodyFont.family,
+              id: selectedBodyFont.id
+            }
           }
-        }
-      : { mode: 'auto' }
+        : { mode: 'auto' }
     const topicText = topic.trim()
     const briefText = brief.trim()
     const safePageCount = Number.parseInt(pageCount.trim(), 10)
@@ -312,7 +316,9 @@ export function SessionCreatePage(): ReactElement {
     return await ipc.parseStyleImage({ imageBase64, mimeType })
   }
 
-  const createParsedImageStyle = async (parsedStyle: StyleParseResult): Promise<{ id: string; label: string }> => {
+  const createParsedImageStyle = async (
+    parsedStyle: StyleParseResult
+  ): Promise<{ id: string; label: string }> => {
     const createdStyle = await ipc.createStyle({
       label: parsedStyle.label,
       description: parsedStyle.description,
@@ -678,7 +684,10 @@ export function SessionCreatePage(): ReactElement {
                         ? t('home.fontSourceUploaded')
                         : t('home.fontSourceBuiltIn')
                       return (
-                        <SelectItem key={`${font.source}:${font.id}`} value={`${font.source}:${font.id}`}>
+                        <SelectItem
+                          key={`${font.source}:${font.id}`}
+                          value={`${font.source}:${font.id}`}
+                        >
                           <span className="flex items-center gap-2">
                             <span
                               className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-medium ${
@@ -710,7 +719,10 @@ export function SessionCreatePage(): ReactElement {
                         ? t('home.fontSourceUploaded')
                         : t('home.fontSourceBuiltIn')
                       return (
-                        <SelectItem key={`${font.source}:${font.id}`} value={`${font.source}:${font.id}`}>
+                        <SelectItem
+                          key={`${font.source}:${font.id}`}
+                          value={`${font.source}:${font.id}`}
+                        >
                           <span className="flex items-center gap-2">
                             <span
                               className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-medium ${
@@ -731,9 +743,7 @@ export function SessionCreatePage(): ReactElement {
                   </SelectContent>
                 </Select>
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {fontSelectHint}
-              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{fontSelectHint}</p>
             </div>
 
             <div>
