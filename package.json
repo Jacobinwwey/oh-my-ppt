@@ -67,6 +67,7 @@
     "fonteditor-core": "^2.6.3",
     "isomorphic-git": "^1.37.6",
     "katex": "^0.16.45",
+    "langchain": "^1.4.1",
     "lru-cache": "^11.5.0",
     "lucide-react": "^0.574.0",
     "mammoth": "^1.12.0",
