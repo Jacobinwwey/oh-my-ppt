@@ -328,7 +328,7 @@ export const zh = {
     incompleteNone: '会话尚未完成：当前 0/{total} 页。请重新生成。',
     noValidPagesEvent: '已失败',
     backHome: '返回首页',
-    title: 'AI 正在生成你的创意',
+    title: '正在生成创意',
     expandLog: '展开日志面板',
     collapseLog: '收起日志面板',
     logTitle: '进度日志',
