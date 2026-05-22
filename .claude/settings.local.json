@@ -17,7 +17,11 @@
       "Bash(./node_modules/.bin/tsc --project tsconfig.web.json --noEmit)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npx --yes tsc@latest --version)",
+      "Bash(~/.nvm/versions/node/v24.15.0/bin/node ./node_modules/.bin/tsc --project tsconfig.web.json --noEmit)",
+      "Bash(~/.nvm/versions/node/v24.15.0/bin/node ~/.nvm/versions/node/v24.15.0/lib/node_modules/pnpm/bin/pnpm.cjs run typecheck:web)",
+      "Bash(git commit *)"
     ]
   }
 }
