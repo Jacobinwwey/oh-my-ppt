@@ -181,6 +181,7 @@ export const en = {
     providerPlaceholder: 'Select Provider',
     modelHint: 'Any compatible model name for this provider is accepted.',
     baseUrlHint: 'Enter a service URL compatible with the selected provider protocol.',
+    baseUrlHintGoogle: 'Leave empty for official Google API. Fill only if using a proxy.',
     maxTokensHint: 'Max output tokens, default 4096. Generally no need to change. Adjust based on model limits.',
     timeoutSection: 'Model timeouts (seconds)',
     timeoutPlanning: 'Outline planning',
