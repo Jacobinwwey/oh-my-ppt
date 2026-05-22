@@ -812,6 +812,14 @@ export function buildEditModeInjectScript(previewScale = 1): string {
         s.transition = "";
       }
     });
+    // Reset click-triggered data-anim initial hidden state so elements
+    // are visible in edit mode (marked by ppt-runtime during scan).
+    root.querySelectorAll("[data-ppt-anim-initialized='1']").forEach((el) => {
+      if (el instanceof HTMLElement) {
+        el.style.opacity = "";
+        el.style.transform = "";
+      }
+    });
   })();
 
   // --- Visual helpers ---

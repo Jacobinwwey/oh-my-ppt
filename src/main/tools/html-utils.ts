@@ -89,6 +89,62 @@ export const isPlaceholderPageHtml = (html: string): boolean =>
 
 const classBaseName = (cls: string): string => cls.split(':').pop() || cls
 
+const classList = (classRaw: string): string[] =>
+  classRaw
+    .split(/\s+/)
+    .map((cls) => cls.trim())
+    .filter(Boolean)
+
+const isPositionedContentClass = (classRaw: string): boolean => {
+  const classes = classList(classRaw).map(classBaseName)
+  return classes.some((cls) => cls === 'absolute' || cls === 'fixed')
+}
+
+const hasRiskyContentPositionClass = (classRaw: string): boolean => {
+  const classes = classList(classRaw).map(classBaseName)
+  return classes.some((cls) =>
+    /^-(?:top|right|bottom|left)-/.test(cls) ||
+    /^-?translate-[xy]-/.test(cls)
+  )
+}
+
+const isTextBearingLayoutNode = ($: cheerio.CheerioAPI, node: cheerio.Element): boolean => {
+  const el = $(node)
+  if (el.is('svg, path, line, circle, rect, ellipse, polygon, polyline')) return false
+  if (el.find('h1,h2,h3,h4,h5,h6,p,li,[data-role="title"]').length > 0) return true
+  const text = el
+    .clone()
+    .find('svg,script,style')
+    .remove()
+    .end()
+    .text()
+    .replace(/\s+/g, '')
+  return text.length >= 8
+}
+
+const findRiskyPositionedContent = ($: cheerio.CheerioAPI): string | null => {
+  let hit: string | null = null
+  $('[class]').each((_, node) => {
+    const el = $(node)
+    const classRaw = el.attr('class') || ''
+    if (!isPositionedContentClass(classRaw)) return undefined
+    if (!hasRiskyContentPositionClass(classRaw)) return undefined
+    if (!isTextBearingLayoutNode($, node)) return undefined
+    const textPreview = el
+      .clone()
+      .find('svg,script,style')
+      .remove()
+      .end()
+      .text()
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 24)
+    hit = textPreview || classRaw
+    return false
+  })
+  return hit
+}
+
 const hasConcreteChartHeightClass = (classRaw: string): boolean =>
   classRaw
     .split(/\s+/)
@@ -131,8 +187,12 @@ const isAllowedRuntimeAsset = (src: string): boolean => {
 
 export const validateHtmlContent = (html: string): { valid: boolean; errors: string[] } => {
   const errors: string[] = []
+  const animationCallScanHtml = html.replace(
+    /\bdata-anim-delay\s*=\s*(["'])stagger\s*\(\s*\d+\s*\)\1/gi,
+    'data-anim-delay=$1__DATA_ANIM_STAGGER__$1'
+  )
   const hasUnqualifiedCall = (fnName: string): boolean =>
-    new RegExp(`(^|[^\\w$.])${fnName}\\s*\\(`, 'm').test(html)
+    new RegExp(`(^|[^\\w$.])${fnName}\\s*\\(`, 'm').test(animationCallScanHtml)
   if (!html || html.trim().length === 0) {
     errors.push('HTML 内容为空')
     return { valid: false, errors }
@@ -188,10 +248,10 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
     errors.push(`检测到不允许的 script src：${preview}。页面片段禁止引入脚本资源，运行时已预注入。`)
   }
   if (/anime\s*\(\s*\{[\s\S]{0,240}?targets\s*:/im.test(html)) {
-    errors.push('检测到旧版 anime({ targets, ... }) 写法，请统一改为 PPT.animate(...)（v4）')
+    errors.push('检测到旧版 anime({ targets, ... }) 写法；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.animate(targets, params)')
   }
   if (/(^|[^\w$])anime\.(?:animate|stagger|createTimeline|timeline)\s*\(/i.test(html)) {
-    errors.push('检测到直接 anime.* 调用，请统一改为 PPT.animate/PPT.stagger/PPT.createTimeline')
+    errors.push('检测到直接 anime.* 调用；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.animate/PPT.stagger/PPT.createTimeline')
   }
   if (/PPT\.animate\s*\(\s*\{[\s\S]{0,240}?targets\s*:/im.test(html)) {
     errors.push('检测到 PPT.animate({ targets, ... }) 写法，请改为 PPT.animate(targets, params)')
@@ -201,7 +261,7 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
     hasUnqualifiedCall('stagger') ||
     hasUnqualifiedCall('createTimeline')
   ) {
-    errors.push('检测到未命名空间的动画调用（animate/stagger/createTimeline），请统一改为 PPT.*')
+    errors.push('检测到未命名空间的动画调用（animate/stagger/createTimeline）；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.*')
   }
   if (/new\s+Chart\s*\(/i.test(html)) {
     errors.push(
@@ -248,6 +308,12 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
       .map(([id]) => id)
     if (duplicatedBlockIds.length > 0) {
       errors.push(`data-block-id 必须唯一，重复项：${duplicatedBlockIds.join(', ')}`)
+    }
+    const riskyPositionedContent = findRiskyPositionedContent($)
+    if (riskyPositionedContent) {
+      errors.push(
+        `检测到正文内容使用 absolute/fixed + translate/负偏移定位，容易导致重叠：${riskyPositionedContent}。正文卡片请使用 grid/flex 分区，absolute 仅用于装饰或连接线。`
+      )
     }
   } catch {
     errors.push('HTML 片段结构解析失败')
@@ -321,6 +387,12 @@ export const validatePersistedPageHtml = (
   const content = $('.ppt-page-content').first()
   if (!content.length) {
     errors.push('缺少 .ppt-page-content')
+  }
+  const riskyPositionedContent = findRiskyPositionedContent($)
+  if (riskyPositionedContent) {
+    errors.push(
+      `正文内容使用 absolute/fixed + translate/负偏移定位，容易导致重叠：${riskyPositionedContent}。正文卡片请使用 grid/flex 分区。`
+    )
   }
   const blockIds = new Map<string, number>()
   $('[data-block-id]').each((_, node) => {

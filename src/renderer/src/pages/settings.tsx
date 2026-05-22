@@ -22,7 +22,7 @@ import {
   resolveModelTimeoutMs
 } from '@shared/model-timeout.js'
 
-type ProviderId = 'anthropic' | 'openai'
+type ProviderId = 'anthropic' | 'openai' | 'google'
 
 interface ModelForm {
   id?: string
@@ -562,7 +562,9 @@ export function SettingsPage(): React.JSX.Element {
                   <Select
                     value={modelForm.provider}
                     onValueChange={(value) =>
-                      updateModelForm({ provider: value === 'anthropic' ? 'anthropic' : 'openai' })
+                      updateModelForm({
+                        provider: value === 'anthropic' || value === 'google' ? value : 'openai'
+                      })
                     }
                   >
                     <SelectTrigger className="h-8">
@@ -571,6 +573,7 @@ export function SettingsPage(): React.JSX.Element {
                     <SelectContent>
                       <SelectItem value="anthropic">Claude (Anthropic)</SelectItem>
                       <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="google">Google Gemini</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -618,7 +621,12 @@ export function SettingsPage(): React.JSX.Element {
                   <Input
                     type="password"
                     placeholder={t('settings.apiKeyPlaceholder', {
-                      provider: modelForm.provider === 'openai' ? 'OpenAI' : 'Claude'
+                      provider:
+                        modelForm.provider === 'openai'
+                          ? 'OpenAI'
+                          : modelForm.provider === 'google'
+                            ? 'Google'
+                            : 'Claude'
                     })}
                     value={modelForm.apiKey}
                     onChange={(e) => updateModelForm({ apiKey: e.target.value })}
