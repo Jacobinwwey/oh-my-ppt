@@ -24,45 +24,78 @@ function buildLengthInstruction(length: SpeechLength, isZh: boolean): string {
   if (isZh) {
     switch (length) {
       case 'short':
-        return '演讲内容约100-150字，控制在1分钟以内。'
+        return '本页演讲稿控制在100-150字以内（约1分钟），只提炼最核心的一两个要点，语言简练有力，不要展开细节。'
       case 'long':
-        return '演讲内容约400-500字，详细展开，约3-4分钟。'
+        return '本页演讲稿写400-500字（约3-4分钟），充分展开论述，提供背景、数据、案例或类比，让听众深入理解每个要点。'
       default:
-        return '演讲内容约200-300字，约2分钟。'
+        return '本页演讲稿写200-300字（约2分钟），覆盖主要要点并适度展开，保持节奏流畅。'
     }
   } else {
     switch (length) {
       case 'short':
-        return 'Keep the section to ~100-150 words, around 1 minute.'
+        return 'Keep this slide to 100–150 words (~1 minute). Distill the one or two most essential points. Be crisp and punchy — no elaboration.'
       case 'long':
-        return 'Write ~400-500 words with rich detail, around 3-4 minutes.'
+        return 'Write 400–500 words (~3–4 minutes). Fully develop the ideas with background context, data, examples, or analogies so the audience deeply understands each point.'
       default:
-        return 'Write ~200-300 words, around 2 minutes.'
+        return 'Write 200–300 words (~2 minutes). Cover the main points with moderate elaboration and maintain a smooth pace.'
     }
   }
 }
 
 function buildStyleInstruction(style: SpeechStyle, isZh: boolean, customStyle?: string): string {
   if (style === 'custom') {
-    return customStyle?.trim() || (isZh ? '语气轻松自然，口语化，像和听众对话一样，亲切易懂。' : 'Use a relaxed, conversational tone as if speaking directly to the audience.')
+    const fallback = isZh
+      ? '语气轻松自然，口语化，像和听众直接对话一样，亲切易懂。'
+      : 'Use a relaxed, conversational tone as if speaking directly to the audience. Keep it approachable and natural.'
+    return customStyle?.trim() || fallback
   }
   if (isZh) {
     switch (style) {
       case 'formal':
-        return '语气正式、专业，适合商务或学术场合，避免口语化表达。'
+        return [
+          '采用正式、严谨的演讲风格，适合商务汇报、学术答辩或政务场合。',
+          '语言精准，措辞规范，句式完整，避免口语化、缩写或随意的表达。',
+          '每个要点层次分明，逻辑严密，体现专业深度与权威性。',
+          '开场可用数据或引言定调，结尾给出明确结论或建议。'
+        ].join('')
       case 'storytelling':
-        return '采用叙事风格，以故事或案例引入，有情节感和情感共鸣，吸引听众注意力。'
+        return [
+          '采用叙事驱动的演讲风格，用故事、场景或真实案例作为切入点，让听众产生画面感和代入感。',
+          '开场设置悬念或情境（谁、在哪、发生了什么），通过情节推进自然引出幻灯片的核心信息。',
+          '适当加入细节、对话或情感转折，让内容有温度、有记忆点。',
+          '结尾将故事与要点收拢，给听众留下深刻印象。'
+        ].join('')
       default:
-        return '语气轻松自然，口语化，像和听众对话一样，亲切易懂。'
+        return [
+          '采用轻松自然的对话风格，像和朋友聊天一样和听众交流，拉近距离感。',
+          '多用短句、口语化词汇和第一/二人称（"我们"、"你可能会想……"）。',
+          '适当加入反问或小幽默调动气氛，让内容易于接受和记忆。',
+          '避免过于书面化，保持真实、有人情味的语调。'
+        ].join('')
     }
   } else {
     switch (style) {
       case 'formal':
-        return 'Use a formal, professional tone suitable for business or academic settings. Avoid colloquialisms.'
+        return [
+          'Use a formal, authoritative tone appropriate for business presentations, academic defenses, or official settings.',
+          'Choose precise, professional vocabulary. Write in complete sentences. Avoid contractions, slang, or casual phrasing.',
+          'Structure each point with clear logic — state the claim, support it with evidence or reasoning, and draw a conclusion.',
+          'Open with a strong framing statement (a statistic, a quote, or a clear thesis) and close with a definitive takeaway or recommendation.'
+        ].join(' ')
       case 'storytelling':
-        return 'Use a storytelling approach — open with a story or case study, build narrative flow, and engage emotions.'
+        return [
+          'Use a narrative-driven style. Open each slide by dropping the audience into a scene, anecdote, or real-world case — set up who, where, and what happened.',
+          'Let the story unfold naturally to reveal the slide\'s core insight, rather than stating it upfront.',
+          'Include vivid details, dialogue snippets, or an emotional beat to make the content memorable and human.',
+          'Close by tying the story back to the key point, leaving the audience with a lasting image or feeling.'
+        ].join(' ')
       default:
-        return 'Use a relaxed, conversational tone as if speaking directly to the audience. Keep it approachable and natural.'
+        return [
+          'Use a warm, conversational tone — speak to the audience like a knowledgeable colleague sharing insights, not a lecturer reciting facts.',
+          'Prefer short sentences, contractions, and first/second-person language ("we", "you might be thinking…", "here\'s the thing").',
+          'Occasionally pose a rhetorical question or light observation to keep the audience engaged.',
+          'Keep it genuine and approachable — avoid overly formal or stiff phrasing.'
+        ].join(' ')
     }
   }
 }
@@ -145,16 +178,38 @@ export function registerSpeechHandlers(ctx: IpcContext): void {
 
     const systemPrompt = uiText(
       locale,
-      `你是一位专业的演讲稿撰写人。你将逐页为演讲者生成演讲稿。
-每次只生成当前一页的演讲内容，以 "## 第N页：标题" 开头。
-- ${lengthInstruction}
-- ${styleInstruction}
-- 如有上一页的结尾提供，请自然衔接过渡语句。`,
-      `You are a professional speech writer. You will generate speaker notes one slide at a time.
-Each response covers only the current slide, starting with "## Slide N: Title".
-- ${lengthInstruction}
-- ${styleInstruction}
-- If the previous slide's ending is provided, include a natural transition.`
+      `你是一位经验丰富的演讲稿撰写人，擅长将幻灯片内容转化为自然流畅、打动人心的演讲词。
+
+**任务规则：**
+- 每次仅为当前一页幻灯片生成演讲稿，不要提前引用后续页面内容。
+- 输出以 "## 第N页：{标题}" 开头，正文直接是演讲词，不要加任何说明性注释或括号提示。
+- 演讲词是演讲者直接开口说的话，用第一人称，不要写成旁白或摘要。
+- 不要逐字复读幻灯片上的文字，而是将关键信息转化为自然的口语表达，做到"讲"而非"念"。
+
+**字数与时长：**
+${lengthInstruction}
+
+**演讲风格：**
+${styleInstruction}
+
+**页面衔接：**
+如提供了上一页的结尾内容，请在开头自然地加入过渡语句，使演讲整体连贯，不显突兀。`,
+      `You are an experienced speech writer who transforms slide content into natural, compelling spoken words.
+
+**Rules:**
+- Generate speaker notes for the current slide only. Do not reference future slides.
+- Begin your response with "## Slide N: {Title}", then deliver the speech directly — no meta-commentary, annotations, or bracketed notes.
+- Write in first person as the speaker's actual spoken words, not a summary or narration.
+- Do not read the slide verbatim. Translate key information into natural spoken language — the goal is to "tell", not "recite".
+
+**Length & Pacing:**
+${lengthInstruction}
+
+**Style:**
+${styleInstruction}
+
+**Transitions:**
+If the previous slide's ending is provided, open with a smooth transition sentence that connects the two slides naturally.`
     )
 
     const scriptParts: string[] = []
@@ -171,8 +226,22 @@ Each response covers only the current slide, starting with "## Slide N: Title".
 
       const userPrompt = uiText(
         locale,
-        `${contextPart}演示文稿标题：${sessionTitle}\n当前第${slide.pageNumber}页（共${total}页），标题：${slide.title}\n\n幻灯片内容：\n${slide.text}\n\n请生成本页演讲稿。`,
-        `${contextPart}Presentation: ${sessionTitle}\nCurrent slide ${slide.pageNumber} of ${total}: ${slide.title}\n\nSlide content:\n${slide.text}\n\nGenerate the speaker script for this slide.`
+        `${contextPart}【演示文稿】${sessionTitle}
+【当前位置】第 ${slide.pageNumber} 页 / 共 ${total} 页
+【本页标题】${slide.title || '（无标题）'}
+
+【幻灯片文字内容】
+${slide.text}
+
+请为本页生成演讲稿。`,
+        `${contextPart}[Presentation] ${sessionTitle}
+[Position] Slide ${slide.pageNumber} of ${total}
+[Slide Title] ${slide.title || '(no title)'}
+
+[Slide Text Content]
+${slide.text}
+
+Please generate the speaker script for this slide.`
       )
 
       log.info('[speech] generating slide', { sessionId, current, total })

@@ -1,6 +1,5 @@
-import { useEffect, forwardRef, useState } from 'react'
-import { ChevronDown, Loader2, Sparkles } from 'lucide-react'
-import { cn } from '@renderer/lib/utils'
+import { useEffect, forwardRef } from 'react'
+import { Loader2, Sparkles } from 'lucide-react'
 import { useSessionDetailUiStore } from '@renderer/store/sessionDetailStore'
 import { PreviewIframe, type PreviewIframeHandle } from '../preview/PreviewIframe'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/Tooltip'
@@ -22,7 +21,6 @@ export const PreviewStage = forwardRef<
     onDiscardAllEdits: () => void
     onReplayPendingEdits: () => void
     onDeleteRequest?: (selector: string) => void
-    pageSpeechScript?: string | null
   }
 >(function PreviewStage(
   {
@@ -36,8 +34,7 @@ export const PreviewStage = forwardRef<
     onCancelTextEdit,
     onDiscardAllEdits,
     onReplayPendingEdits,
-    onDeleteRequest,
-    pageSpeechScript
+    onDeleteRequest
   },
   ref
 ) {
@@ -47,7 +44,6 @@ export const PreviewStage = forwardRef<
   const setInteractionMode = useSessionDetailUiStore((state) => state.setInteractionMode)
   const setSelectedElement = useSessionDetailUiStore((state) => state.setSelectedElement)
   const displayTitle = sessionTitle || t('sessionDetail.sessionFallback')
-  const [speechCollapsed, setSpeechCollapsed] = useState(false)
 
   const isEditing = interactionMode === 'edit'
   const isInspecting = interactionMode === 'ai-inspect'
@@ -138,31 +134,6 @@ export const PreviewStage = forwardRef<
           </div>
         )}
       </div>
-
-      {pageSpeechScript && (
-        <div className={cn(
-          'mt-2 flex shrink-0 flex-col overflow-hidden rounded-[1.4rem] border border-[#e1d6c4]/72 bg-[#fffaf1]/78 shadow-[0_4px_12px_rgba(77,61,43,0.06)] transition-all duration-200',
-          speechCollapsed ? 'h-8' : 'h-36'
-        )}>
-          <button
-            type="button"
-            onClick={() => setSpeechCollapsed((v) => !v)}
-            className="flex shrink-0 w-full items-center justify-between px-3 py-1.5 hover:bg-[#f0e8d8]/60 transition-colors"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7a875f]">
-              {t('sessionDetail.speechScript')}
-            </span>
-            <ChevronDown className={cn('h-3.5 w-3.5 text-[#9a8f80] transition-transform duration-200', speechCollapsed ? '' : 'rotate-180')} />
-          </button>
-          {!speechCollapsed && (
-            <div className="overflow-y-auto border-t border-[#ede5d6]/80 px-3 py-2.5">
-              <p className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-[#4a5a3a]">
-                {pageSpeechScript}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
     </main>
   )
 })
