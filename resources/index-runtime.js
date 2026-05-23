@@ -124,12 +124,12 @@
     loadedPages.add(pageId);
     var pageUrl = new URL(buildPageUrl(page));
     if (forceReload) pageUrl.searchParams.set('_pptReplay', String(Date.now()));
-    frame.src = pageUrl.toString();
     frame.addEventListener('load', function () {
       bindFrameKeyboard(frame);
       bindFrameClick(frame);
       if (pageId === currentPageId) scheduleFitFrame();
     }, { once: true });
+    frame.src = pageUrl.toString();
   }
 
   if (embedMode) document.body.classList.add('embed');
