@@ -46,7 +46,7 @@ const SMIL_PRESET: Record<
   SmilAnimType,
   { presetID: number; presetClass: string; presetSubtype?: number; filter?: string }
 > = {
-  fade:       { presetID: 10, presetClass: 'entr', filter: 'fade' },
+  fade:       { presetID: 10, presetClass: 'entr' },
   'fade-up':  { presetID: 7,  presetClass: 'entr', presetSubtype: 8, filter: 'fade' },
   'fade-down':{ presetID: 7,  presetClass: 'entr', presetSubtype: 1, filter: 'fade' },
   'fade-left':{ presetID: 7,  presetClass: 'entr', presetSubtype: 2, filter: 'fade' },
@@ -54,11 +54,6 @@ const SMIL_PRESET: Record<
   'scale-in': { presetID: 31, presetClass: 'entr' },
   'slide-up': { presetID: 7,  presetClass: 'entr', presetSubtype: 8 },
   'slide-left':{ presetID: 7,  presetClass: 'entr', presetSubtype: 2 }
-}
-
-const NS = {
-  p: 'http://schemas.openxmlformats.org/presentationml/2006/main',
-  p14: 'http://schemas.microsoft.com/office/powerpoint/2010/main'
 }
 
 let _nextNodeId = 1000
@@ -84,11 +79,6 @@ function buildAnimEffectAttrs(anim: SmilElementAnim): string {
   return attrs
 }
 
-function buildFilterElement(filter?: string): string {
-  if (!filter) return ''
-  return `\n                  <p:animEffect transition="in" filter="${filter}"/>`
-}
-
 /**
  * Build a <p:timing> block for a slide from a list of element animations.
  * Each element gets its own <p:animEffect> inside a <p:seq> container.
@@ -101,7 +91,7 @@ export function buildSlideTiming(timing: SmilSlideTiming): string {
   if (!timing.elements || timing.elements.length === 0) return ''
 
   const nodeId = nextNodeId()
-  const children = timing.elements
+  const children = [...timing.elements]
     .sort((a, b) => a.order - b.order)
     .map((anim) => {
       const preset = SMIL_PRESET[anim.type]
@@ -159,6 +149,8 @@ ${children}
 
 /**
  * Build a <p:transition> element for slide-level transitions.
+ * PPTX spec: child element defines type (e.g. <p:fade/>),
+ * spd is speed (slow/med/fast), advClick controls advance-on-click.
  */
 export function buildSlideTransition(
   type: 'fade' | 'push' | 'wipe' | 'cover' | 'uncover' | 'dissolve' | 'none',
@@ -166,7 +158,7 @@ export function buildSlideTransition(
 ): string {
   if (type === 'none') return ''
 
-  const transitionMap: Record<string, string> = {
+  const childMap: Record<string, string> = {
     fade: 'fade',
     push: 'push',
     wipe: 'wipe',
@@ -175,10 +167,11 @@ export function buildSlideTransition(
     dissolve: 'dissolve'
   }
 
-  const spd = transitionMap[type] || 'fade'
-  const dur = Math.round(Math.max(100, Math.min(5000, durationMs || 400)))
+  const dur = Math.max(100, Math.min(5000, durationMs || 400))
+  const spd = dur <= 300 ? 'fast' : dur <= 700 ? 'med' : 'slow'
+  const child = childMap[type] || 'fade'
 
-  return `<p:transition spd="${spd}" dur="${dur}" advClick="1"/>`
+  return `<p:transition spd="${spd}" advClick="1"><p:${child}/></p:transition>`
 }
 
 /**

@@ -40,6 +40,8 @@ describe('buildSlideTiming', () => {
     expect(result).toContain('<p:spTgt spid="5"/>')
     expect(result).toContain('dur="400"')
     expect(result).toContain('</p:timing>')
+    // Plain fade should NOT emit a filter companion (presetID=10 handles it)
+    expect(result).not.toContain('filter="fade"')
   })
 
   it('sorts elements by order', () => {
@@ -171,49 +173,59 @@ describe('buildSlideTransition', () => {
     expect(buildSlideTransition('none')).toBe('')
   })
 
-  it('generates fade transition', () => {
+  it('generates fade transition with <p:fade/> child', () => {
     const result = buildSlideTransition('fade', 500)
     expect(result).toContain('<p:transition')
-    expect(result).toContain('spd="fade"')
-    expect(result).toContain('dur="500"')
+    expect(result).toContain('<p:fade/>')
     expect(result).toContain('advClick="1"')
+    expect(result).toContain('</p:transition>')
+  })
+
+  it('uses spd="fast" for duration <= 300ms', () => {
+    const result = buildSlideTransition('fade', 200)
+    expect(result).toContain('spd="fast"')
+  })
+
+  it('uses spd="med" for duration 301-700ms', () => {
+    const result = buildSlideTransition('fade', 500)
+    expect(result).toContain('spd="med"')
+  })
+
+  it('uses spd="slow" for duration > 700ms', () => {
+    const result = buildSlideTransition('fade', 1000)
+    expect(result).toContain('spd="slow"')
   })
 
   it('generates push transition', () => {
-    const result = buildSlideTransition('push', 300)
-    expect(result).toContain('spd="push"')
+    const result = buildSlideTransition('push')
+    expect(result).toContain('<p:push/>')
   })
 
   it('generates wipe transition', () => {
-    const result = buildSlideTransition('wipe', 400)
-    expect(result).toContain('spd="wipe"')
+    const result = buildSlideTransition('wipe')
+    expect(result).toContain('<p:wipe/>')
   })
 
   it('generates cover transition', () => {
     const result = buildSlideTransition('cover')
-    expect(result).toContain('spd="cover"')
+    expect(result).toContain('<p:cover/>')
   })
 
   it('generates uncover transition', () => {
     const result = buildSlideTransition('uncover')
-    expect(result).toContain('spd="uncover"')
+    expect(result).toContain('<p:uncover/>')
   })
 
   it('generates dissolve transition', () => {
     const result = buildSlideTransition('dissolve')
-    expect(result).toContain('spd="dissolve"')
+    expect(result).toContain('<p:dissolve/>')
   })
 
-  it('clamps duration to valid range', () => {
-    const tooFast = buildSlideTransition('fade', 50)
-    expect(tooFast).toContain('dur="100"')
-    const tooSlow = buildSlideTransition('fade', 10000)
-    expect(tooSlow).toContain('dur="5000"')
-  })
-
-  it('defaults duration to 400ms when omitted', () => {
-    const result = buildSlideTransition('fade')
-    expect(result).toContain('dur="400"')
+  it('clamps duration to [100, 5000] range for spd mapping', () => {
+    const result = buildSlideTransition('fade', 50)
+    expect(result).toContain('spd="fast"')
+    const result2 = buildSlideTransition('fade', 10000)
+    expect(result2).toContain('spd="slow"')
   })
 })
 
