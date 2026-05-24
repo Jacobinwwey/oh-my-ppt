@@ -1,5 +1,27 @@
 # 更新日志 / Changelog
 
+## 2026-05-24 · v2.0.11
+
+### 中文
+
+- 新增对话创作模式：先通过多轮对话梳理主题、资料、受众、结构和每页重点，再确认参数生成完整演示稿。适合需求尚不清晰、资料较复杂或需要先共同推敲大纲的场景，再去生成创作。
+- 新增演讲稿创作：支持为整套幻灯片或当前页生成演讲稿，内置正式演讲、轻松对话、叙事风格和自定义风格，并可复制或直接查看文件。
+- 新增 Gemini Provider：设置页支持配置 Google Gemini，可用于生成、编辑和对话创作。
+- 重构动画系统：支持更自然的入场动画、错峰展示和点击逐条出现，让演示内容可以按讲述节奏逐步展开。
+- 优化演示播放：键盘导航、鼠标点击和逐条展示的衔接更顺畅，带点击节奏的页面不容易误翻页。
+- 优化预览与导出稳定性：带动画、图表和复杂内容的页面在预览、缩略图和导出时显示更可靠。
+- 优化生成预览： 生成的时候支持边生成边预览，无需等待生成完成，方便确认生成效果。
+
+### English
+
+- Added Chat to Create: first use a multi-turn conversation to clarify the topic, materials, audience, structure, and key points for each slide, then confirm the parameters and generate the full presentation. It is designed for unclear requirements, complex materials, or scenarios where you want to shape the outline together before creation.
+- Added speaker script creation: generate scripts for the full deck or the current slide, with built-in formal, casual conversational, storytelling, and custom styles. Scripts can be copied or opened directly as a file.
+- Added Gemini Provider: Google Gemini can now be configured in Settings and used for generation, editing, and Chat to Create.
+- Rebuilt the animation system: supports more natural entrance animations, staggered reveals, and click-by-click content display, so presentation content can unfold with the speaker's rhythm.
+- Improved presentation playback: keyboard navigation, mouse clicks, and step-by-step reveals now work together more smoothly, making click-paced pages less likely to accidentally advance to the next slide.
+- Improved preview and export stability: slides with animations, charts, and complex content now render more reliably in previews, thumbnails, and exports.
+- Improved generation preview: slides can now be previewed while they are still being generated, so you no longer need to wait for the full generation to finish before checking the result.
+
 ## 2026-05-18 · v2.0.10
 
 ### 中文
