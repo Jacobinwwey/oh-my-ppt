@@ -216,8 +216,10 @@ export const PreviewIframe = forwardRef<
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
+  const webviewReadyRef = useRef(false)
   const previewScaleRef = useRef(1)
   const [webviewElement, setWebviewElement] = useState<Electron.WebviewTag | null>(null)
+  const [webviewReady, setWebviewReady] = useState(false)
   const [transform, setTransform] = useState('scale(1)')
   const [previewScale, setPreviewScale] = useState(1)
 
@@ -317,13 +319,44 @@ export const PreviewIframe = forwardRef<
   }
 
   const handleWebviewRef = useCallback((node: Electron.WebviewTag | null): void => {
+    webviewReadyRef.current = false
+    setWebviewReady(false)
     webviewRef.current = node
     setWebviewElement((prev) => (prev === node ? prev : node))
   }, [])
 
+  const canExecuteJavaScript = (webview: Electron.WebviewTag): boolean => {
+    return webview.isConnected && webviewRef.current === webview && webviewReadyRef.current
+  }
+
+  const wrapSafeVoidScript = (label: string, script: string): string => `
+(() => {
+  try {
+    ${script}
+  } catch (error) {
+    const message = error && (error.stack || error.message || String(error));
+    console.error("[PreviewIframe:${label}]", message || "Unknown script error");
+  }
+})();
+`
+
   const safeExecuteJavaScript = (webview: Electron.WebviewTag, script: string): void => {
+    if (!canExecuteJavaScript(webview)) return
     try {
-      webview.executeJavaScript(script).catch(() => {})
+      webview.executeJavaScript(wrapSafeVoidScript('void', script)).catch(() => {})
+    } catch {
+      // executeJavaScript may throw synchronously before dom-ready
+    }
+  }
+
+  const safeExecuteHostScript = (
+    webview: Electron.WebviewTag,
+    label: string,
+    script: string
+  ): void => {
+    if (!canExecuteJavaScript(webview)) return
+    try {
+      webview.executeJavaScript(wrapSafeVoidScript(label, script)).catch(() => {})
     } catch {
       // executeJavaScript may throw synchronously before dom-ready
     }
@@ -431,7 +464,8 @@ export const PreviewIframe = forwardRef<
         if (style.isAbsoluteMode) {
           safeExecuteJavaScript(
             wv,
-            `var __el = document.querySelector(${JSON.stringify(selector)}); if (!__el) return;` +
+            `(function(){` +
+              `var __el = document.querySelector(${JSON.stringify(selector)}); if (!__el) return;` +
               `__el.style.position = 'absolute';` +
               `if (!__el.style.zIndex) __el.style.zIndex = '10';` +
               `__el.style.left = ${JSON.stringify(style.x + 'px')};` +
@@ -441,13 +475,15 @@ export const PreviewIframe = forwardRef<
               `__el.style.removeProperty('--ppt-drag-y');` +
               `__el.setAttribute('data-ppt-layout-converted', '1');` +
               (style.width != null ? `__el.style.width = ${JSON.stringify(style.width + 'px')};` : '') +
-              (style.height != null ? `__el.style.height = ${JSON.stringify(style.height + 'px')};` : '')
+              (style.height != null ? `__el.style.height = ${JSON.stringify(style.height + 'px')};` : '') +
+            `})()`
           )
           return
         }
         safeExecuteJavaScript(
           wv,
-          `var __el = document.querySelector(${JSON.stringify(selector)}); if (!__el) return;` +
+          `(function(){` +
+            `var __el = document.querySelector(${JSON.stringify(selector)}); if (!__el) return;` +
             `var __pos = __el.style.position || getComputedStyle(__el).position;` +
             `if (!__pos || __pos === 'static') __el.style.position = 'relative';` +
             `if (!__el.style.zIndex) __el.style.zIndex = '10';` +
@@ -455,7 +491,8 @@ export const PreviewIframe = forwardRef<
             `__el.style.setProperty('--ppt-drag-y', ${JSON.stringify(style.y + 'px')});` +
             `__el.style.translate = 'var(--ppt-drag-x, 0px) var(--ppt-drag-y, 0px)';` +
             (style.width != null ? `__el.style.width = ${JSON.stringify(style.width + 'px')};` : '') +
-            (style.height != null ? `__el.style.height = ${JSON.stringify(style.height + 'px')};` : '')
+            (style.height != null ? `__el.style.height = ${JSON.stringify(style.height + 'px')};` : '') +
+          `})()`
         )
       },
       applyZIndex(selector: string, zIndex: number): void {
@@ -472,7 +509,7 @@ export const PreviewIframe = forwardRef<
       },
       copyElement(selector: string, newBlockId: string): string | null {
         const wv = webviewRef.current
-        if (!wv) return null
+        if (!wv || !canExecuteJavaScript(wv)) return null
         const scope = selector.match(/\[data-page-id="([^"]+)"\]/)?.[1] || ''
         const root = scope ? `body[data-page-id="${scope}"] [data-ppt-guard-root="1"]` : 'body'
         const newSelector = scope
@@ -520,7 +557,7 @@ export const PreviewIframe = forwardRef<
       },
       async readElementHtml(selector: string): Promise<string> {
         const wv = webviewRef.current
-        if (!wv) return ''
+        if (!wv || !canExecuteJavaScript(wv)) return ''
         try {
           return (await wv.executeJavaScript(
             `document.querySelector(${JSON.stringify(selector)})?.outerHTML || ''`
@@ -531,7 +568,7 @@ export const PreviewIframe = forwardRef<
       },
       async readElementSnapshot(selector: string): Promise<EditableElementSnapshot | null> {
         const wv = webviewRef.current
-        if (!wv) return null
+        if (!wv || !canExecuteJavaScript(wv)) return null
         try {
           return (
             (await wv.executeJavaScript(
@@ -556,6 +593,7 @@ export const PreviewIframe = forwardRef<
           .join(',')
         safeExecuteJavaScript(
           wv,
+          `(function(){` +
           `var __parent = document.querySelector(${JSON.stringify(selector)}); if (!__parent) return;` +
           `var __ups = [${updatesJs}];` +
           `for (var __i = 0; __i < __ups.length; __i++) {` +
@@ -564,7 +602,8 @@ export const PreviewIframe = forwardRef<
           `  if (!__c) continue;` +
           `  if (__u.width !== null) __c.style.width = __u.width + 'px';` +
           `  if (__u.height !== null) __c.style.height = __u.height + 'px';` +
-          `}`
+          `}` +
+          `})()`
         )
       },
       injectElement(parentSelector: string, htmlFragment: string): void {
@@ -578,28 +617,67 @@ export const PreviewIframe = forwardRef<
     []
   )
 
+  useEffect(() => {
+    const webview = webviewElement
+    if (!webview) return
+
+    webviewReadyRef.current = false
+    setWebviewReady(false)
+
+    const markReady = (): void => {
+      if (webviewRef.current === webview) {
+        webviewReadyRef.current = true
+        setWebviewReady(true)
+      }
+    }
+    const handleStartLoading = (): void => {
+      if (webviewRef.current === webview) {
+        webviewReadyRef.current = false
+        setWebviewReady(false)
+      }
+    }
+
+    webview.addEventListener('dom-ready', markReady as EventListener)
+    webview.addEventListener('did-start-loading', handleStartLoading as EventListener)
+    window.setTimeout(() => {
+      try {
+        if (webview.isConnected && !webview.isLoading()) {
+          markReady()
+        }
+      } catch {
+        // Some webview methods can throw during teardown.
+      }
+    }, 0)
+
+    return () => {
+      webview.removeEventListener('dom-ready', markReady as EventListener)
+      webview.removeEventListener('did-start-loading', handleStartLoading as EventListener)
+      if (webviewRef.current === webview) {
+        webviewReadyRef.current = false
+        setWebviewReady(false)
+      }
+    }
+  }, [webviewElement])
+
   // Inspector effect: handles AI inspect mode only.
   useEffect(() => {
     const webview = webviewElement
-    if (!webview || !inspectable) return
+    if (!webview || !inspectable || !webviewReady) return
 
     const runInspectorLifecycle = (): void => {
       if (inspecting) {
-        safeExecuteJavaScript(webview, buildInspectorInjectScript())
+        safeExecuteHostScript(webview, 'inspector-inject', buildInspectorInjectScript())
       } else {
-        safeExecuteJavaScript(webview, buildInspectorCleanupScript())
+        safeExecuteHostScript(webview, 'inspector-cleanup', buildInspectorCleanupScript())
       }
     }
 
     runInspectorLifecycle()
-    const handleDomReady = (): void => runInspectorLifecycle()
-    webview.addEventListener('dom-ready', handleDomReady as EventListener)
 
     return () => {
-      webview.removeEventListener('dom-ready', handleDomReady as EventListener)
-      safeExecuteJavaScript(webview, buildInspectorCleanupScript())
+      safeExecuteHostScript(webview, 'inspector-cleanup', buildInspectorCleanupScript())
     }
-  }, [inspectable, inspecting, webviewSrc, webviewElement])
+  }, [inspectable, inspecting, webviewReady, webviewSrc, webviewElement])
 
   // Unified edit mode effect: handles click-to-select, drag, and resize.
   // Use ref for onDidReload to avoid re-running effect on every parent re-render.
@@ -608,74 +686,75 @@ export const PreviewIframe = forwardRef<
 
   useEffect(() => {
     const webview = webviewElement
-    if (!webview || !inspectable) return
+    if (!webview || !inspectable || !webviewReady) return
 
     const runEditModeLifecycle = (): void => {
       if (editMode) {
-        safeExecuteJavaScript(webview, buildEditModeInjectScript(previewScaleRef.current))
+        safeExecuteHostScript(
+          webview,
+          'edit-inject',
+          buildEditModeInjectScript(previewScaleRef.current)
+        )
       } else {
-        safeExecuteJavaScript(webview, buildEditModeCleanupScript())
+        safeExecuteHostScript(webview, 'edit-cleanup', buildEditModeCleanupScript())
       }
     }
 
     runEditModeLifecycle()
-    const handleDomReady = (): void => {
-      runEditModeLifecycle()
-      // Fire after script injection so caller can replay edits
-      if (editMode) onDidReloadRef.current?.()
-    }
-    webview.addEventListener('dom-ready', handleDomReady as EventListener)
+    if (editMode) onDidReloadRef.current?.()
 
     return () => {
-      webview.removeEventListener('dom-ready', handleDomReady as EventListener)
-      safeExecuteJavaScript(webview, buildEditModeCleanupScript())
+      safeExecuteHostScript(webview, 'edit-cleanup', buildEditModeCleanupScript())
     }
-  }, [inspectable, editMode, webviewSrc, webviewElement])
+  }, [inspectable, editMode, webviewReady, webviewSrc, webviewElement])
 
   useEffect(() => {
     const webview = webviewElement
-    if (!webview || !inspectable) return
+    if (!webview || !inspectable || !webviewReady) return
 
     const runPreviewClickAnimationLifecycle = (): void => {
       if (currentInteractionMode === 'preview') {
-        safeExecuteJavaScript(webview, buildPreviewClickAnimationInjectScript())
+        safeExecuteHostScript(
+          webview,
+          'preview-click-animation-inject',
+          buildPreviewClickAnimationInjectScript()
+        )
       } else {
-        safeExecuteJavaScript(webview, buildPreviewClickAnimationCleanupScript())
+        safeExecuteHostScript(
+          webview,
+          'preview-click-animation-cleanup',
+          buildPreviewClickAnimationCleanupScript()
+        )
       }
     }
 
     runPreviewClickAnimationLifecycle()
-    const handleDomReady = (): void => runPreviewClickAnimationLifecycle()
-    webview.addEventListener('dom-ready', handleDomReady as EventListener)
 
     return () => {
-      webview.removeEventListener('dom-ready', handleDomReady as EventListener)
-      safeExecuteJavaScript(webview, buildPreviewClickAnimationCleanupScript())
+      safeExecuteHostScript(
+        webview,
+        'preview-click-animation-cleanup',
+        buildPreviewClickAnimationCleanupScript()
+      )
     }
-  }, [inspectable, currentInteractionMode, webviewSrc, webviewElement])
+  }, [inspectable, currentInteractionMode, webviewReady, webviewSrc, webviewElement])
 
   // Thumbnail: freeze all animations so the thumbnail renders the final visible state.
   useEffect(() => {
     const webview = webviewElement
-    if (!webview || !thumbnail) return
-
-    const handleDomReady = (): void => {
-      safeExecuteJavaScript(webview, buildThumbnailFreezeScript())
-    }
-
-    handleDomReady()
-    webview.addEventListener('dom-ready', handleDomReady as EventListener)
-
-    return () => {
-      webview.removeEventListener('dom-ready', handleDomReady as EventListener)
-    }
-  }, [thumbnail, webviewSrc, webviewElement])
+    if (!webview || !thumbnail || !webviewReady) return
+    safeExecuteHostScript(webview, 'thumbnail-freeze', buildThumbnailFreezeScript())
+  }, [thumbnail, webviewReady, webviewSrc, webviewElement])
 
   useEffect(() => {
     const webview = webviewElement
-    if (!webview || !inspectable || !editMode) return
-    safeExecuteJavaScript(webview, buildEditModeSetPreviewScaleScript(previewScale))
-  }, [editMode, inspectable, previewScale, webviewElement])
+    if (!webview || !inspectable || !editMode || !webviewReady) return
+    safeExecuteHostScript(
+      webview,
+      'edit-set-preview-scale',
+      buildEditModeSetPreviewScaleScript(previewScale)
+    )
+  }, [editMode, inspectable, previewScale, webviewReady, webviewElement])
 
   // Console message router: inspector + unified edit mode
   // Use refs for callback props to avoid re-registering listener on every parent re-render
@@ -696,6 +775,10 @@ export const PreviewIframe = forwardRef<
     const handleConsoleMessage = (event: Event): void => {
       const payloadText = (event as { message?: unknown }).message
       if (typeof payloadText !== 'string') {
+        return
+      }
+      if (payloadText.startsWith('[PreviewIframe:')) {
+        console.error(payloadText)
         return
       }
       const isInspectorMessage = payloadText.startsWith(INSPECTOR_CONSOLE_PREFIX)

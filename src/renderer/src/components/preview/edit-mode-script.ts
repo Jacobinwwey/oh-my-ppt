@@ -807,6 +807,7 @@ export function buildEditModeInjectScript(previewScale = 1): string {
     const root = document.querySelector(".ppt-page-root, [data-ppt-guard-root='1']");
     if (!root) return;
     root.querySelectorAll("[style]").forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
       const s = el.style;
       if (s.transition && (s.transition.includes("transform") || s.transition.includes("opacity"))) {
         s.transition = "";

@@ -407,10 +407,7 @@ Please generate the speaker script for this slide.`
     const projectDir = await ctx.resolveSessionProjectDir(sessionId)
     const scriptPath = resolveSpeechScriptPath(projectDir)
     await fs.promises.access(scriptPath, fs.constants.R_OK)
-    const errorMessage = await shell.openPath(scriptPath)
-    if (errorMessage) {
-      shell.showItemInFolder(scriptPath)
-    }
+    shell.showItemInFolder(scriptPath)
     return { success: true, path: scriptPath }
   })
 

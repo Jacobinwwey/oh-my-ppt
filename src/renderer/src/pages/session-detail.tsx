@@ -1157,8 +1157,10 @@ export function SessionDetailPage(): React.JSX.Element {
     previewIframeRef.current?.clearEditModeSelection()
     setTextSelection(null)
     setTextDraft(EMPTY_ELEMENT_DRAFT)
-    setPreviewRefreshKey((key) => key + 1)
     useSessionDetailUiStore.getState().setInteractionMode('preview')
+    if (hadPending) {
+      setPreviewRefreshKey((key) => key + 1)
+    }
     if (hadPending) toastInfo(t('sessionDetail.discardedAdjustments'))
   }
 
