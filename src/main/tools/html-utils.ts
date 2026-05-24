@@ -176,6 +176,9 @@ const isAllowedRuntimeAsset = (src: string): boolean => {
     clean.endsWith('/assets/tailwindcss.v3.js') ||
     clean.endsWith('./assets/tailwindcss.v3.js') ||
     clean.endsWith('assets/tailwindcss.v3.js') ||
+    clean.endsWith('/assets/lottie-web.min.js') ||
+    clean.endsWith('./assets/lottie-web.min.js') ||
+    clean.endsWith('assets/lottie-web.min.js') ||
     clean.endsWith('/assets/katex/katex.min.js') ||
     clean.endsWith('./assets/katex/katex.min.js') ||
     clean.endsWith('assets/katex/katex.min.js') ||
