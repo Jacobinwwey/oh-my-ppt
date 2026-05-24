@@ -11,6 +11,7 @@ import type {
   HtmlToPptxTableCell,
   HtmlToPptxEmbeddedFont
 } from './types'
+import { traceToLottieAnimation } from '../animation-to-lottie'
 
 // ─── Constants ───────────────────────────────────────────────────────
 const EMU_PER_INCH = 914400
@@ -678,7 +679,8 @@ function buildSlideXml(
 function buildContentTypesXml(
   slideCount: number,
   mediaExtensions: Set<string>,
-  hasEmbeddedFonts: boolean = false
+  hasEmbeddedFonts: boolean = false,
+  hasLottie: boolean = false
 ): string {
   const overrides: string[] = [
     `<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>`,
@@ -698,6 +700,9 @@ function buildContentTypesXml(
   ]
   if (hasEmbeddedFonts) {
     defaults.push(`<Default Extension="fntdata" ContentType="application/x-fontdata"/>`)
+  }
+  if (hasLottie) {
+    defaults.push(`<Default Extension="json" ContentType="application/json"/>`)
   }
   for (const ext of mediaExtensions) {
     const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'svg' ? 'image/svg+xml' : `image/${ext}`
@@ -910,13 +915,23 @@ function buildThemeXml(): string {
 </a:theme>`
 }
 
-function buildSlideRelsXml(imageRels: ImageRel[]): string {
+interface LottieRel {
+  rId: string
+  lottieFile: string
+}
+
+function buildSlideRelsXml(imageRels: ImageRel[], lottieRels: LottieRel[] = []): string {
   const rels: string[] = [
     `<Relationship Id="rIdLayout" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>`
   ]
   for (const r of imageRels) {
     rels.push(
       `<Relationship Id="${r.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${r.mediaFile}"/>`
+    )
+  }
+  for (const lr of lottieRels) {
+    rels.push(
+      `<Relationship Id="${lr.rId}" Type="http://schemas.ohmyppt.com/officeDocument/2024/relationships/lottieAnimation" Target="../lottie/${lr.lottieFile}"/>`
     )
   }
   return `${XML_HEADER}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -971,6 +986,35 @@ export const writePptxDocument = async (
   // 2. Build per-slide image rels
   const slideImageRels: Map<string, ImageRel>[] = []
 
+  // 2b. Process animation traces into Lottie JSON bundles per slide
+  const slideLottieRels: LottieRel[][] = []
+  const lottieFiles = new Map<string, Uint8Array>() // lottieFile -> JSON bytes
+  let hasLottie = false
+  let lottieIndex = 0
+
+  for (const slide of slides) {
+    const lottieRels: LottieRel[] = []
+    if (slide.animationTrace && document.embedLottie) {
+      try {
+        const trace = JSON.parse(slide.animationTrace)
+        const bundle = traceToLottieAnimation(trace)
+        if (bundle) {
+          lottieIndex++
+          const lottieFile = `slide${lottieIndex}.json`
+          const rId = `rIdLottie`
+          lottieRels.push({ rId, lottieFile })
+          lottieFiles.set(lottieFile, strToU8(bundle.json))
+          hasLottie = true
+        }
+      } catch (_err) {
+        // Trace parsing failed — skip Lottie embedding for this slide
+      }
+    }
+    slideLottieRels.push(lottieRels)
+  }
+
+  // 2c. Build per-slide image rels
+
   for (const slide of slides) {
     const relsMap = new Map<string, ImageRel>()
     let relIndex = 0
@@ -1022,7 +1066,7 @@ export const writePptxDocument = async (
 
   // Global XML
   files['[Content_Types].xml'] = strToU8(
-    buildContentTypesXml(slideCount, mediaExtensions, hasEmbeddedFonts)
+    buildContentTypesXml(slideCount, mediaExtensions, hasEmbeddedFonts, hasLottie)
   )
   files['_rels/.rels'] = strToU8(buildRootRelsXml())
   files['ppt/presentation.xml'] = strToU8(
@@ -1045,7 +1089,7 @@ export const writePptxDocument = async (
     const imageRelsForSlide = Array.from(relsMap.values())
 
     files[`ppt/slides/slide${i + 1}.xml`] = strToU8(buildSlideXml(slides[i], relsMap, 1))
-    files[`ppt/slides/_rels/slide${i + 1}.xml.rels`] = strToU8(buildSlideRelsXml(imageRelsForSlide))
+    files[`ppt/slides/_rels/slide${i + 1}.xml.rels`] = strToU8(buildSlideRelsXml(imageRelsForSlide, slideLottieRels[i] || []))
   }
 
   // Media files
@@ -1059,6 +1103,11 @@ export const writePptxDocument = async (
   // Font files
   for (const [fontFile, ttfBuffer] of fontFileMap) {
     files[`ppt/fonts/${fontFile}`] = ttfBuffer
+  }
+
+  // Lottie JSON files
+  for (const [lottieFile, jsonBytes] of lottieFiles) {
+    files[`ppt/lottie/${lottieFile}`] = jsonBytes
   }
 
   // 6. Generate ZIP and write

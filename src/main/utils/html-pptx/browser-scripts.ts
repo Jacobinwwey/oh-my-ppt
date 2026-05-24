@@ -512,3 +512,18 @@ export const WAIT_FOR_PPTX_CAPTURE_FRAME_SCRIPT = `
   return true;
 })()
 `
+
+export const COLLECT_ANIMATION_TRACE_SCRIPT = `
+(() => {
+  try {
+    var ppt = window.PPT || globalThis.PPT;
+    if (ppt && typeof ppt.__collectAnimationTrace === 'function') {
+      var trace = ppt.__collectAnimationTrace();
+      return JSON.stringify(trace);
+    }
+    return JSON.stringify({ version: '1.0', elements: [] });
+  } catch (_err) {
+    return JSON.stringify({ version: '1.0', elements: [] });
+  }
+})()
+`
