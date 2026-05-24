@@ -63,6 +63,7 @@ export function MessagePanel({
   const removePendingAsset = useSessionDetailUiStore((state) => state.removePendingAsset)
   const clearSelectedElement = useSessionDetailUiStore((state) => state.clearSelectedElement)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const composingRef = useRef(false)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -246,8 +247,15 @@ export function MessagePanel({
           placeholder={inputPlaceholder}
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onCompositionStart={() => {
+            composingRef.current = true
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
+              if (composingRef.current || event.nativeEvent.isComposing) return
               event.preventDefault()
               onSend()
             }

@@ -83,6 +83,39 @@ const rewriteThinkingSourceForSession = (
   return rewritten
 }
 
+const copyFileIfExists = async (sourcePath: string, targetPath: string): Promise<void> => {
+  if (!fs.existsSync(sourcePath)) return
+  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true })
+  await fs.promises.copyFile(sourcePath, targetPath)
+}
+
+const copyDirectoryIfExists = async (sourceDir: string, targetDir: string): Promise<void> => {
+  if (!fs.existsSync(sourceDir)) return
+  await fs.promises.mkdir(targetDir, { recursive: true })
+  const entries = await fs.promises.readdir(sourceDir, { withFileTypes: true })
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name)
+    const targetPath = path.join(targetDir, entry.name)
+    if (entry.isDirectory()) {
+      await copyDirectoryIfExists(sourcePath, targetPath)
+    } else if (entry.isFile()) {
+      await fs.promises.copyFile(sourcePath, targetPath)
+    }
+  }
+}
+
+const copyThinkingWorkspaceToSession = async (thinkingDir: string, projectDir: string): Promise<void> => {
+  const targetDir = path.join(projectDir, 'thinking')
+  await fs.promises.mkdir(targetDir, { recursive: true })
+  await Promise.all([
+    copyFileIfExists(path.join(thinkingDir, 'thinking.md'), path.join(targetDir, 'thinking.md')),
+    copyFileIfExists(path.join(thinkingDir, 'context.md'), path.join(targetDir, 'context.md')),
+    copyFileIfExists(path.join(thinkingDir, 'sources.json'), path.join(targetDir, 'sources.json')),
+    copyDirectoryIfExists(path.join(thinkingDir, 'sources'), path.join(targetDir, 'sources')),
+    copyDirectoryIfExists(path.join(thinkingDir, 'assets'), path.join(targetDir, 'assets'))
+  ])
+}
+
 const createThinkingReferenceDocument = async (args: {
   thinkingDir: string
   projectDir: string
@@ -90,7 +123,7 @@ const createThinkingReferenceDocument = async (args: {
   thinkingMdPath: string
 }): Promise<string> => {
   const thinkingMd = await fs.promises.readFile(args.thinkingMdPath, 'utf-8')
-  await fs.promises.copyFile(args.thinkingMdPath, path.join(args.projectDir, 'thinking.md'))
+  await copyThinkingWorkspaceToSession(args.thinkingDir, args.projectDir)
   const copiedAssets = await copyThinkingAssetsToSession(args.thinkingDir, args.projectDir)
 
   // Inline all source content so the generation agent gets everything in one read

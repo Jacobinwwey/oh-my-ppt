@@ -31,7 +31,7 @@ export const zh = {
     uploadDocument: '上传文档/图片自动解析',
     parsingDocument: '解析中...',
     uploadDocumentTooltip:
-      '支持 txt、md、csv、docx（≤{maxSize}MB），以及 png、jpg、webp 图片（≤{imageMaxSize}MB）。解析后会自动填充主题、页数和详细描述；文档会作为后续生成参考，图片会先整理为可编辑创作简报并创建自定义风格。',
+      '支持 txt、md、csv、docx（≤{maxSize}MB），以及 png、jpg、webp 图片（≤{imageMaxSize}MB）。解析后会自动填充主题、页数和详细描述；源文件会作为后续生成的主要参考物，图片会先整理为可编辑创作简报并创建自定义风格。',
     importPptx: '导入 PPTX 直接AI编辑',
     importingPptx: '导入解析中',
     importPptxTooltip:
@@ -54,7 +54,8 @@ export const zh = {
     fontSourceBuiltIn: '内置',
     pageCount: '页数',
     brief: '详细描述',
-    briefPlaceholder: '描述你的简要需求、核心结论、希望保留的数据点，以及你想要的讲述节奏',
+    briefPlaceholder:
+      '可以写：\n- 这份演示的大纲结构，每个章节或页面要讲什么\n- 文档里的哪些内容是重点，哪些结论、数据或案例必须保留\n- 每一页的呈现方式，例如图表、对比、流程、总结；如需点击动画，请写明“点击逐条出现”“按键展示”“逐步讲述”“逐项展开”或“演讲节奏控制”\n- 希望如何组织源文件内容，例如先背景、再方案、最后总结\n- 需要强调、弱化或避免出现的内容',
     creating: '创建中...',
     createAndStart: '创建会话并开始',
     unnamedTopic: '未命名主题',
@@ -638,13 +639,13 @@ export const zh = {
   },
   thinking: {
     homeTitle: '开始创建演示文稿',
-    homeDescription: '选择适合当前工作的创建方式：信息明确时快速生成，需要梳理资料和方向时先进入探索。',
+    homeDescription: '已有主题或素材，可以马上生成初稿；还没想清楚，就先用对话创作梳理大纲。',
     quickCreate: '快速创建',
-    quickCreateDescription: '适合主题、页数和风格已经明确的任务，填写基础信息后直接进入生成流程。',
-    quickCreateBadge: '直接生成',
-    quickCreatePointOne: '手动选择主题、页数、风格和字体。',
-    quickCreatePointTwo: '更适合目标清晰、材料已经准备好的演示。',
-    startQuickCreate: '填写生成参数',
+    quickCreateDescription: '输入主题，上传文档/图片或导入 PPTX，选择风格和页数，快速生成一份可继续编辑的演示初稿。',
+    quickCreateBadge: '直接出稿',
+    quickCreatePointOne: '填写主题、页数、风格，也可以上传素材辅助生成。',
+    quickCreatePointTwo: '适合已经有方向，想尽快拿到可编辑初稿的任务。',
+    startQuickCreate: '开始生成',
     exploreProject: '对话创作',
     exploreProjectDescription: '适合还在整理想法、资料或图片的任务，先和 AI 对话梳理出生成大纲，再进入生成。',
     exploreProjectBadge: '先想清楚',
@@ -659,6 +660,8 @@ export const zh = {
     homeNoteThree: '最终都会进入同一套演示生成流程。',
     eyebrow: 'Explore before creating',
     title: '对话创作',
+    description:
+      '先用对话把需求、素材和页面结构梳理清楚，再调用 30+ 内置风格、自定义风格、Chart.js 图表和 anime.js 动画生成演示稿。',
     chatTitle: 'AI 对话',
     thinking: '思考中...',
     inputPlaceholder: '描述你想呈现的主题和内容...',

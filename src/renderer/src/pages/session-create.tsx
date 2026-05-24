@@ -582,8 +582,6 @@ export function SessionCreatePage(): ReactElement {
               <p className="min-w-0 text-xs text-[#4f6340]">{pptxImportProgress}</p>
             ) : null}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">{t('home.localOnly')}</p>
-
           <input
             ref={documentInputRef}
             type="file"
@@ -750,11 +748,11 @@ export function SessionCreatePage(): ReactElement {
               <label className="block font-medium">{t('home.brief')}</label>
               <Textarea
                 placeholder={t('home.briefPlaceholder')}
-                rows={4}
+                rows={7}
                 value={brief}
                 required
                 onChange={(e) => setBrief(e.target.value)}
-                className="min-h-[100px] resize-y"
+                className="min-h-[150px] resize-y"
               />
             </div>
           </CardContent>
