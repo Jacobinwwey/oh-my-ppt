@@ -10,6 +10,7 @@ import {
   STABLE_HTML_FRAGMENT_PROTOCOL,
   buildOutlinePageList,
   formatDesignContract,
+  formatStyleLottieRecommendations,
   resolveStylePrompt
 } from './shared'
 
@@ -74,6 +75,7 @@ export function buildDeckAgentSystemPrompt(
     `风格预设：${presetLabel} (${presetId})`,
     '风格规则：',
     stylePrompt,
+    formatStyleLottieRecommendations(styleId),
     '',
     '本套演示设计契约（统一视觉护栏，避免机械套版）：',
     formatDesignContract(context.designContract),

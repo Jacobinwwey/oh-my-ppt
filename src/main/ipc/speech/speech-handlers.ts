@@ -96,6 +96,18 @@ function extractTextFromHtml(html: string): string {
   return $('body').text().replace(/\s+/g, ' ').trim()
 }
 
+function extractLottieMarkersFromHtml(html: string): string {
+  const $ = cheerio.load(html, { scriptingEnabled: false })
+  const lottieEls: string[] = []
+  $('[data-anim="lottie"]').each((_, el) => {
+    const blockId = $(el).attr('data-block-id') || 'lottie'
+    const src = ($(el).attr('data-anim-lottie-src') || '').trim()
+    lottieEls.push(`${blockId} (src: ${src.slice(0, 80)}${src.length > 80 ? '...' : ''})`)
+  })
+  if (lottieEls.length === 0) return ''
+  return `[Available Lottie Markers]\nUse element block IDs above as annotation targets.\nLottie elements found:\n${lottieEls.map((e) => `- ${e}`).join('\n')}\n\n`
+}
+
 function buildLengthInstruction(length: SpeechLength, isZh: boolean): string {
   if (isZh) {
     switch (length) {
@@ -227,7 +239,7 @@ export function registerSpeechHandlers(ctx: IpcContext): void {
         throw new Error(uiText(locale, '找不到指定页面', 'Specified page not found'))
       }
 
-      const slideContents: Array<{ pageNumber: number; title: string; text: string }> = []
+      const slideContents: Array<{ pageNumber: number; title: string; text: string; html: string }> = []
       for (const p of filteredPages) {
         if (!p.html_path) continue
         const rawHtmlPath = path.isAbsolute(p.html_path)
@@ -251,7 +263,8 @@ export function registerSpeechHandlers(ctx: IpcContext): void {
           slideContents.push({
             pageNumber: p.page_number,
             title: p.title || '',
-            text: text || uiText(locale, '（本页主要为图片或视觉内容，请结合上下文发挥）', '(This slide is mainly visual; improvise based on context.)')
+            text: text || uiText(locale, '（本页主要为图片或视觉内容，请结合上下文发挥）', '(This slide is mainly visual; improvise based on context.)'),
+            html
           })
         } catch (err) {
           log.warn('[speech] failed to read page html', { htmlPath: p.html_path, err })
@@ -318,7 +331,18 @@ ${lengthInstruction}
 ${styleInstruction}
 
 **Transitions:**
-If the previous slide's ending is provided, open with a smooth transition sentence that connects the two slides naturally.`
+If the previous slide's ending is provided, open with a smooth transition sentence that connects the two slides naturally.
+
+**Lottie Animation Markers:**
+If the current slide content includes Lottie animations with markers (shown in [Available Lottie Markers]), you may insert timing annotations in the script. Use the format:
+[lottie:elementId:markerName]
+
+Example: if the slide has a chart animation with a "highlight" marker, write:
+[lottie:chart-anim:highlight]
+
+- Place each annotation on its own line, at the point in the speech where the animation should trigger.
+- Only use markers listed in [Available Lottie Markers] for the current slide.
+- If no markers are listed, do not add any [lottie:...] annotations.`
       )
 
       const scriptParts: string[] = []
@@ -336,9 +360,11 @@ If the previous slide's ending is provided, open with a smooth transition senten
         const progressZh = total > 1 ? `【生成进度】${current} / ${total}\n` : ''
         const progressEn = total > 1 ? `[Generation Progress] ${current} / ${total}\n` : ''
 
+        const lottieMarkersInfo = extractLottieMarkersFromHtml(slide.html)
+
         const userPrompt = uiText(
           locale,
-          `${contextPart}【演示文稿】${sessionTitle}
+          `${contextPart}${lottieMarkersInfo}【演示文稿】${sessionTitle}
 ${progressZh}【Slide】Slide ${slide.pageNumber}
 【本页标题】${slide.title || '（无标题）'}
 
@@ -346,7 +372,7 @@ ${progressZh}【Slide】Slide ${slide.pageNumber}
 ${slide.text}
 
 请为本页生成演讲稿。`,
-          `${contextPart}[Presentation] ${sessionTitle}
+          `${contextPart}${lottieMarkersInfo}[Presentation] ${sessionTitle}
 ${progressEn}[Slide] Slide ${slide.pageNumber}
 [Slide Title] ${slide.title || '(no title)'}
 
