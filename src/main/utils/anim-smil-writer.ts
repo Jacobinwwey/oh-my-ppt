@@ -167,11 +167,11 @@ export function buildSlideTransition(
     dissolve: 'dissolve'
   }
 
-  const dur = Math.max(100, Math.min(5000, durationMs || 400))
+  const dur = Math.max(100, Math.min(5000, durationMs ?? 400))
   const spd = dur <= 300 ? 'fast' : dur <= 700 ? 'med' : 'slow'
   const child = childMap[type] || 'fade'
 
-  return `<p:transition spd="${spd}" advClick="1"><p:${child}/></p:transition>`
+  return `<p:transition spd="${spd}" dur="${dur}" advClick="1"><p:${child}/></p:transition>`
 }
 
 /**

@@ -173,11 +173,22 @@ describe('buildSlideTransition', () => {
     expect(buildSlideTransition('none')).toBe('')
   })
 
-  it('generates fade transition with <p:fade/> child', () => {
+  it('includes dur attribute with correct clamped values', () => {
+    const d0 = buildSlideTransition('fade', 0)
+    expect(d0).toContain('dur="100"')
+    expect(d0).toContain('spd="fast"')
+
+    const d500 = buildSlideTransition('fade', 500)
+    expect(d500).toContain('dur="500"')
+    expect(d500).toContain('spd="med"')
+  })
+
+  it('generates fade transition with <p:fade/> child and dur attribute', () => {
     const result = buildSlideTransition('fade', 500)
     expect(result).toContain('<p:transition')
     expect(result).toContain('<p:fade/>')
     expect(result).toContain('advClick="1"')
+    expect(result).toContain('dur="500"')
     expect(result).toContain('</p:transition>')
   })
 
