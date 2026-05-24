@@ -11,6 +11,207 @@ import { readAppLocale, uiText } from '../config/locale-utils'
 import { normalizeFontSelection } from '@shared/generation'
 import { ensureSessionRuntimeCompatible } from './runtime-assets'
 import { GitHistoryService } from '../../history/git-history-service'
+import { allowLocalAssetRoot } from '../io/assets-handlers'
+
+const THINKING_ID_RE = /^[a-zA-Z0-9_-]{6,32}$/
+const THINKING_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
+const THINKING_REFERENCE_SOURCE_EXTENSIONS = new Set(['.md', '.txt', '.text', '.csv'])
+
+const isPathInside = (candidate: string, root: string): boolean => {
+  const relative = path.relative(root, candidate)
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+const toSafeAssetName = (value: string): string =>
+  value.replace(/[\\/:"*?<>|]+/g, '-').replace(/\s+/g, '-').replace(/^-+|-+$/g, '') || 'image'
+
+const detectThinkingWorkspaceDir = (storageRoot: string, referencePath: string): string | null => {
+  if (path.basename(referencePath) !== 'thinking.md') return null
+  const thinkingRoot = path.join(storageRoot, 'thinking')
+  const dir = path.dirname(referencePath)
+  if (!isPathInside(dir, thinkingRoot)) return null
+  const thinkingId = path.basename(dir)
+  return THINKING_ID_RE.test(thinkingId) ? dir : null
+}
+
+const copyThinkingAssetsToSession = async (
+  thinkingDir: string,
+  projectDir: string
+): Promise<Array<{ fileName: string; sourcePath: string; targetPath: string; publicPath: string }>> => {
+  const assetsDir = path.join(thinkingDir, 'assets')
+  if (!fs.existsSync(assetsDir)) return []
+  const imagesDir = path.join(projectDir, 'images')
+  await fs.promises.mkdir(imagesDir, { recursive: true })
+  allowLocalAssetRoot(imagesDir)
+
+  const entries = await fs.promises.readdir(assetsDir, { withFileTypes: true })
+  const copied: Array<{ fileName: string; sourcePath: string; targetPath: string; publicPath: string }> = []
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    const ext = path.extname(entry.name).toLowerCase()
+    if (!THINKING_IMAGE_EXTENSIONS.has(ext)) continue
+    const sourcePath = path.join(assetsDir, entry.name)
+    const fileName = toSafeAssetName(entry.name)
+    const targetPath = path.join(imagesDir, fileName)
+    await fs.promises.copyFile(sourcePath, targetPath)
+    copied.push({
+      fileName,
+      sourcePath,
+      targetPath,
+      publicPath: `./images/${fileName}`
+    })
+  }
+  return copied
+}
+
+const rewriteThinkingSourceForSession = (
+  content: string,
+  copiedAssets: Array<{ fileName: string; sourcePath: string; targetPath: string; publicPath: string }>
+): string => {
+  let rewritten = content
+  for (const asset of copiedAssets) {
+    rewritten = rewritten
+      .split(asset.sourcePath)
+      .join(asset.targetPath)
+      .split(`thinkingPublicPath: assets/${asset.fileName}`)
+      .join(`publicPath: ${asset.publicPath}`)
+      .split('- sessionAssetPath: (set during generation copy)')
+      .join(`- sessionAssetPath: ${asset.targetPath}`)
+      .split('- publicPath: (set during generation copy)')
+      .join(`- publicPath: ${asset.publicPath}`)
+  }
+  return rewritten
+}
+
+const rewriteThinkingWorkspaceArchiveContent = (
+  content: string,
+  thinkingDir: string,
+  archivedThinkingDir: string
+): string =>
+  content
+    .split(path.resolve(thinkingDir))
+    .join(path.resolve(archivedThinkingDir))
+    .split(path.join(thinkingDir, 'assets'))
+    .join(path.join(archivedThinkingDir, 'assets'))
+    .split(path.join(thinkingDir, 'sources'))
+    .join(path.join(archivedThinkingDir, 'sources'))
+
+const copyDirectoryIfExists = async (sourceDir: string, targetDir: string): Promise<void> => {
+  if (!fs.existsSync(sourceDir)) return
+  await fs.promises.mkdir(targetDir, { recursive: true })
+  const entries = await fs.promises.readdir(sourceDir, { withFileTypes: true })
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name)
+    const targetPath = path.join(targetDir, entry.name)
+    if (entry.isDirectory()) {
+      await copyDirectoryIfExists(sourcePath, targetPath)
+    } else if (entry.isFile()) {
+      await fs.promises.copyFile(sourcePath, targetPath)
+    }
+  }
+}
+
+const isRewriteableThinkingArchiveFile = (filePath: string): boolean => {
+  const ext = path.extname(filePath).toLowerCase()
+  return new Set(['.md', '.txt', '.text', '.csv', '.json']).has(ext)
+}
+
+const rewriteThinkingWorkspaceArchivePaths = async (
+  archiveDir: string,
+  thinkingDir: string,
+  archivedThinkingDir: string
+): Promise<void> => {
+  if (!fs.existsSync(archiveDir)) return
+  const entries = await fs.promises.readdir(archiveDir, { withFileTypes: true })
+  await Promise.all(
+    entries.map(async (entry) => {
+      const filePath = path.join(archiveDir, entry.name)
+      if (entry.isDirectory()) {
+        await rewriteThinkingWorkspaceArchivePaths(filePath, thinkingDir, archivedThinkingDir)
+        return
+      }
+      if (!entry.isFile() || !isRewriteableThinkingArchiveFile(filePath)) return
+      const content = await fs.promises.readFile(filePath, 'utf-8')
+      const rewritten = rewriteThinkingWorkspaceArchiveContent(content, thinkingDir, archivedThinkingDir)
+      if (rewritten !== content) {
+        await fs.promises.writeFile(filePath, rewritten, 'utf-8')
+      }
+    })
+  )
+}
+
+const copyThinkingWorkspaceToSession = async (thinkingDir: string, projectDir: string): Promise<void> => {
+  const targetDir = path.join(projectDir, 'thinking')
+  if (fs.existsSync(targetDir)) {
+    await fs.promises.rm(targetDir, { recursive: true, force: true })
+  }
+  await fs.promises.mkdir(targetDir, { recursive: true })
+  await copyDirectoryIfExists(thinkingDir, targetDir)
+  await rewriteThinkingWorkspaceArchivePaths(targetDir, thinkingDir, targetDir)
+}
+
+const createThinkingReferenceDocument = async (args: {
+  thinkingDir: string
+  projectDir: string
+  docsDir: string
+  thinkingMdPath: string
+}): Promise<string> => {
+  const thinkingMd = await fs.promises.readFile(args.thinkingMdPath, 'utf-8')
+  await copyThinkingWorkspaceToSession(args.thinkingDir, args.projectDir)
+  const copiedAssets = await copyThinkingAssetsToSession(args.thinkingDir, args.projectDir)
+
+  // Inline all source content so the generation agent gets everything in one read
+  const sourceSections: string[] = []
+  const sourcesDir = path.join(args.thinkingDir, 'sources')
+  if (fs.existsSync(sourcesDir)) {
+    const entries = await fs.promises.readdir(sourcesDir, { withFileTypes: true })
+    for (const entry of entries) {
+      const ext = path.extname(entry.name).toLowerCase()
+      if (!entry.isFile() || !THINKING_REFERENCE_SOURCE_EXTENSIONS.has(ext)) continue
+      const sourcePath = path.join(sourcesDir, entry.name)
+      const content = await fs.promises.readFile(sourcePath, 'utf-8')
+      sourceSections.push(
+        [`## Source: ${entry.name}`, '', rewriteThinkingSourceForSession(content, copiedAssets)].join('\n')
+      )
+    }
+  }
+
+  const assetSection =
+    copiedAssets.length > 0
+      ? [
+          '## Available Image Assets',
+          '',
+          'These images are available as an asset library. Use them only when the page brief needs an uploaded image. Do not infer style, palette, layout, or visual direction from these assets; the deck style must follow the selected system style preset.',
+          '',
+          ...copiedAssets.map(
+            (asset, index) =>
+              `${index + 1}. ${asset.publicPath}\n   - sessionAssetPath: ${asset.targetPath}`
+          )
+        ].join('\n')
+      : ''
+
+  const referenceContent = [
+    '# Thinking Reference',
+    '',
+    'This file was prepared from the exploration workspace. Use the page text as the generation brief. Use available image assets as a library when relevant, but keep visual style governed by the selected system style preset.',
+    '',
+    '## Final Thinking Document',
+    '',
+    thinkingMd,
+    '',
+    assetSection,
+    '',
+    sourceSections.length > 0 ? '# Source Notes' : '',
+    '',
+    ...sourceSections
+  ]
+    .filter((part) => part.trim().length > 0)
+    .join('\n\n')
+
+  const targetPath = path.join(args.docsDir, 'thinking-reference.md')
+  await fs.promises.writeFile(targetPath, referenceContent, 'utf-8')
+  return '/docs/thinking-reference.md'
+}
 
 export function registerSessionHandlers(ctx: IpcContext): void {
   const {
@@ -70,10 +271,10 @@ export function registerSessionHandlers(ctx: IpcContext): void {
       )
     }
     let validatedReferenceSourcePath: string | null = null
+    const storageRoot = fs.existsSync(storagePath)
+      ? await fs.promises.realpath(storagePath)
+      : path.resolve(storagePath)
     if (referenceDocumentPath) {
-      const storageRoot = fs.existsSync(storagePath)
-        ? await fs.promises.realpath(storagePath)
-        : path.resolve(storagePath)
       const sourcePath = path.resolve(referenceDocumentPath)
       if (!fs.existsSync(sourcePath)) {
         throw new Error(
@@ -104,10 +305,21 @@ export function registerSessionHandlers(ctx: IpcContext): void {
       fs.mkdirSync(projectDir, { recursive: true })
     }
     await ensureSessionAssets(projectDir)
+    let isThinkingSource = false
     const copyReferenceDocumentToSession = async (): Promise<string | null> => {
       if (!validatedReferenceSourcePath) return null
       const docsDir = path.join(projectDir, 'docs')
       await fs.promises.mkdir(docsDir, { recursive: true })
+      const thinkingDir = detectThinkingWorkspaceDir(storageRoot, validatedReferenceSourcePath)
+      if (thinkingDir) {
+        isThinkingSource = true
+        return createThinkingReferenceDocument({
+          thinkingDir,
+          projectDir,
+          docsDir,
+          thinkingMdPath: validatedReferenceSourcePath
+        })
+      }
       const ext = path.extname(validatedReferenceSourcePath).toLowerCase() || '.md'
       const fileName = `${Date.now()}${ext}`
       const targetPath = path.join(docsDir, fileName)
@@ -135,7 +347,10 @@ export function registerSessionHandlers(ctx: IpcContext): void {
       pageCount,
       referenceDocumentPath: sessionReferenceDocumentPath
     })
-    await db.updateSessionMetadata(sessionId, { fontSelection })
+    await db.updateSessionMetadata(sessionId, {
+      fontSelection,
+      ...(isThinkingSource ? { source: 'thinking' } : {})
+    })
 
     await db.createProject({
       session_id: sessionId,

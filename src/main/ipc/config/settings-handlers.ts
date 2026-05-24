@@ -19,8 +19,10 @@ const readGlobalTimeouts = (
     ])
   ) as Record<ConfigurableModelTimeoutProfile, number>
 
-const normalizeProvider = (provider: unknown): 'anthropic' | 'openai' =>
-  provider === 'anthropic' ? 'anthropic' : 'openai'
+const VALID_PROVIDERS = ['anthropic', 'openai', 'google'] as const
+type Provider = (typeof VALID_PROVIDERS)[number]
+const normalizeProvider = (provider: unknown): Provider =>
+  VALID_PROVIDERS.includes(provider as Provider) ? (provider as Provider) : 'openai'
 
 export function registerSettingsHandlers(ctx: IpcContext): void {
   const { mainWindow, db, encryptApiKey, decryptApiKey } = ctx
