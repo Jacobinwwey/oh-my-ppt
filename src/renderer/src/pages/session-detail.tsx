@@ -27,9 +27,11 @@ import {
 import { MessagePanel } from '../components/session-detail/MessagePanel'
 import { PageSidebar } from '../components/session-detail/PageSidebar'
 import { PreviewStage } from '../components/session-detail/PreviewStage'
+import { PreviewToolbar } from '../components/session-detail/PreviewToolbar'
 import { ElementInspectorPanel } from '../components/session-detail/ElementInspectorPanel'
 import { SessionToolbar } from '../components/session-detail/SessionToolbar'
 import { AssetPickerDialog } from '../components/session-detail/AssetPickerDialog'
+import { SpeechScriptDrawer } from '../components/session-detail/SpeechScriptDrawer'
 import type { ElementEditDraft } from '../components/session-detail/ElementInspectorPanel'
 import type { ChatType, SessionPreviewPage } from '../components/session-detail/types'
 import { useSessionStore, useGenerateStore } from '../store'
@@ -37,6 +39,7 @@ import { useSessionDetailUiStore } from '../store/sessionDetailStore'
 import { useEditHistoryStore } from '../store/editHistoryStore'
 import type { GenerateChunkEvent } from '@shared/generation.js'
 import type { HistoryVersion } from '@shared/history.js'
+import type { SpeechConfig } from '@shared/speech'
 import { useToastStore } from '../store'
 import { getEditorGate } from '../lib/sessionMetadata'
 import { useT } from '../i18n'
@@ -172,6 +175,12 @@ export function SessionDetailPage(): React.JSX.Element {
   const assetPickerOpen = useSessionDetailUiStore((state) => state.assetPickerOpen)
   const assetPickerType = useSessionDetailUiStore((state) => state.assetPickerType)
   const setAssetPickerOpen = useSessionDetailUiStore((state) => state.setAssetPickerOpen)
+  const speechScriptDialogOpen = useSessionDetailUiStore((state) => state.speechScriptDialogOpen)
+  const setSpeechScriptDialogOpen = useSessionDetailUiStore((state) => state.setSpeechScriptDialogOpen)
+  const speechConfig = useSessionDetailUiStore((state) => state.speechConfig)
+  const setSpeechConfig = useSessionDetailUiStore((state) => state.setSpeechConfig)
+  const isGeneratingSpeechScript = useSessionDetailUiStore((state) => state.isGeneratingSpeechScript)
+  const speechProgress = useSessionDetailUiStore((state) => state.speechProgress)
   const setAddPageDialogOpen = useSessionDetailUiStore((state) => state.setAddPageDialogOpen)
   const setIsAddingPage = useSessionDetailUiStore((state) => state.setIsAddingPage)
   const activeChatRef = useRef<{ chatType: ChatType; pageId?: string }>({ chatType: 'page' })
@@ -506,6 +515,15 @@ export function SessionDetailPage(): React.JSX.Element {
     }
   }, [addMessage, id, updateProgress])
 
+  useEffect(() => {
+    if (!id) return
+    const unsubscribe = ipc.onSpeechProgress((payload) => {
+      if (payload.sessionId !== id) return
+      useSessionDetailUiStore.getState().setSpeechProgress({ current: payload.current, total: payload.total })
+    })
+    return () => unsubscribe()
+  }, [id])
+
   const isSupportedImageFile = (file: File): boolean => {
     if (file.type.startsWith('image/')) return true
     return /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name)
@@ -706,6 +724,8 @@ export function SessionDetailPage(): React.JSX.Element {
         latestPages[Math.min(insertAfter, Math.max(latestPages.length - 1, 0))] ||
         latestPages[latestPages.length - 1]
       targetSelection = (addedPage || fallbackPage)?.id ?? null
+      // Only clear script on success — a new page invalidates the existing script
+      if (id) void ipc.clearSpeechScript(id).catch((err) => console.warn('[speech] clearSpeechScript failed', err))
     } catch (err) {
       const message = err instanceof Error ? err.message : t('sessionDetail.addPageFailed')
       toastError(message)
@@ -730,6 +750,7 @@ export function SessionDetailPage(): React.JSX.Element {
       useGenerateStore.getState().setPages(result.generatedPages)
       useSessionDetailUiStore.getState().setSelectedPageId(result.selectedPageId)
       useSessionDetailUiStore.getState().bumpPreviewKey()
+      void ipc.clearSpeechScript(id).catch((err) => console.warn('[speech] clearSpeechScript failed', err))
     } catch (error) {
       toastError(error instanceof Error ? error.message : t('pageManagement.reorderFailed'))
     } finally {
@@ -755,6 +776,7 @@ export function SessionDetailPage(): React.JSX.Element {
       useSessionDetailUiStore.getState().setSelectedPageId(result.selectedPageId)
       useSessionDetailUiStore.getState().bumpPreviewKey()
       setDeleteConfirmPage(null)
+      void ipc.clearSpeechScript(id).catch((err) => console.warn('[speech] clearSpeechScript failed', err))
     } catch (error) {
       toastError(error instanceof Error ? error.message : t('pageManagement.deleteFailed'))
     } finally {
@@ -800,6 +822,33 @@ export function SessionDetailPage(): React.JSX.Element {
     const indexPath = basePath.replace(/[^/\\]+\.html$/i, 'index.html')
     const pageHash = selectedPage?.id || normalizedOrderedPages[0]?.id
     await ipc.openInBrowser(indexPath, pageHash ? `#${pageHash}` : undefined, id || undefined)
+  }
+
+  const handleOpenSpeechDialog = (): void => {
+    useSessionDetailUiStore.getState().setSpeechScriptDialogOpen(true)
+  }
+
+  const handleDoGenerateSpeechScript = async (config: SpeechConfig): Promise<void> => {
+    const detailState = useSessionDetailUiStore.getState()
+    if (!id || detailState.isGeneratingSpeechScript) return
+    detailState.setIsGeneratingSpeechScript(true)
+    detailState.setSpeechProgress(null)
+    const currentPageId = selectedPage?.id
+    try {
+      const result = await ipc.generateSpeechScript(id, {
+        ...config,
+        currentPageId: config.scope === 'single' ? currentPageId : undefined
+      })
+      if (!result.success) {
+        toastError(t('sessionDetail.speechScriptError'))
+      }
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : t('sessionDetail.speechScriptError'))
+    } finally {
+      const s = useSessionDetailUiStore.getState()
+      s.setIsGeneratingSpeechScript(false)
+      s.setSpeechProgress(null)
+    }
   }
 
   const handleExportPdf = async (): Promise<void> => {
@@ -1102,13 +1151,16 @@ export function SessionDetailPage(): React.JSX.Element {
       snapshot.dragEdits.length > 0 ||
       snapshot.textEdits.length > 0 ||
       snapshot.propertyEdits.length > 0 ||
-      snapshot.deletes.length > 0
+      snapshot.deletes.length > 0 ||
+      snapshot.addElements.length > 0
     editHistory.clearPage(selectedPage.pageId)
     previewIframeRef.current?.clearEditModeSelection()
     setTextSelection(null)
     setTextDraft(EMPTY_ELEMENT_DRAFT)
-    setPreviewRefreshKey((key) => key + 1)
     useSessionDetailUiStore.getState().setInteractionMode('preview')
+    if (hadPending) {
+      setPreviewRefreshKey((key) => key + 1)
+    }
     if (hadPending) toastInfo(t('sessionDetail.discardedAdjustments'))
   }
 
@@ -1628,71 +1680,93 @@ export function SessionDetailPage(): React.JSX.Element {
             onToggleCollapsed={toggleSidebarCollapsed}
           />
 
-          <PreviewStage
-            ref={previewIframeRef}
-            selectedPage={selectedPage}
-            sessionTitle={currentSession?.title}
-            isGenerating={isGenerating}
-            progressLabel={progress?.label}
-            previewRefreshKey={previewRefreshKey}
-            isSavingEdits={isSavingEdits}
-            canUndo={editHistory.canUndo()}
-            canRedo={editHistory.canRedo()}
-            hasPendingEdits={
-              selectedPage
-                ? (() => {
-                    const s = editHistory.getSnapshotForPage(selectedPage.pageId)
-                    return (
-                      s.dragEdits.length > 0 ||
-                      s.textEdits.length > 0 ||
-                      s.propertyEdits.length > 0 ||
-                      s.deletes.length > 0 ||
-                      s.addElements.length > 0
-                    )
-                  })()
-                : false
-            }
-            onElementMoved={handleElementMoved}
-            onElementSelected={handleElementSelected}
-            onCancelTextEdit={handleCancelTextEdit}
-            onUndo={handleUndo}
-            onRedo={handleRedo}
-            onReplayPendingEdits={replayPendingEdits}
-            onSaveAllEdits={() => void handleSaveAllEdits()}
-            onDiscardAllEdits={handleDiscardAllEdits}
-            onAddFromLibrary={(type) => setAssetPickerOpen(true, type)}
-            onAddFromLocal={(type) => void handleUploadAndAdd(type)}
-            onDeleteRequest={(selector) => {
-              setPendingDeleteSelector(selector)
-              setDeleteConfirmOpen(true)
-            }}
-          />
-
-          {interactionMode === 'edit' && textSelection && (
-            <ElementInspectorPanel
-              selection={textSelection}
-              draft={textDraft}
-              onDraftChange={handleTextDraftChange}
-              onClose={handleCancelTextEdit}
-              onCopy={handleCopyElement}
-              onDelete={handleDeleteElement}
-            />
-          )}
-
-          {interactionMode === 'ai-inspect' && (
-            <MessagePanel
-              selectedPageExists={Boolean(selectedPage?.pageId)}
-              selectedPageNumber={selectedPage?.pageNumber}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <PreviewToolbar
+              selectedPage={selectedPage}
               isGenerating={isGenerating}
-              progress={progress}
-              error={error}
-              onDropFiles={(files) => void uploadFiles(files)}
-              onChooseAssets={(assetType) => void handleChooseAssets(assetType)}
-              onSend={() => void handleSend()}
-              onCancel={() => void handleCancel()}
-              cleanMessageContent={cleanMessageContent}
+              isSavingEdits={isSavingEdits}
+              canUndo={editHistory.canUndo()}
+              canRedo={editHistory.canRedo()}
+              hasPendingEdits={
+                selectedPage
+                  ? (() => {
+                      const s = editHistory.getSnapshotForPage(selectedPage.pageId)
+                      return (
+                        s.dragEdits.length > 0 ||
+                        s.textEdits.length > 0 ||
+                        s.propertyEdits.length > 0 ||
+                        s.deletes.length > 0 ||
+                        s.addElements.length > 0
+                      )
+                    })()
+                  : false
+              }
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onSaveAllEdits={() => void handleSaveAllEdits()}
+              onDiscardAllEdits={handleDiscardAllEdits}
+              onAddFromLibrary={(type) => setAssetPickerOpen(true, type)}
+              onAddFromLocal={(type) => void handleUploadAndAdd(type)}
+              onOpenSpeechScript={handleOpenSpeechDialog}
             />
-          )}
+            <div className="flex min-h-0 flex-1">
+              <PreviewStage
+                ref={previewIframeRef}
+                selectedPage={selectedPage}
+                sessionTitle={currentSession?.title}
+                isGenerating={isGenerating}
+                progressLabel={progress?.label}
+                previewRefreshKey={previewRefreshKey}
+                onElementMoved={handleElementMoved}
+                onElementSelected={handleElementSelected}
+                onCancelTextEdit={handleCancelTextEdit}
+                onDiscardAllEdits={handleDiscardAllEdits}
+                onReplayPendingEdits={replayPendingEdits}
+                onDeleteRequest={(selector) => {
+                  setPendingDeleteSelector(selector)
+                  setDeleteConfirmOpen(true)
+                }}
+              />
+              {speechScriptDialogOpen && id && (
+                <SpeechScriptDrawer
+                  sessionId={id}
+                  isGenerating={isGeneratingSpeechScript}
+                  speechProgress={speechProgress}
+                  speechConfig={speechConfig}
+                  onConfigChange={setSpeechConfig}
+                  onGenerate={(config) => void handleDoGenerateSpeechScript(config)}
+                  onClose={() => setSpeechScriptDialogOpen(false)}
+                  currentPageNumber={selectedPage?.pageNumber}
+                  currentPageTitle={selectedPage?.title || undefined}
+                />
+              )}
+              {interactionMode === 'edit' && textSelection && (
+                <ElementInspectorPanel
+                  selection={textSelection}
+                  draft={textDraft}
+                  onDraftChange={handleTextDraftChange}
+                  onClose={handleCancelTextEdit}
+                  onCopy={handleCopyElement}
+                  onDelete={handleDeleteElement}
+                />
+              )}
+              {interactionMode === 'ai-inspect' && (
+                <MessagePanel
+                  selectedPageExists={Boolean(selectedPage?.pageId)}
+                  selectedPageNumber={selectedPage?.pageNumber}
+                  isGenerating={isGenerating}
+                  progress={progress}
+                  error={error}
+                  onDropFiles={(files) => void uploadFiles(files)}
+                  onChooseAssets={(assetType) => void handleChooseAssets(assetType)}
+                  onSend={() => void handleSend()}
+                  onCancel={() => void handleCancel()}
+                  cleanMessageContent={cleanMessageContent}
+                />
+              )}
+            </div>
+          </div>
+
         </div>
 
         {historyOpen && (
