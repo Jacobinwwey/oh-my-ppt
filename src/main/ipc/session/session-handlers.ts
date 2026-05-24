@@ -83,11 +83,18 @@ const rewriteThinkingSourceForSession = (
   return rewritten
 }
 
-const copyFileIfExists = async (sourcePath: string, targetPath: string): Promise<void> => {
-  if (!fs.existsSync(sourcePath)) return
-  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true })
-  await fs.promises.copyFile(sourcePath, targetPath)
-}
+const rewriteThinkingWorkspaceArchiveContent = (
+  content: string,
+  thinkingDir: string,
+  archivedThinkingDir: string
+): string =>
+  content
+    .split(path.resolve(thinkingDir))
+    .join(path.resolve(archivedThinkingDir))
+    .split(path.join(thinkingDir, 'assets'))
+    .join(path.join(archivedThinkingDir, 'assets'))
+    .split(path.join(thinkingDir, 'sources'))
+    .join(path.join(archivedThinkingDir, 'sources'))
 
 const copyDirectoryIfExists = async (sourceDir: string, targetDir: string): Promise<void> => {
   if (!fs.existsSync(sourceDir)) return
@@ -104,16 +111,43 @@ const copyDirectoryIfExists = async (sourceDir: string, targetDir: string): Prom
   }
 }
 
+const isRewriteableThinkingArchiveFile = (filePath: string): boolean => {
+  const ext = path.extname(filePath).toLowerCase()
+  return new Set(['.md', '.txt', '.text', '.csv', '.json']).has(ext)
+}
+
+const rewriteThinkingWorkspaceArchivePaths = async (
+  archiveDir: string,
+  thinkingDir: string,
+  archivedThinkingDir: string
+): Promise<void> => {
+  if (!fs.existsSync(archiveDir)) return
+  const entries = await fs.promises.readdir(archiveDir, { withFileTypes: true })
+  await Promise.all(
+    entries.map(async (entry) => {
+      const filePath = path.join(archiveDir, entry.name)
+      if (entry.isDirectory()) {
+        await rewriteThinkingWorkspaceArchivePaths(filePath, thinkingDir, archivedThinkingDir)
+        return
+      }
+      if (!entry.isFile() || !isRewriteableThinkingArchiveFile(filePath)) return
+      const content = await fs.promises.readFile(filePath, 'utf-8')
+      const rewritten = rewriteThinkingWorkspaceArchiveContent(content, thinkingDir, archivedThinkingDir)
+      if (rewritten !== content) {
+        await fs.promises.writeFile(filePath, rewritten, 'utf-8')
+      }
+    })
+  )
+}
+
 const copyThinkingWorkspaceToSession = async (thinkingDir: string, projectDir: string): Promise<void> => {
   const targetDir = path.join(projectDir, 'thinking')
+  if (fs.existsSync(targetDir)) {
+    await fs.promises.rm(targetDir, { recursive: true, force: true })
+  }
   await fs.promises.mkdir(targetDir, { recursive: true })
-  await Promise.all([
-    copyFileIfExists(path.join(thinkingDir, 'thinking.md'), path.join(targetDir, 'thinking.md')),
-    copyFileIfExists(path.join(thinkingDir, 'context.md'), path.join(targetDir, 'context.md')),
-    copyFileIfExists(path.join(thinkingDir, 'sources.json'), path.join(targetDir, 'sources.json')),
-    copyDirectoryIfExists(path.join(thinkingDir, 'sources'), path.join(targetDir, 'sources')),
-    copyDirectoryIfExists(path.join(thinkingDir, 'assets'), path.join(targetDir, 'assets'))
-  ])
+  await copyDirectoryIfExists(thinkingDir, targetDir)
+  await rewriteThinkingWorkspaceArchivePaths(targetDir, thinkingDir, targetDir)
 }
 
 const createThinkingReferenceDocument = async (args: {
