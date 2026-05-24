@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, type ReactElement } from 'react'
+import { useState, useRef, useEffect, useMemo, type KeyboardEvent, type ReactElement } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useT } from '@renderer/i18n'
 import { useToastStore } from '@renderer/store'
@@ -150,6 +150,7 @@ export function ThinkingChat({
   const [thinkingExpanded, setThinkingExpanded] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const composingRef = useRef(false)
   const visibleThinkingSteps = useMemo(
     () => thinkingSteps.filter((step) => step.type === 'tool_call' && step.summary.trim()),
     [thinkingSteps]
@@ -174,8 +175,9 @@ export function ThinkingChat({
     setInput('')
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent): void => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (composingRef.current || e.nativeEvent.isComposing) return
       e.preventDefault()
       handleSend()
     }
@@ -430,6 +432,12 @@ export function ThinkingChat({
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onCompositionStart={() => {
+                composingRef.current = true
+              }}
+              onCompositionEnd={() => {
+                composingRef.current = false
+              }}
               onKeyDown={handleKeyDown}
               disabled={loading}
             />

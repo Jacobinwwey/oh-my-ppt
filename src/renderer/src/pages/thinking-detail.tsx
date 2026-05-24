@@ -7,7 +7,6 @@ import { ThinkingChat } from '../components/thinking/ThinkingChat'
 import { ThinkingPageCards } from '../components/thinking/ThinkingPageCards'
 import { GenerationConfirmDialog } from '../components/thinking/GenerationConfirmDialog'
 import { useT } from '../i18n'
-import { FileText } from 'lucide-react'
 import type {
   ThinkingChatMessage,
   ThinkingSource,
@@ -220,20 +219,20 @@ export function ThinkingDetailPage(): ReactElement {
           <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
             {t('thinking.eyebrow')}
           </p>
-          <h1 className="organic-serif mt-2 truncate text-[32px] font-semibold leading-none text-[#3e4a32]">
-            {t('thinking.title')}
-          </h1>
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-[#7a806c]">
-            <FileText className="h-3.5 w-3.5" />
+          <h1 className="organic-serif mt-2 flex min-w-0 items-baseline gap-3 text-[32px] font-semibold leading-none text-[#3e4a32]">
+            <span className="truncate">{t('thinking.title')}</span>
             <button
               type="button"
-              className="rounded-full px-2 py-0.5 font-mono transition-colors hover:bg-[#d4e4c1] hover:text-[#3e4a32]"
+              className="min-w-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-normal leading-none text-[#7a806c] transition-colors hover:bg-[#d4e4c1] hover:text-[#3e4a32]"
               onClick={() => void handleRevealWorkspace()}
               title={t('thinking.revealWorkspace')}
             >
               {thinkingId}
             </button>
-          </div>
+          </h1>
+          <p className="mt-2 max-w-3xl text-[12px] leading-relaxed text-muted-foreground">
+            {t('thinking.description')}
+          </p>
         </div>
       </div>
 
