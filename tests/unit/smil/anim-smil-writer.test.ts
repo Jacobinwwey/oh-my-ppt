@@ -1,16 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   buildSlideTiming,
   buildSlideTransition,
   mapTransitionToPptx,
-  resetSmilNodeId,
-  type SmilSlideTiming,
   type SmilElementAnim
 } from '../../../src/main/utils/anim-smil-writer'
-
-beforeEach(() => {
-  resetSmilNodeId(1000)
-})
 
 function makeAnim(overrides: Partial<SmilElementAnim> = {}): SmilElementAnim {
   return {
@@ -136,13 +130,13 @@ describe('buildSlideTiming', () => {
     expect(tooSlow).toContain('dur="5000"')
   })
 
-  it('generates unique node IDs per call', () => {
+  it('generates unique node IDs per call with different startNodeId', () => {
     const first = buildSlideTiming({
       elements: [makeAnim({ spid: 1 })]
-    })
+    }, 1000)
     const second = buildSlideTiming({
-      elements: [makeAnim({ spid: 2 })]
-    })
+      elements: [makeAnim({ spid: 1 })]
+    }, 2000)
     expect(first).not.toBe(second)
     expect(first.match(/id="(\d+)"/g)).not.toEqual(second.match(/id="(\d+)"/g))
   })

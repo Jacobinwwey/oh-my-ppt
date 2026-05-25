@@ -56,17 +56,6 @@ const SMIL_PRESET: Record<
   'slide-left':{ presetID: 7,  presetClass: 'entr', presetSubtype: 2 }
 }
 
-let _nextNodeId = 1000
-
-export function resetSmilNodeId(startAt = 1000): void {
-  _nextNodeId = startAt
-}
-
-function nextNodeId(): number {
-  _nextNodeId += 1
-  return _nextNodeId
-}
-
 function buildAnimEffectAttrs(anim: SmilElementAnim): string {
   const preset = SMIL_PRESET[anim.type]
   if (!preset) return ''
@@ -87,17 +76,23 @@ function buildAnimEffectAttrs(anim: SmilElementAnim): string {
  * elements are generated inside a <p:childTnLst> — one for the motion
  * path, one for the fade filter.
  */
-export function buildSlideTiming(timing: SmilSlideTiming): string {
+export function buildSlideTiming(timing: SmilSlideTiming, startNodeId = 1000): string {
   if (!timing.elements || timing.elements.length === 0) return ''
 
-  const nodeId = nextNodeId()
+  let nodeId = startNodeId
+  const nextId = (): number => {
+    nodeId += 1
+    return nodeId
+  }
+
+  const seqNodeId = nextId()
   const children = [...timing.elements]
     .sort((a, b) => a.order - b.order)
     .map((anim) => {
       const preset = SMIL_PRESET[anim.type]
       if (!preset) return ''
 
-      const animNodeId = nextNodeId()
+      const animNodeId = nextId()
       const durMs = Math.max(100, Math.min(5000, anim.duration))
       const delayMs = Math.max(0, anim.delay)
 
@@ -107,7 +102,7 @@ export function buildSlideTiming(timing: SmilSlideTiming): string {
       // Optional filter: layered fade on top of fly motion
       const filterChunk = preset.filter
         ? `\n                  <p:animEffect transition="in" filter="${preset.filter}">` +
-          `\n                    <p:cTn id="${nextNodeId()}" dur="${durMs}">` +
+          `\n                    <p:cTn id="${nextId()}" dur="${durMs}">` +
           '\n                      <p:stCondLst>' +
           `\n                        <p:cond delay="${delayMs}"/>` +
           '\n                      </p:stCondLst>' +
@@ -137,7 +132,7 @@ export function buildSlideTiming(timing: SmilSlideTiming): string {
   return `<p:timing>
     <p:tnLst>
       <p:seq concurrent="0" nextAc="seek">
-        <p:cTn id="${nodeId}" dur="indefinite">
+        <p:cTn id="${seqNodeId}" dur="indefinite">
           <p:childTnLst>
 ${children}
           </p:childTnLst>
