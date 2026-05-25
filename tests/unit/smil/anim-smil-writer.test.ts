@@ -269,6 +269,18 @@ describe('mapTransitionToPptx', () => {
     expect(mapTransitionToPptx('zoom')).toBe('dissolve')
   })
 
+  it('maps cover to cover', () => {
+    expect(mapTransitionToPptx('cover')).toBe('cover')
+  })
+
+  it('maps uncover to uncover', () => {
+    expect(mapTransitionToPptx('uncover')).toBe('uncover')
+  })
+
+  it('maps dissolve to dissolve', () => {
+    expect(mapTransitionToPptx('dissolve')).toBe('dissolve')
+  })
+
   it('falls back to fade for unknown types', () => {
     expect(mapTransitionToPptx('unknown-type')).toBe('fade')
   })

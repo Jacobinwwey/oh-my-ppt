@@ -186,6 +186,9 @@ export function mapTransitionToPptx(
     'slide-up': 'push',
     push: 'push',
     wipe: 'wipe',
+    cover: 'cover',
+    uncover: 'uncover',
+    dissolve: 'dissolve',
     zoom: 'dissolve'
   }
   if (type === 'none') return 'none'
