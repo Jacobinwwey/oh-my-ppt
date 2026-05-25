@@ -1,10 +1,10 @@
 (function initPptRuntime(global) {
   if (!global || typeof global !== "object") return;
-  // @ohmyppt-ppt-runtime:arcsin1:v2.0.11
+  // @ohmyppt-ppt-runtime:arcsin1:v2.0.12
 
   var ppt = global.PPT && typeof global.PPT === "object" ? global.PPT : (global.PPT = {});
-  if (ppt.__runtimeVersion === "2.0.11") return;
-  ppt.__runtimeVersion = "2.0.11";
+  if (ppt.__runtimeVersion === "2.0.12") return;
+  ppt.__runtimeVersion = "2.0.12";
 
   function resolveSearchParams() {
     try {
@@ -303,6 +303,16 @@
     return normalizeChartScalar(value);
   }
 
+  function isLikelyCategoryScale(config, scaleKey, scale) {
+    if (scale && scale.type === "category") return true;
+    if (scale && scale.type) return false;
+    var data = config && config.data && typeof config.data === "object" ? config.data : null;
+    if (!data || !Array.isArray(data.labels)) return false;
+    var options = config && config.options && typeof config.options === "object" ? config.options : null;
+    var defaultCategoryAxis = options && options.indexAxis === "y" ? "y" : "x";
+    return scaleKey === defaultCategoryAxis;
+  }
+
   function ensureChartNumberFormatters(config) {
     if (!config || typeof config !== "object") return;
     var options = config.options && typeof config.options === "object" ? config.options : (config.options = {});
@@ -313,9 +323,18 @@
         if (!scale || typeof scale !== "object") return;
         var ticks = scale.ticks && typeof scale.ticks === "object" ? scale.ticks : (scale.ticks = {});
         if (typeof ticks.callback !== "function") {
-          ticks.callback = function (value) {
-            return typeof value === "number" ? formatChartNumber(value, 6) : String(value);
-          };
+          if (isLikelyCategoryScale(config, scaleKey, scale)) {
+            ticks.callback = function (value) {
+              if (this && typeof this.getLabelForValue === "function") {
+                return this.getLabelForValue(value);
+              }
+              return String(value == null ? "" : value);
+            };
+          } else {
+            ticks.callback = function (value) {
+              return typeof value === "number" ? formatChartNumber(value, 6) : String(value);
+            };
+          }
         }
       });
     }

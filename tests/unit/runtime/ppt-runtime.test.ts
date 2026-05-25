@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  *
- * Unit tests for ppt-runtime.js v2.0.11:
+ * Unit tests for ppt-runtime.js v2.0.12:
  *   - PPT.stopAnimations() / PPT.resumeAnimations()
  *   - PPT.clicks state machine (advance returns boolean, _dispatch exact match)
  *   - PPT.scanDataAnim() / PPT.executeDataAnim() (routed through PPT.animate)
@@ -503,9 +503,56 @@ describe('PPT.animate tracks animations for stop/resume', () => {
   })
 })
 
+describe('PPT.createChart tick formatters', () => {
+  it('keeps category axis labels instead of displaying numeric indexes', () => {
+    const { PPT } = setupRuntime()
+    document.body.innerHTML = '<canvas id="chart"></canvas>'
+
+    let capturedConfig: Record<string, any> | null = null
+    const previousChart = (globalThis as Record<string, unknown>).Chart
+    ;(globalThis as Record<string, unknown>).Chart = vi.fn(function (this: Record<string, unknown>, target: HTMLCanvasElement, config: Record<string, any>) {
+      this.canvas = target
+      this.resize = vi.fn()
+      this.update = vi.fn()
+      capturedConfig = config
+    })
+
+    try {
+      ;(PPT.createChart as Function)(document.getElementById('chart'), {
+        type: 'line',
+        data: {
+          labels: ['2000', '2005', '2010'],
+          datasets: [{ data: [21.5, 20.3, 19.2] }]
+        },
+        options: {
+          scales: {
+            x: { type: 'category', ticks: {} },
+            y: { ticks: {} }
+          }
+        }
+      })
+
+      const xCallback = capturedConfig?.options.scales.x.ticks.callback
+      const yCallback = capturedConfig?.options.scales.y.ticks.callback
+      const categoryScale = {
+        getLabelForValue: (value: number) => capturedConfig?.data.labels[value]
+      }
+
+      expect(xCallback.call(categoryScale, 1)).toBe('2005')
+      expect(yCallback(20.300000000000004)).toBe('20.3')
+    } finally {
+      if (previousChart === undefined) {
+        delete (globalThis as Record<string, unknown>).Chart
+      } else {
+        ;(globalThis as Record<string, unknown>).Chart = previousChart
+      }
+    }
+  })
+})
+
 describe('Version guard', () => {
-  it('runtime version is 2.0.11', () => {
+  it('runtime version is 2.0.12', () => {
     const PPT = setupRuntime().PPT
-    expect(PPT.__runtimeVersion).toBe('2.0.11')
+    expect(PPT.__runtimeVersion).toBe('2.0.12')
   })
 })
