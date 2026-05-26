@@ -7,6 +7,7 @@ import log from 'electron-log/main.js'
 import type { IpcContext } from '../ipc/context'
 import { buildProjectIndexHtml, extractPagesDataFromIndex, type DeckPageFile } from '../ipc/engine/template'
 import { recordHistoryOperationStrict } from '../history/git-history-service'
+import { createDefaultDesignContract } from '../utils/design-contract'
 
 const MAX_IMPORT_FILE_BYTES = 300 * 1024 * 1024
 const MAX_EXTRACTED_BYTES = 600 * 1024 * 1024
@@ -551,6 +552,7 @@ export async function importSessionFile(
       provider: 'import',
       model: 'session-file-import'
     })
+    await ctx.db.updateSessionDesignContract(sessionId, createDefaultDesignContract())
     const projectId = await ctx.db.createProject({
       session_id: sessionId,
       title,
