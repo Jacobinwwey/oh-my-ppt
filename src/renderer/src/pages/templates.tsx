@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CircleAlert, FileText, LayoutTemplate, Loader2, RefreshCw } from 'lucide-react'
+import { CircleAlert, FileText, FileUp, LayoutTemplate, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/Dialog'
 import { Input, Textarea } from '../components/ui/Input'
@@ -14,6 +14,8 @@ const MIN_PAGE_COUNT = 1
 const MAX_PAGE_COUNT = 40
 const MAX_DOCUMENT_SIZE_MB = 10
 const MAX_DOCUMENT_SIZE_BYTES = MAX_DOCUMENT_SIZE_MB * 1024 * 1024
+const MAX_PPTX_SIZE_MB = 80
+const MAX_PPTX_SIZE_BYTES = MAX_PPTX_SIZE_MB * 1024 * 1024
 const DIRECT_CREATE_DONE_DELAY_MS = 500
 
 const resolvePageCount = (raw: string, fallback: number): number => {
@@ -58,6 +60,7 @@ export function TemplatesPage(): React.JSX.Element {
     fetchTemplates,
     createEditableSessionFromTemplate,
     createSessionFromTemplate,
+    importPptxAsTemplate,
     updateTemplateMetadata,
     deleteTemplate
   } = useTemplateStore()
@@ -78,6 +81,9 @@ export function TemplatesPage(): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const documentInputRef = useRef<HTMLInputElement | null>(null)
+  const pptxInputRef = useRef<HTMLInputElement | null>(null)
+  const [importingPptxTemplate, setImportingPptxTemplate] = useState(false)
+  const [pptxTemplateProgress, setPptxTemplateProgress] = useState<string | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -92,6 +98,12 @@ export function TemplatesPage(): React.JSX.Element {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    return ipc.onTemplatePptxImportProgress((payload) => {
+      setPptxTemplateProgress(`${payload.label}${payload.progress ? ` · ${payload.progress}%` : ''}`)
+    })
+  }, [])
 
   const openUseDialog = (template: TemplateListItem): void => {
     setUseTarget(template)
@@ -124,6 +136,66 @@ export function TemplatesPage(): React.JSX.Element {
       }
     })
     return false
+  }
+
+  const handleImportPptxTemplateClick = async (): Promise<void> => {
+    if (importingPptxTemplate) return
+    if (!(await ensureUploadPrerequisites())) return
+    pptxInputRef.current?.click()
+  }
+
+  const handlePptxTemplateFilesSelected = async (files: FileList | null): Promise<void> => {
+    const selectedFiles = Array.from(files || [])
+    if (pptxInputRef.current) {
+      pptxInputRef.current.value = ''
+    }
+    if (selectedFiles.length === 0) return
+    if (selectedFiles.length > 1) {
+      error(t('templates.pptxSingleOnlyTitle'), { description: t('templates.pptxSingleOnly') })
+      return
+    }
+    const selectedFile = selectedFiles[0]
+    if (!/\.pptx$/i.test(selectedFile.name)) {
+      error(t('templates.unsupportedPptxTitle'), { description: t('templates.unsupportedPptx') })
+      return
+    }
+    if (selectedFile.size > MAX_PPTX_SIZE_BYTES) {
+      error(t('templates.pptxTooLargeTitle'), {
+        description: t('templates.pptxTooLarge', { maxSize: MAX_PPTX_SIZE_MB })
+      })
+      return
+    }
+    const filePath = window.electron?.getPathForFile?.(selectedFile) || ''
+    if (!filePath) {
+      error(t('templates.pptxPathFailedTitle'), { description: t('templates.pptxPathFailed') })
+      return
+    }
+
+    setImportingPptxTemplate(true)
+    setPptxTemplateProgress(t('templates.pptxTemplatePreparing'))
+    try {
+      const result = await importPptxAsTemplate({
+        filePath,
+        name: selectedFile.name.replace(/\.pptx$/i, '')
+      })
+      await wait(DIRECT_CREATE_DONE_DELAY_MS)
+      success(t('templates.pptxTemplateImported'), {
+        description:
+          result.warnings.length > 0
+            ? t('templates.pptxTemplateImportedWithWarnings', {
+                pageCount: result.pageCount,
+                warningCount: result.warnings.length
+              })
+            : t('templates.pptxTemplateImportedDescription', { pageCount: result.pageCount })
+      })
+    } catch (err) {
+      error(t('templates.pptxTemplateImportFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
+      })
+    } finally {
+      setImportingPptxTemplate(false)
+      setPptxTemplateProgress(null)
+    }
   }
 
   const handleParseDocumentClick = async (): Promise<void> => {
@@ -172,7 +244,6 @@ export function TemplatesPage(): React.JSX.Element {
       const result = await ipc.parseDocumentPlan({
         files: payloadFiles,
         topic: title.trim() || useTarget.name,
-        pageCount: resolvePageCount(pageCount, useTarget.pageCount || 5),
         existingBrief: brief.trim()
       })
       setTitle(result.topic || title || useTarget.name)
@@ -306,6 +377,19 @@ export function TemplatesPage(): React.JSX.Element {
             <span className="rounded-md border border-[#d6c08d]/70 bg-[#fff7e8] px-2.5 py-1.5 text-xs font-medium text-[#7c6a4c]">
               {t('templates.count', { count: templates.length })}
             </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleImportPptxTemplateClick()}
+              disabled={loading || importingPptxTemplate}
+            >
+              {importingPptxTemplate ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileUp className="mr-2 h-4 w-4" />
+              )}
+              {t('templates.importPptx')}
+            </Button>
             <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               {t('templates.refresh')}
@@ -313,6 +397,14 @@ export function TemplatesPage(): React.JSX.Element {
           </div>
         </div>
       </div>
+
+      <input
+        ref={pptxInputRef}
+        type="file"
+        accept=".pptx"
+        className="hidden"
+        onChange={(event) => void handlePptxTemplateFilesSelected(event.target.files)}
+      />
 
       {templates.length === 0 ? (
         <TemplateEmptyState />
@@ -342,6 +434,24 @@ export function TemplatesPage(): React.JSX.Element {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[#34402c]">{t('templates.creatingEditable')}</p>
                 <p className="mt-1 truncate text-xs text-muted-foreground">{directCreatingTemplateName}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {importingPptxTemplate ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2d261f]/28 backdrop-blur-[2px]">
+          <div className="w-[min(380px,calc(100vw-32px))] rounded-xl border border-[#ded2bd]/80 bg-[#fffdf8] px-5 py-4 shadow-[0_18px_45px_rgba(57,47,36,0.22)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#eef3e7] text-[#5f6b50]">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[#34402c]">{t('templates.importingPptxTemplate')}</p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {pptxTemplateProgress || t('templates.pptxTemplatePreparing')}
+                </p>
               </div>
             </div>
           </div>
@@ -407,7 +517,7 @@ export function TemplatesPage(): React.JSX.Element {
               <LayoutTemplate className="h-4 w-4" />
               {t('templates.useDialogTitle')}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs leading-5">
               {t('templates.useDialogDescription')}
             </DialogDescription>
           </DialogHeader>

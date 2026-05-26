@@ -6,6 +6,7 @@ import {
   createTemplateFromSession,
   deleteTemplate,
   getTemplate,
+  importPptxAsTemplate,
   listTemplates,
   updateTemplateMetadata
 } from './template-service'
@@ -25,6 +26,12 @@ export function registerTemplateHandlers(ctx: IpcContext): void {
 
   ipcMain.handle('templates:createEditableSession', async (_event, payload: unknown) =>
     createEditableSessionFromTemplate(ctx, payload)
+  )
+
+  ipcMain.handle('templates:importPptx', async (event, payload: unknown) =>
+    importPptxAsTemplate(ctx, payload, (progress) => {
+      event.sender.send('templates:importPptx:progress', progress)
+    })
   )
 
   ipcMain.handle('templates:updateMetadata', async (_event, payload: unknown) =>

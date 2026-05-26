@@ -21,6 +21,10 @@ interface TemplateStore {
     templateId: string
     title?: string
   }) => Promise<string>
+  importPptxAsTemplate: (payload: {
+    filePath: string
+    name?: string
+  }) => Promise<{ id: string; pageCount: number; warnings: string[] }>
   updateTemplateMetadata: (payload: {
     templateId: string
     name: string
@@ -59,6 +63,16 @@ export const useTemplateStore = create<TemplateStore>((set, get) => ({
   createEditableSessionFromTemplate: async (payload) => {
     const result = await ipc.createEditableSessionFromTemplate(payload)
     return result.sessionId
+  },
+
+  importPptxAsTemplate: async (payload) => {
+    const result = await ipc.importPptxAsTemplate(payload)
+    await get().fetchTemplates()
+    return {
+      id: result.id,
+      pageCount: result.pageCount,
+      warnings: result.warnings
+    }
   },
 
   updateTemplateMetadata: async (payload) => {

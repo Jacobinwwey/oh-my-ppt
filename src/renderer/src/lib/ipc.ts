@@ -354,6 +354,16 @@ export const ipc = {
       success: true
       sessionId: string
     }>,
+  importPptxAsTemplate: (payload: {
+    filePath: string
+    name?: string
+  }) =>
+    getIpc().invoke('templates:importPptx', payload) as Promise<{
+      success: true
+      id: string
+      pageCount: number
+      warnings: string[]
+    }>,
   updateTemplateMetadata: (payload: {
     templateId: string
     name: string
@@ -621,6 +631,15 @@ export const ipc = {
   },
   onPptxImportProgress: (callback: (payload: PptxImportProgressPayload) => void): (() => void) => {
     const channel = 'pptx:import:progress'
+    const handler = (_event: unknown, payload: unknown): void =>
+      callback(payload as PptxImportProgressPayload)
+    getIpc().on(channel, handler)
+    return () => getIpc().removeListener(channel, handler)
+  },
+  onTemplatePptxImportProgress: (
+    callback: (payload: PptxImportProgressPayload) => void
+  ): (() => void) => {
+    const channel = 'templates:importPptx:progress'
     const handler = (_event: unknown, payload: unknown): void =>
       callback(payload as PptxImportProgressPayload)
     getIpc().on(channel, handler)

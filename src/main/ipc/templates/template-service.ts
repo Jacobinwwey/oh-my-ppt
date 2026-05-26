@@ -1,11 +1,17 @@
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import crypto from 'crypto'
 import { LRUCache } from 'lru-cache'
 import type { IpcContext } from '../context'
-import { resolveActiveModelConfig } from '../config/model-config-utils'
+import { resolveActiveModelConfig, resolveGlobalModelTimeouts } from '../config/model-config-utils'
 import { buildProjectIndexHtml, type DeckPageFile } from '../engine/template'
+import { buildDesignContractWithLLM } from '../engine/generate'
 import { parseJsonObject } from '../utils'
+import { importPptxToEditableHtml, type PptxImportProgressPayload } from '../../utils/pptx-importer'
+import { extractStyleFromExistingHtml } from '../../utils/style-pptx-import'
+import { createStyleSkill } from '../../utils/style-skills'
+import { recordHistoryOperationStrict } from '../../history/git-history-service'
 import { copyDirExcluding } from './template-copy'
 import { resolveTemplateDesignContract } from './template-design-contract'
 import {
@@ -42,6 +48,8 @@ const templateListCache = new LRUCache<string, TemplateListItem[]>({
   max: 20,
   ttl: 30 * 1000
 })
+
+const MAX_TEMPLATE_PPTX_SIZE = 80 * 1024 * 1024
 
 function clearTemplateCache(templatesRoot: string, templateId?: string): void {
   templateListCache.delete(`list:${templatesRoot}`)
@@ -388,6 +396,148 @@ export async function createTemplateFromSession(
   return { success: true, id: templateId }
 }
 
+export async function importPptxAsTemplate(
+  ctx: IpcContext,
+  payload: unknown,
+  onProgress?: (progress: PptxImportProgressPayload) => void
+): Promise<{ success: true; id: string; pageCount: number; warnings: string[] }> {
+  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
+  const rawFilePath = typeof record.filePath === 'string' ? record.filePath.trim() : ''
+  const inputName = typeof record.name === 'string' ? record.name.trim() : ''
+  if (!rawFilePath) throw new Error('PPTX 文件路径不能为空')
+
+  const sourcePath = await ctx.resolveExistingFileRealPath(rawFilePath)
+  if (path.extname(sourcePath).toLowerCase() !== '.pptx') {
+    throw new Error('仅支持导入 .pptx 文件')
+  }
+  const stat = await fs.promises.stat(sourcePath)
+  if (stat.size > MAX_TEMPLATE_PPTX_SIZE) {
+    throw new Error('PPTX 文件不能超过 80MB')
+  }
+
+  const originalFileName = path.basename(sourcePath)
+  const title = inputName || path.basename(originalFileName, path.extname(originalFileName)) || '导入的 PPTX 模板'
+  const templatesRoot = await ensureTemplatesRoot()
+  const templateId = createTemplateId()
+  const templateDir = resolveTemplateDir(templatesRoot, templateId)
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ohmyppt-template-pptx-'))
+  const activeModel = await resolveActiveModelConfig(ctx)
+  const modelTimeouts = await resolveGlobalModelTimeouts(ctx)
+
+  try {
+    await ctx.ensureSessionAssets(tempDir)
+    const imported = await importPptxToEditableHtml({
+      filePath: sourcePath,
+      projectDir: tempDir,
+      title,
+      onProgress
+    })
+    if (imported.pages.length === 0) {
+      throw new Error('PPTX 未解析出可用页面')
+    }
+
+    onProgress?.({
+      stage: 'database',
+      progress: 92,
+      label: '正在抽取模板风格',
+      totalPages: imported.pageCount
+    })
+    const styleResult = await extractStyleFromExistingHtml({
+      projectDir: tempDir,
+      pageHtmlPaths: imported.pages.map((page) => path.basename(page.htmlPath)),
+      sourceFilePath: sourcePath,
+      provider: activeModel.provider,
+      apiKey: activeModel.apiKey,
+      model: activeModel.model,
+      baseUrl: activeModel.baseUrl,
+      maxTokens: activeModel.maxTokens,
+      modelTimeoutMs: modelTimeouts.document
+    })
+    const styleId = `style-${createLowercaseId()}`
+    await createStyleSkill({
+      id: styleId,
+      label: styleResult.label,
+      description: styleResult.description,
+      category: styleResult.category,
+      aliases: styleResult.aliases,
+      prompt: styleResult.styleSkill,
+      styleCase: styleResult.styleCase
+    })
+
+    onProgress?.({
+      stage: 'database',
+      progress: 94,
+      label: '正在生成模板设计契约',
+      totalPages: imported.pageCount
+    })
+    const designContract = await buildDesignContractWithLLM({
+      provider: activeModel.provider,
+      apiKey: activeModel.apiKey,
+      model: activeModel.model,
+      baseUrl: activeModel.baseUrl,
+      maxTokens: activeModel.maxTokens,
+      styleId,
+      styleSkillPrompt: styleResult.styleSkill,
+      modelTimeoutMs: modelTimeouts.document,
+      totalPages: imported.pageCount,
+      topic: title
+    })
+
+    onProgress?.({
+      stage: 'database',
+      progress: 96,
+      label: '正在写入模板',
+      totalPages: imported.pageCount
+    })
+
+    await fs.promises.mkdir(templateDir, { recursive: true })
+    await copyDirExcluding(tempDir, templateDir)
+
+    const now = Date.now()
+    const manifest: TemplateManifest = {
+      schemaVersion: 1,
+      id: templateId,
+      name: imported.title || title,
+      description: '',
+      createdAt: now,
+      updatedAt: now,
+      pageCount: imported.pageCount,
+      tags: [],
+      styleId,
+      designContract,
+      pages: imported.pages.map((page, index) => {
+        const relativeHtmlPath = path.relative(tempDir, page.htmlPath).split(path.sep).join('/')
+        return {
+          pageNumber: page.pageNumber || index + 1,
+          pageId: page.pageId,
+          title: page.title || `第 ${index + 1} 页`,
+          htmlPath:
+            relativeHtmlPath && !relativeHtmlPath.startsWith('..') && !path.isAbsolute(relativeHtmlPath)
+              ? relativeHtmlPath
+              : `${page.pageId}.html`
+        }
+      })
+    }
+
+    await writeManifest(templateDir, manifest)
+    clearTemplateCache(templatesRoot, templateId)
+
+    onProgress?.({
+      stage: 'completed',
+      progress: 100,
+      label: '模板导入完成',
+      totalPages: imported.pageCount
+    })
+
+    return { success: true, id: templateId, pageCount: imported.pageCount, warnings: imported.warnings }
+  } catch (error) {
+    await fs.promises.rm(templateDir, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
 export async function deleteTemplate(templateId: string): Promise<{ success: true; deleted: boolean }> {
   const templatesRoot = await ensureTemplatesRoot()
   const templateDir = resolveTemplateDir(templatesRoot, templateId)
@@ -592,6 +742,19 @@ export async function createEditableSessionFromTemplate(
   await ctx.db.updateGenerationRunStatus(runId, 'completed')
   await ctx.db.updateProjectStatus(projectId, 'draft')
   await ctx.db.updateSessionStatus(sessionId, 'completed')
+  await recordHistoryOperationStrict(ctx.db, {
+    sessionId,
+    projectDir,
+    type: 'import',
+    scope: 'session',
+    prompt: `从模板直接创建：${manifest.name}`,
+    metadata: {
+      runId,
+      source: 'template-direct-edit',
+      templateId,
+      pageCount: preparedPages.length
+    }
+  })
 
   return { success: true, sessionId }
 }

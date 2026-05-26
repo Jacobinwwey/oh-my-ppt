@@ -101,14 +101,14 @@ export function TemplateCard({
                   <ChevronDown className="ml-1 h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuContent align="end" className="w-max min-w-[10rem] max-w-[calc(100vw-2rem)]">
                 <DropdownMenuItem onSelect={() => onUseDirect(template)}>
-                  <PencilLine className="h-3.5 w-3.5 text-[#5f6b50]" />
-                  {t('templates.createEditable')}
+                  <PencilLine className="h-3.5 w-3.5 shrink-0 text-[#5f6b50]" />
+                  <span className="whitespace-nowrap">{t('templates.createEditable')}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onUseGenerate(template)}>
-                  <Sparkles className="h-3.5 w-3.5 text-[#7c6a4c]" />
-                  {t('templates.createAndGenerate')}
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#7c6a4c]" />
+                  <span className="whitespace-nowrap">{t('templates.createAndGenerate')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

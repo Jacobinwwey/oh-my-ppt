@@ -850,6 +850,7 @@ export const runDeepAgentDeckGeneration = async (args: {
   sourceDocumentPaths?: string[]
   systemPromptAddendum?: string
   singlePagePromptAddendum?: string
+  requireTemplatePageRead?: boolean
   generationMode?: 'generate' | 'retry'
   pageTasks?: Array<{
     pageNumber: number
@@ -1122,6 +1123,7 @@ export const runDeepAgentDeckGeneration = async (args: {
         styleSkillPrompt: args.styleSkillPrompt,
         appLocale: args.appLocale,
         designContract: args.designContract,
+        templatePageReadRequired: args.requireTemplatePageRead,
         userMessage: args.userMessage,
         outlineTitles: [page.title],
         outlineItems: [
@@ -1147,6 +1149,16 @@ export const runDeepAgentDeckGeneration = async (args: {
               role: 'user',
               content: [
                 args.singlePagePromptAddendum?.trim() || '',
+                args.requireTemplatePageRead
+                  ? [
+                      'Template inspection is mandatory before writing.',
+                      `1. First call read_file(path="/${page.pageId}.html", offset=0, limit=260) to inspect the copied template page.`,
+                      '2. Identify every template-skeleton asset and wrapper: background images, texture images, decorative images, masks, overlays, CSS background-image/url(...) references, <img src>, SVG image href, font scale, spacing rhythm, color language, and reusable structural wrappers from that file.',
+                      '3. These background/decorative assets are not old business content. Do not delete them when replacing text, metrics, logos, or content images.',
+                      '4. update_single_page_file rebuilds the page from your content fragment, so the fragment you write must explicitly include the required background/decorative layers or exact local asset references from the template page.',
+                      '5. Only after reading the file, call update_single_page_file with the new content while preserving the template visual system unless the user explicitly asks for a redesign.'
+                    ].join('\n')
+                  : '',
                 buildSinglePageGenerationPrompt({
                   topic: args.topic,
                   deckTitle: args.deckTitle,
