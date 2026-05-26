@@ -650,8 +650,8 @@ export function createIpcContext(
       '- 如需使用图片或视频，请引用上面的相对路径。',
       '- 禁止使用 file://、绝对路径或 base64。',
       '- 不要重新引入远程资源，优先使用这些本地素材。',
-      '- 插入视频时必须使用 HTML <video> 标签，并包含 autoplay muted loop playsinline preload="auto"。',
-      '- 插入视频时不要添加 controls 属性，确保页面内不显示控制条。'
+      '- 插入视频时必须使用 HTML <video> 标签，并包含 controls playsinline preload="metadata"。',
+      '- 视频默认不要添加 autoplay 或 muted，让用户点击控件后播放并保留声音；只有明确要求循环背景视频时才使用 muted/loop。'
     ]
       .filter(Boolean)
       .join('\n')

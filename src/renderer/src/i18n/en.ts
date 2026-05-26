@@ -528,6 +528,8 @@ Business presentations, product introductions, project summaries — formal but 
     muted: 'Muted',
     loop: 'Loop',
     autoplay: 'Autoplay',
+    playsInline: 'Inline',
+    preload: 'Preload',
     decrease: 'Decrease',
     increase: 'Increase',
     cancel: 'Cancel',

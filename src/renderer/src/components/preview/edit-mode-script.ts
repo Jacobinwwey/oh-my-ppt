@@ -52,6 +52,8 @@ export interface EditableElementSnapshot {
     muted?: boolean
     loop?: boolean
     autoplay?: boolean
+    playsInline?: boolean
+    preload?: string
   }
   text?: {
     editable: boolean
@@ -1098,6 +1100,8 @@ export function buildEditModeInjectScript(previewScale = 1): string {
       attrs.muted = element.hasAttribute("muted");
       attrs.loop = element.hasAttribute("loop");
       attrs.autoplay = element.hasAttribute("autoplay");
+      attrs.playsInline = element.hasAttribute("playsinline");
+      attrs.preload = element.getAttribute("preload") || "";
     }
     return attrs;
   };
@@ -1719,14 +1723,17 @@ export function buildEditModeInjectScript(previewScale = 1): string {
         if (patch.style.objectFit) el.style.setProperty("object-fit", patch.style.objectFit, "important");
       }
       if (patch.attrs) {
-        ["alt", "poster", "controls", "muted", "loop", "autoplay"].forEach((name) => {
+        ["alt", "poster", "controls", "muted", "loop", "autoplay", "playsInline", "preload"].forEach((name) => {
           if (!Object.prototype.hasOwnProperty.call(patch.attrs, name)) return;
           const value = patch.attrs[name];
           if (typeof value === "boolean") {
-            if (value) el.setAttribute(name, "");
-            else el.removeAttribute(name);
+            const attrName = name === "playsInline" ? "playsinline" : name;
+            if (value) el.setAttribute(attrName, "");
+            else el.removeAttribute(attrName);
           } else if (value !== undefined && value !== null) {
-            el.setAttribute(name, String(value));
+            const attrName = name === "playsInline" ? "playsinline" : name;
+            if (String(value)) el.setAttribute(attrName, String(value));
+            else el.removeAttribute(attrName);
           }
         });
       }

@@ -512,6 +512,8 @@ export const zh = {
     muted: '静音',
     loop: '循环',
     autoplay: '自动播放',
+    playsInline: '内嵌播放',
+    preload: '预加载',
     decrease: '减少',
     increase: '增加',
     cancel: '取消',

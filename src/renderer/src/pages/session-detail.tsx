@@ -65,7 +65,9 @@ const EMPTY_ELEMENT_DRAFT: ElementEditDraft = {
   controls: false,
   muted: false,
   loop: false,
-  autoplay: false
+  autoplay: false,
+  playsInline: true,
+  preload: 'metadata'
 }
 
 type ElementPropertyStylePatch = {
@@ -85,6 +87,8 @@ type ElementPropertyAttrsPatch = {
   muted?: boolean
   loop?: boolean
   autoplay?: boolean
+  playsInline?: boolean
+  preload?: string
 }
 
 type ElementPropertyPatch = {
@@ -1237,7 +1241,9 @@ export function SessionDetailPage(): React.JSX.Element {
         controls: Boolean(attrs.controls),
         muted: Boolean(attrs.muted),
         loop: Boolean(attrs.loop),
-        autoplay: Boolean(attrs.autoplay)
+        autoplay: Boolean(attrs.autoplay),
+        playsInline: attrs.playsInline !== false,
+        preload: attrs.preload || 'metadata'
       })
     } else {
       setTextDraft({
@@ -1255,7 +1261,9 @@ export function SessionDetailPage(): React.JSX.Element {
         controls: Boolean(attrs.controls),
         muted: Boolean(attrs.muted),
         loop: Boolean(attrs.loop),
-        autoplay: Boolean(attrs.autoplay)
+        autoplay: Boolean(attrs.autoplay),
+        playsInline: attrs.playsInline !== false,
+        preload: attrs.preload || 'metadata'
       })
     }
   }
@@ -1278,6 +1286,8 @@ export function SessionDetailPage(): React.JSX.Element {
       fields.add('muted')
       fields.add('loop')
       fields.add('autoplay')
+      fields.add('playsInline')
+      fields.add('preload')
     }
     if (capabilities.includes('text')) {
       fields.add('text')
@@ -1351,6 +1361,12 @@ export function SessionDetailPage(): React.JSX.Element {
     if (commitFields.has('autoplay') && draft.autoplay !== Boolean(initial.attrs.autoplay)) {
       attrs.autoplay = draft.autoplay
     }
+    if (commitFields.has('playsInline') && draft.playsInline !== (initial.attrs.playsInline !== false)) {
+      attrs.playsInline = draft.playsInline
+    }
+    if (commitFields.has('preload') && draft.preload !== (initial.attrs.preload || 'metadata')) {
+      attrs.preload = draft.preload
+    }
 
     if (text === undefined && Object.keys(style).length === 0 && Object.keys(attrs).length === 0) {
       return null
@@ -1398,6 +1414,8 @@ export function SessionDetailPage(): React.JSX.Element {
       muted?: boolean
       loop?: boolean
       autoplay?: boolean
+      playsInline?: boolean
+      preload?: string
     } = {}
 
     if (textSelection && selectedPage?.htmlPath && selectedPage?.pageId && draft.layoutZIndex !== textDraft.layoutZIndex) {
@@ -1420,6 +1438,8 @@ export function SessionDetailPage(): React.JSX.Element {
     if (draft.muted !== textDraft.muted) liveAttrs.muted = draft.muted
     if (draft.loop !== textDraft.loop) liveAttrs.loop = draft.loop
     if (draft.autoplay !== textDraft.autoplay) liveAttrs.autoplay = draft.autoplay
+    if (draft.playsInline !== textDraft.playsInline) liveAttrs.playsInline = draft.playsInline
+    if (draft.preload !== textDraft.preload) liveAttrs.preload = draft.preload
 
     setTextDraft(draft)
     // Live preview in iframe
@@ -1598,7 +1618,7 @@ export function SessionDetailPage(): React.JSX.Element {
     const top = Math.min(200 + offset, 900 - h - 20)
     const zIdx = 10 + existingCount
     const htmlFragment = isVideo
-      ? `<video src="${relativePath}" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${zIdx};" controls playsinline></video>`
+      ? `<video src="${relativePath}" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${zIdx}; object-fit:contain;" controls playsinline preload="metadata"></video>`
       : `<img src="${relativePath}" alt="" data-block-id="${blockId}" style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px; z-index:${zIdx}; object-fit:contain;" />`
     editHistory.addElement({
       pageId: selectedPage.pageId,
