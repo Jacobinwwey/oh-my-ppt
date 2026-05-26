@@ -71,11 +71,29 @@ function normalizeTags(value: unknown): string[] {
 
 function resolveTemplateListPaths(templateDir: string, manifest: TemplateManifest): {
   previewHtmlPath: string | null
+  previewPages: Array<{
+    pageNumber: number
+    pageId: string
+    title: string
+    htmlPath: string
+  }>
 } {
-  const firstPage = manifest.pages[0]
-  const previewHtmlPath = resolveTemplateRelativePath(templateDir, firstPage?.htmlPath)
+  const previewPages = manifest.pages
+    .map((page) => {
+      const htmlPath = resolveTemplateRelativePath(templateDir, page.htmlPath)
+      if (!htmlPath || !fs.existsSync(htmlPath)) return null
+      return {
+        pageNumber: page.pageNumber,
+        pageId: page.pageId,
+        title: page.title,
+        htmlPath
+      }
+    })
+    .filter((page): page is NonNullable<typeof page> => Boolean(page))
+  const previewHtmlPath = previewPages[0]?.htmlPath || null
   return {
-    previewHtmlPath: previewHtmlPath && fs.existsSync(previewHtmlPath) ? previewHtmlPath : null
+    previewHtmlPath,
+    previewPages
   }
 }
 

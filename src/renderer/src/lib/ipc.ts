@@ -121,6 +121,12 @@ export interface TemplateListItem {
   pageCount: number
   tags: string[]
   previewHtmlPath: string | null
+  previewPages: Array<{
+    pageNumber: number
+    pageId: string
+    title: string
+    htmlPath: string
+  }>
   createdAt: number
   updatedAt: number
 }

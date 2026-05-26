@@ -8,6 +8,7 @@ import { SaveTemplateDialog } from '../components/templates/SaveTemplateDialog'
 import { TemplateCard, TemplateEmptyState } from '../components/templates/TemplateCard'
 import { useTemplateStore, useToastStore } from '../store'
 import { ipc, type TemplateListItem } from '../lib/ipc'
+import { useT } from '../i18n'
 
 const MIN_PAGE_COUNT = 1
 const MAX_PAGE_COUNT = 40
@@ -37,8 +38,17 @@ const buildTemplateInitialPrompt = (args: {
     args.brief
   ].join('\n')
 
+const localAssetUrl = (filePath: string): string =>
+  `local-asset://${encodeURI(filePath.replace(/\\/g, '/'))}`
+
+const templateThumbnailUrl = (filePath: string): string => {
+  const separator = filePath.includes('?') ? '&' : '?'
+  return `${localAssetUrl(filePath)}${separator}print=1&thumbnail=1&fit=off`
+}
+
 export function TemplatesPage(): React.JSX.Element {
   const navigate = useNavigate()
+  const t = useT()
   const {
     templates,
     loading,
@@ -49,6 +59,7 @@ export function TemplatesPage(): React.JSX.Element {
   } = useTemplateStore()
   const { success, error, warning } = useToastStore()
   const [useTarget, setUseTarget] = useState<TemplateListItem | null>(null)
+  const [previewTarget, setPreviewTarget] = useState<TemplateListItem | null>(null)
   const [editTarget, setEditTarget] = useState<TemplateListItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<TemplateListItem | null>(null)
   const [title, setTitle] = useState('')
@@ -67,11 +78,11 @@ export function TemplatesPage(): React.JSX.Element {
     try {
       await fetchTemplates()
     } catch (err) {
-      error('模板加载失败', {
-        description: err instanceof Error ? err.message : '请稍后重试'
+      error(t('templates.loadFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
       })
     }
-  }, [error, fetchTemplates])
+  }, [error, fetchTemplates, t])
 
   useEffect(() => {
     void load()
@@ -100,10 +111,10 @@ export function TemplatesPage(): React.JSX.Element {
   const ensureUploadPrerequisites = async (): Promise<boolean> => {
     const validation = await ipc.validateUploadPrerequisites()
     if (validation.ready) return true
-    warning('需要先完成设置', {
-      description: validation.message || '请先配置存储目录、模型和 API Key',
+    warning(t('templates.settingsRequiredTitle'), {
+      description: validation.message || t('templates.settingsRequiredDescription'),
       action: {
-        label: '去设置',
+        label: t('templates.goToSettings'),
         onClick: () => navigate('/settings')
       }
     })
@@ -123,17 +134,17 @@ export function TemplatesPage(): React.JSX.Element {
     }
     if (!useTarget || selectedFiles.length === 0) return
     if (selectedFiles.length > 1) {
-      const message = '一次只能上传 1 个参考文档'
+      const message = t('templates.documentSingleOnly')
       setDocumentParseError(message)
-      error('文档数量超出限制', { description: message })
+      error(t('templates.documentCountExceeded'), { description: message })
       return
     }
 
     const selectedFile = selectedFiles[0]
     if (selectedFile.size > MAX_DOCUMENT_SIZE_BYTES) {
-      const message = `文档不能超过 ${MAX_DOCUMENT_SIZE_MB}MB`
+      const message = t('templates.documentTooLarge', { maxSize: MAX_DOCUMENT_SIZE_MB })
       setDocumentParseError(message)
-      error('文档过大', { description: message })
+      error(t('templates.documentTooLargeTitle'), { description: message })
       return
     }
 
@@ -144,8 +155,8 @@ export function TemplatesPage(): React.JSX.Element {
       }))
       .filter((file) => file.path)
     if (payloadFiles.length === 0) {
-      setDocumentParseError('无法读取文档路径，请重新选择')
-      error('文档读取失败')
+      setDocumentParseError(t('templates.documentPathFailed'))
+      error(t('templates.documentPathFailedTitle'))
       return
     }
 
@@ -165,13 +176,13 @@ export function TemplatesPage(): React.JSX.Element {
       const referenceFile = result.files.find((file) => file.type !== 'image')
       setReferenceDocumentPath(referenceFile?.path || null)
       setHasParsedSource(true)
-      success('文档已解析', {
-        description: `已整理 ${result.files.length} 个素材并填入标题、页数和大纲`
+      success(t('templates.documentParsed'), {
+        description: t('templates.documentParsedDescription', { count: result.files.length })
       })
     } catch (err) {
-      const message = err instanceof Error ? err.message : '请稍后重试'
+      const message = err instanceof Error ? err.message : t('common.retryLater')
       setDocumentParseError(message)
-      error('文档解析失败', { description: message })
+      error(t('templates.documentParseFailed'), { description: message })
     } finally {
       setParsingDocument(false)
     }
@@ -182,7 +193,7 @@ export function TemplatesPage(): React.JSX.Element {
     const deckTitle = title.trim() || useTarget.name
     const briefText = brief.trim()
     if (!briefText) {
-      warning('请先填写描述或上传文档解析大纲')
+      warning(t('templates.briefRequired'))
       return
     }
     const safePageCount = resolvePageCount(pageCount, useTarget.pageCount || 5)
@@ -200,14 +211,14 @@ export function TemplatesPage(): React.JSX.Element {
         pageCount: safePageCount,
         brief: briefText
       })
-      success('已从模板创建会话', { description: '正在按模板重新生成内容' })
+      success(t('templates.sessionCreated'), { description: t('templates.sessionCreatedDescription') })
       setUseTarget(null)
       navigate(`/sessions/${sessionId}/template-generating`, {
         state: { initialPrompt }
       })
     } catch (err) {
-      error('从模板创建失败', {
-        description: err instanceof Error ? err.message : '请稍后重试'
+      error(t('templates.createFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
       })
     } finally {
       setCreating(false)
@@ -219,11 +230,11 @@ export function TemplatesPage(): React.JSX.Element {
     setDeleting(true)
     try {
       await deleteTemplate(deleteTarget.id)
-      success('模板已删除')
+      success(t('templates.deleted'))
       setDeleteTarget(null)
     } catch (err) {
-      error('删除模板失败', {
-        description: err instanceof Error ? err.message : '请稍后重试'
+      error(t('templates.deleteFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
       })
     } finally {
       setDeleting(false)
@@ -242,11 +253,11 @@ export function TemplatesPage(): React.JSX.Element {
         templateId: editTarget.id,
         ...payload
       })
-      success('模板信息已更新')
+      success(t('templates.updated'))
       setEditTarget(null)
     } catch (err) {
-      error('模板更新失败', {
-        description: err instanceof Error ? err.message : '请稍后重试'
+      error(t('templates.updateFailed'), {
+        description: err instanceof Error ? err.message : t('common.retryLater')
       })
     } finally {
       setEditing(false)
@@ -254,32 +265,38 @@ export function TemplatesPage(): React.JSX.Element {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl p-6">
+    <div className="mx-auto w-full max-w-7xl p-6">
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Templates</p>
+        <p className="text-xs uppercase tracking-[0.22em] text-[#8a7e6c]">{t('templates.eyebrow')}</p>
         <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h1 className="organic-serif text-[32px] font-semibold leading-none text-[#3e4a32]">模板</h1>
+            <h1 className="organic-serif text-[32px] font-semibold leading-none text-[#3e4a32]">{t('templates.title')}</h1>
             <p className="mt-2 text-[12px] text-muted-foreground">
-              管理从会话沉淀下来的模板，并用它们创建新的演示会话。
+              {t('templates.description')}
             </p>
           </div>
-          <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            刷新
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="rounded-md border border-[#d6c08d]/70 bg-[#fff7e8] px-2.5 py-1.5 text-xs font-medium text-[#7c6a4c]">
+              {t('templates.count', { count: templates.length })}
+            </span>
+            <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              {t('templates.refresh')}
+            </Button>
+          </div>
         </div>
       </div>
 
       {templates.length === 0 ? (
         <TemplateEmptyState />
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {templates.map((template) => (
             <TemplateCard
               key={template.id}
               template={template}
               onUse={openUseDialog}
+              onPreview={setPreviewTarget}
               onEdit={setEditTarget}
               onDelete={setDeleteTarget}
             />
@@ -287,25 +304,77 @@ export function TemplatesPage(): React.JSX.Element {
         </div>
       )}
 
+      <Dialog open={Boolean(previewTarget)} onOpenChange={(open) => !open && setPreviewTarget(null)}>
+        <DialogContent className="w-auto max-w-none gap-3 rounded-lg bg-[#f6efe2] p-4">
+          <DialogHeader className="pr-10">
+            <DialogTitle className="flex items-center gap-2">
+              <LayoutTemplate className="h-4 w-4" />
+              {previewTarget?.name || t('templates.previewTitle')}
+            </DialogTitle>
+          </DialogHeader>
+          {previewTarget ? (
+            <div className="max-h-[min(72vh,720px)] w-[min(84vw,920px)] overflow-y-auto pr-1">
+              <div className="grid justify-center gap-3 [grid-template-columns:repeat(auto-fill,260px)]">
+                {(previewTarget.previewPages.length > 0
+                  ? previewTarget.previewPages
+                  : previewTarget.previewHtmlPath
+                    ? [
+                        {
+                          pageNumber: 1,
+                          pageId: 'preview',
+                          title: previewTarget.name,
+                          htmlPath: previewTarget.previewHtmlPath
+                        }
+                      ]
+                    : []
+                ).map((page) => (
+                  <div
+                    key={`${previewTarget.id}-${page.pageId}-${page.pageNumber}`}
+                    className="overflow-hidden rounded-lg border border-[#ded2bd]/80 bg-[#fffdf8] shadow-[0_8px_18px_rgba(74,59,42,0.09)]"
+                  >
+                    <div className="relative aspect-video overflow-hidden bg-white">
+                      <iframe
+                        src={templateThumbnailUrl(page.htmlPath)}
+                        className="absolute left-0 top-0 h-[900px] w-[1600px] origin-top-left border-0 bg-white"
+                        style={{ transform: 'scale(0.1625)' }}
+                        title={`${previewTarget.name} page ${page.pageNumber}`}
+                      />
+                    </div>
+                    <div className="flex min-w-0 items-center gap-2 border-t border-[#eee4d2]/80 px-2.5 py-2">
+                      <span className="shrink-0 rounded-md bg-[#e8f0df] px-1.5 py-0.5 text-[11px] font-semibold text-[#4f6340]">
+                        P{page.pageNumber}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs text-[#5f6b50]">
+                        {page.title || t('templates.pageFallback', { pageNumber: page.pageNumber })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(useTarget)} onOpenChange={(open) => !open && closeUseDialog()}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <LayoutTemplate className="h-4 w-4" />
-              使用模板创建会话
+              {t('templates.useDialogTitle')}
             </DialogTitle>
             <DialogDescription>
-              输入新内容方向，或上传文档自动解析大纲；生成时会把模板作为固定视觉参考。
+              {t('templates.useDialogDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex flex-col gap-3 sm:flex-row">
               <div className="min-w-0 flex-1">
-                <label className="mb-1 block text-xs font-medium text-[#5f6b50]">会话标题</label>
+                <label className="mb-1 block text-xs font-medium text-[#5f6b50]">{t('templates.sessionTitleLabel')}</label>
                 <Input value={title} onChange={(event) => setTitle(event.target.value)} />
               </div>
               <div className="w-full sm:w-28">
-                <label className="mb-1 block text-xs font-medium text-[#5f6b50]">页数</label>
+                <label className="mb-1 block text-xs font-medium text-[#5f6b50]">{t('templates.pageCountLabel')}</label>
                 <Input
                   value={pageCount}
                   inputMode="numeric"
@@ -315,10 +384,10 @@ export function TemplatesPage(): React.JSX.Element {
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="block text-xs font-medium text-[#5f6b50]">描述 / 大纲</label>
+                <label className="block text-xs font-medium text-[#5f6b50]">{t('templates.briefLabel')}</label>
                 {hasParsedSource && !parsingDocument ? (
                   <span className="rounded-full bg-[#e8f0df] px-2 py-0.5 text-[11px] text-[#4f6340]">
-                    已解析
+                    {t('templates.parsed')}
                   </span>
                 ) : null}
               </div>
@@ -326,7 +395,7 @@ export function TemplatesPage(): React.JSX.Element {
                 value={brief}
                 onChange={(event) => setBrief(event.target.value)}
                 className="min-h-[160px]"
-                placeholder="写下新 PPT 的主题、受众、结构和重点；也可以上传文档自动解析大纲。"
+                placeholder={t('templates.briefPlaceholder')}
               />
             </div>
             <input
@@ -350,9 +419,11 @@ export function TemplatesPage(): React.JSX.Element {
                 ) : (
                   <FileText className="mr-2 h-4 w-4" />
                 )}
-                {parsingDocument ? '解析中...' : '上传文档解析大纲'}
+                {parsingDocument ? t('templates.parsingDocument') : t('templates.uploadDocument')}
               </Button>
-              <span className="text-xs text-muted-foreground">支持 md/txt/csv/docx，最大 {MAX_DOCUMENT_SIZE_MB}MB</span>
+              <span className="text-xs text-muted-foreground">
+                {t('templates.supportedDocuments', { maxSize: MAX_DOCUMENT_SIZE_MB })}
+              </span>
             </div>
             {documentParseError ? (
               <div className="flex items-start gap-2 rounded-md border border-[#d58b7f]/45 bg-[#fff2ef] px-3 py-2 text-xs text-[#8a3d33]">
@@ -363,10 +434,10 @@ export function TemplatesPage(): React.JSX.Element {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" size="sm" onClick={closeUseDialog} disabled={creating || parsingDocument}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button type="button" size="sm" onClick={() => void handleCreate()} disabled={creating || parsingDocument}>
-              {creating ? '创建中...' : '创建并生成'}
+              {creating ? t('templates.creating') : t('templates.createAndGenerate')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -375,17 +446,17 @@ export function TemplatesPage(): React.JSX.Element {
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !deleting && !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>删除模板</DialogTitle>
+            <DialogTitle>{t('templates.deleteTitle')}</DialogTitle>
             <DialogDescription>
-              确定删除「{deleteTarget?.name || ''}」吗？这个操作不会影响已创建的会话。
+              {t('templates.deleteDescription', { name: deleteTarget?.name || '' })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={deleting}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button type="button" size="sm" onClick={() => void handleDelete()} disabled={deleting}>
-              {deleting ? '删除中...' : '删除'}
+              {deleting ? t('templates.deleting') : t('common.delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -30,6 +30,12 @@ export interface TemplateListItem {
   pageCount: number
   tags: string[]
   previewHtmlPath: string | null
+  previewPages: Array<{
+    pageNumber: number
+    pageId: string
+    title: string
+    htmlPath: string
+  }>
   createdAt: number
   updatedAt: number
 }
@@ -81,7 +87,10 @@ export function parseTemplateManifest(raw: unknown): TemplateManifest {
 
 export function manifestToListItem(
   manifest: TemplateManifest,
-  paths: { previewHtmlPath: string | null }
+  paths: {
+    previewHtmlPath: string | null
+    previewPages: TemplateListItem['previewPages']
+  }
 ): TemplateListItem {
   return {
     id: manifest.id,
@@ -91,6 +100,7 @@ export function manifestToListItem(
     pageCount: manifest.pageCount || manifest.pages.length,
     tags: manifest.tags,
     previewHtmlPath: paths.previewHtmlPath,
+    previewPages: paths.previewPages,
     createdAt: manifest.createdAt,
     updatedAt: manifest.updatedAt
   }
