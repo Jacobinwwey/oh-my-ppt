@@ -864,6 +864,7 @@ export function SessionGeneratingPage({
     { page_count: editorGate.totalCount, generatedCount: editorGate.generatedCount },
     0.68
   ).canEdit
+  const showProgressEditorShortcut = canEnterEditor && !state?.retry
   const completedPreviewCount = previewPages.filter((page) => page.status === 'completed').length
   const failedPreviewLabels = previewPages
     .filter((page) => page.status === 'failed')
@@ -977,6 +978,7 @@ export function SessionGeneratingPage({
             cancelLabel={t('generating.cancelGeneration')}
             hasGeneratedPages={canContinueRemaining}
             canEnterEditor={canEnterEditor}
+            showEditorShortcut={showProgressEditorShortcut}
             onEnterEditor={() => navigate(`/sessions/${id}`)}
             onContinueRemaining={handleContinueRemaining}
             onRegenerate={handleRegenerate}
