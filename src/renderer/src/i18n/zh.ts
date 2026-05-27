@@ -93,6 +93,15 @@ export const zh = {
   app: {
     updateAvailable: '发现新版本 {version}',
     updateAvailableDescription: '当前版本 {currentVersion}，点击前往下载。',
+    updateAvailableTitle: '发现新版本 {version}',
+    updateAvailableDialogDescription: '当前版本 {currentVersion}，可以现在下载更新包。',
+    currentVersion: '当前版本',
+    latestVersion: '最新版本',
+    download: '下载',
+    downloadZh: '网盘下载',
+    githubRelease: 'GitHub 下载',
+    changeLog: '更新日志',
+    later: '稍后再说',
     open: '打开'
   },
   nav: {
