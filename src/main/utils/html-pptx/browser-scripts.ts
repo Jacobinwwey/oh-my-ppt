@@ -484,6 +484,39 @@ export const MARK_KATEX_BLOCKS_SCRIPT = `
 })()
 `
 
+export const COLLECT_ANIMATION_TRACE_SCRIPT = `
+(() => {
+  const root = document.querySelector('.ppt-page-root') || document.body;
+  const pageRect = root.getBoundingClientRect();
+  const SUPPORTED_ANIM_TYPES = new Set([
+    'fade', 'fade-up', 'fade-down', 'fade-left', 'fade-right',
+    'scale-in', 'slide-up', 'slide-left'
+  ]);
+  const traces = [];
+  const elements = root.querySelectorAll('[data-anim]');
+  for (const el of elements) {
+    const animType = (el.getAttribute('data-anim') || '').trim().toLowerCase();
+    if (!SUPPORTED_ANIM_TYPES.has(animType)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) continue;
+    const duration = Number(el.getAttribute('data-anim-duration')) || 500;
+    const delay = Number(el.getAttribute('data-anim-delay')) || 0;
+    const trigger = el.getAttribute('data-anim-trigger') || 'load';
+    if (trigger !== 'load') continue;
+    traces.push({
+      type: animType,
+      duration,
+      delay,
+      x: Math.round(rect.left - pageRect.left),
+      y: Math.round(rect.top - pageRect.top),
+      w: Math.round(rect.width),
+      h: Math.round(rect.height)
+    });
+  }
+  return traces;
+})()
+`
+
 export const COLLECT_KATEX_BLOCK_RECTS_SCRIPT = `
 (async () => {
   const root = document.querySelector('.ppt-page-root') || document.body;

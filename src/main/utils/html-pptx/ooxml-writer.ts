@@ -9,8 +9,16 @@ import type {
   HtmlToPptxImage,
   HtmlToPptxTable,
   HtmlToPptxTableCell,
-  HtmlToPptxEmbeddedFont
+  HtmlToPptxEmbeddedFont,
+  HtmlToPptxAnimationTrace
 } from './types'
+import {
+  buildSlideTiming,
+  buildSlideTransition,
+  mapTransitionToPptx,
+  type SmilElementAnim,
+  type SmilSlideTiming
+} from '../anim-smil-writer'
 
 // ─── Constants ───────────────────────────────────────────────────────
 const EMU_PER_INCH = 914400
@@ -544,13 +552,64 @@ type SlideContentItem =
 const contentOrder = (value: number | undefined, fallback: number): number =>
   Number.isFinite(value) ? Number(value) : fallback
 
-function buildSlideXml(
+const PX_PER_INCH_X = SLIDE_WIDTH_EMU / 1600
+const PX_PER_INCH_Y = SLIDE_HEIGHT_EMU / 900
+
+function matchTracesToShapeIds(
+  traces: HtmlToPptxAnimationTrace[],
+  shapePositions: Array<{ pptxId: number; x: number; y: number; w: number; h: number }>
+): SmilElementAnim[] {
+  const animations: SmilElementAnim[] = []
+  for (let ti = 0; ti < traces.length; ti++) {
+    const trace = traces[ti]
+    // Convert trace from px (1600×900 canvas) to EMU
+    const tx = Math.round(trace.x * PX_PER_INCH_X)
+    const ty = Math.round(trace.y * PX_PER_INCH_Y)
+    const tw = Math.round(trace.w * PX_PER_INCH_X)
+    const th = Math.round(trace.h * PX_PER_INCH_Y)
+    let bestIdx = -1
+    let bestOverlap = 0
+    for (let si = 0; si < shapePositions.length; si++) {
+      const sp = shapePositions[si]
+      const overlapX = Math.max(0, Math.min(tx + tw, sp.x + sp.w) - Math.max(tx, sp.x))
+      const overlapY = Math.max(0, Math.min(ty + th, sp.y + sp.h) - Math.max(ty, sp.y))
+      const overlap = overlapX * overlapY
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        bestIdx = si
+      }
+    }
+    if (bestIdx >= 0 && bestOverlap > 0) {
+      animations.push({
+        spid: shapePositions[bestIdx].pptxId,
+        type: trace.type,
+        duration: trace.duration,
+        delay: trace.delay,
+        order: ti
+      })
+    }
+  }
+  return animations
+}
+
+export function buildSlideXml(
   slide: HtmlToPptxSlide,
   imageRels: Map<string, ImageRel>,
   idStart: number
 ): string {
   let nextId = idStart
   const shapes: string[] = []
+  const shapePositions: Array<{ pptxId: number; x: number; y: number; w: number; h: number }> = []
+
+  const recordPos = (id: number, item: { x: number; y: number; w: number; h: number }) => {
+    shapePositions.push({
+      pptxId: id,
+      x: inToEmu(item.x),
+      y: inToEmu(item.y),
+      w: inToEmu(item.w),
+      h: inToEmu(item.h)
+    })
+  }
 
   // Background color
   let bgXml = ''
@@ -558,10 +617,6 @@ function buildSlideXml(
     const hex = normalizeHexColor(slide.backgroundColor)
     bgXml = `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${hex}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`
   }
-
-  // Z-order: keep the extracted DOM paint order instead of placing all shapes
-  // above/below all images. This keeps background SVGs behind cards while card
-  // icons and chart canvases stay above their parent container shapes.
 
   // Background image
   if (slide.backgroundImage) {
@@ -621,17 +676,21 @@ function buildSlideXml(
     nextId++
     if (entry.kind === 'shape') {
       shapes.push(buildShapeXml(nextId, entry.item))
+      recordPos(nextId, entry.item)
     } else if (entry.kind === 'table') {
       shapes.push(buildTableXml(nextId, entry.item))
+      recordPos(nextId, entry.item)
     } else if (entry.kind === 'image') {
       const rel = imageRels.get(entry.item.dataUri)
       if (rel) {
         shapes.push(buildImagePic(nextId, rel.rId, entry.item))
+        recordPos(nextId, entry.item)
       }
     } else {
       const xml = buildTextShape(nextId, entry.item)
       if (xml) {
         shapes.push(xml)
+        recordPos(nextId, entry.item)
       }
     }
   }
@@ -645,9 +704,27 @@ function buildSlideXml(
     }
   }
 
+  // Build animation timing XML from traces
+  let timingXml = ''
+  const traces = slide.animationTraces
+  if (traces && traces.length > 0 && shapePositions.length > 0) {
+    const smilElements = matchTracesToShapeIds(traces, shapePositions)
+    if (smilElements.length > 0) {
+      timingXml = buildSlideTiming({ elements: smilElements }, 1000)
+    }
+  }
+
+  // Build slide transition XML
+  let transitionXml = ''
+  if (slide.transitionType) {
+    const pptxType = mapTransitionToPptx(slide.transitionType)
+    transitionXml = buildSlideTransition(pptxType)
+  }
+
   return `${XML_HEADER}<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
        xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  ${transitionXml}
   <p:cSld>
     ${bgXml}
     <p:spTree>
@@ -667,6 +744,7 @@ function buildSlideXml(
       ${shapes.join('\n      ')}
     </p:spTree>
   </p:cSld>
+  ${timingXml}
   <p:clrMapOvr>
     <a:masterClrMapping/>
   </p:clrMapOvr>

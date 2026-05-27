@@ -111,6 +111,26 @@ export interface HtmlToPptxTable {
   order?: number
 }
 
+export type SmilAnimType =
+  | 'fade'
+  | 'fade-up'
+  | 'fade-down'
+  | 'fade-left'
+  | 'fade-right'
+  | 'scale-in'
+  | 'slide-up'
+  | 'slide-left'
+
+export interface HtmlToPptxAnimationTrace {
+  type: SmilAnimType
+  duration: number
+  delay: number
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export interface HtmlToPptxSlide {
   title?: string
   backgroundColor?: string
@@ -121,6 +141,10 @@ export interface HtmlToPptxSlide {
   tables?: HtmlToPptxTable[]
   /** Overlay images rendered on top of shapes/texts (e.g. KaTeX formula screenshots) */
   overlayImages?: HtmlToPptxImage[]
+  /** Animation traces collected from data-anim attributes */
+  animationTraces?: HtmlToPptxAnimationTrace[]
+  /** Slide transition type (e.g. 'fade', 'push') */
+  transitionType?: string
 }
 
 export interface HtmlToPptxEmbeddedFont {
