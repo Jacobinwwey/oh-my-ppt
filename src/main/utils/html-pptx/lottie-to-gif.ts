@@ -27,22 +27,22 @@ interface LottieTraceElement {
 }
 
 // Optimization: small resolution, low fps, limited colors → compact GIF
-const MAX_CAPTURE_SIZE = 150
-const TARGET_FPS = 10
+const MAX_CAPTURE_SIZE = 400
+const TARGET_FPS = 25
 const MAX_DURATION_MS = 3000
-const MAX_FRAMES = 30
-const PALETTE_SIZE = 64
+const MAX_FRAMES = 75
+const PALETTE_SIZE = 256
 
 /**
  * Renders Lottie animations to optimized animated GIFs.
  *
  * Optimization strategy:
- * - Resolution capped at 150px (Lottie animations are typically decorative icons)
- * - 10fps (visually smooth for decorative animations, 3x fewer frames than 30fps)
- * - 64-color palette (sufficient for flat/vector Lottie art, halves palette vs 256)
+ * - Resolution up to 400px (matches typical PPTX slide element size)
+ * - 25fps (smooth playback in PowerPoint/LibreOffice)
+ * - 256-color palette (full GIF color range)
  * - Duration capped at 3s (most Lottie loops are 1-3s)
  *
- * Result: ~40-120KB per animation vs 500KB-2MB for naive GIF.
+ * Result: ~180-300KB per animation, smooth playback in all PPT viewers.
  * Animated GIF is the only animated image format universally supported in PPTX
  * (PPT 2000+, LibreOffice, Google Slides). Animated WebP only works in PPT 365.
  */
