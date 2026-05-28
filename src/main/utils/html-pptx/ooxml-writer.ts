@@ -11,7 +11,6 @@ import type {
   HtmlToPptxTableCell,
   HtmlToPptxEmbeddedFont
 } from './types'
-import { traceToLottieAnimation } from '../animation-to-lottie'
 
 // ─── Constants ───────────────────────────────────────────────────────
 const EMU_PER_INCH = 914400
@@ -679,8 +678,7 @@ function buildSlideXml(
 function buildContentTypesXml(
   slideCount: number,
   mediaExtensions: Set<string>,
-  hasEmbeddedFonts: boolean = false,
-  hasLottie: boolean = false
+  hasEmbeddedFonts: boolean = false
 ): string {
   const overrides: string[] = [
     `<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>`,
@@ -701,9 +699,7 @@ function buildContentTypesXml(
   if (hasEmbeddedFonts) {
     defaults.push(`<Default Extension="fntdata" ContentType="application/x-fontdata"/>`)
   }
-  if (hasLottie) {
-    defaults.push(`<Default Extension="json" ContentType="application/json"/>`)
-  }
+
   for (const ext of mediaExtensions) {
     const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'svg' ? 'image/svg+xml' : `image/${ext}`
     defaults.push(`<Default Extension="${ext}" ContentType="${mime}"/>`)
@@ -915,12 +911,12 @@ function buildThemeXml(): string {
 </a:theme>`
 }
 
-interface LottieRel {
+interface LottieGifRel {
   rId: string
-  lottieFile: string
+  mediaFile: string
 }
 
-function buildSlideRelsXml(imageRels: ImageRel[], lottieRels: LottieRel[] = []): string {
+function buildSlideRelsXml(imageRels: ImageRel[], lottieGifRels: LottieGifRel[] = []): string {
   const rels: string[] = [
     `<Relationship Id="rIdLayout" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>`
   ]
@@ -929,18 +925,15 @@ function buildSlideRelsXml(imageRels: ImageRel[], lottieRels: LottieRel[] = []):
       `<Relationship Id="${r.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${r.mediaFile}"/>`
     )
   }
-  for (const lr of lottieRels) {
+  for (const lr of lottieGifRels) {
     rels.push(
-      `<Relationship Id="${lr.rId}" Type="http://schemas.ohmyppt.com/officeDocument/2024/relationships/lottieAnimation" Target="../lottie/${lr.lottieFile}"/>`
+      `<Relationship Id="${lr.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${lr.mediaFile}"/>`
     )
   }
   return `${XML_HEADER}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   ${rels.join('\n  ')}
 </Relationships>`
 }
-
-// ─── Media helpers ───────────────────────────────────────────────────
-
 function dataUriToBuffer(dataUri: string): { buffer: Uint8Array; ext: string } | null {
   const match = dataUri.match(/^data:image\/(png|jpeg|jpg|gif);base64,(.+)$/i)
   if (!match) return null
@@ -985,36 +978,6 @@ export const writePptxDocument = async (
 
   // 2. Build per-slide image rels
   const slideImageRels: Map<string, ImageRel>[] = []
-
-  // 2b. Process animation traces into Lottie JSON bundles per slide
-  const slideLottieRels: LottieRel[][] = []
-  const lottieFiles = new Map<string, Uint8Array>() // lottieFile -> JSON bytes
-  let hasLottie = false
-  let lottieIndex = 0
-
-  for (const slide of slides) {
-    const lottieRels: LottieRel[] = []
-    if (slide.animationTrace && document.embedLottie) {
-      try {
-        const trace = JSON.parse(slide.animationTrace)
-        const bundle = traceToLottieAnimation(trace)
-        if (bundle) {
-          lottieIndex++
-          const lottieFile = `slide${lottieIndex}.json`
-          const rId = `rIdLottie`
-          lottieRels.push({ rId, lottieFile })
-          lottieFiles.set(lottieFile, strToU8(bundle.json))
-          hasLottie = true
-        }
-      } catch (_err) {
-        // Trace parsing failed — skip Lottie embedding for this slide
-      }
-    }
-    slideLottieRels.push(lottieRels)
-  }
-
-  // 2c. Build per-slide image rels
-
   for (const slide of slides) {
     const relsMap = new Map<string, ImageRel>()
     let relIndex = 0
@@ -1038,6 +1001,23 @@ export const writePptxDocument = async (
   const mediaExtensions = new Set<string>()
   for (const [, media] of dataUriToMedia) {
     mediaExtensions.add(media.ext)
+  }
+
+  // 2b. Accept pre-rendered Lottie GIF captures (if provided by the renderer)
+  const slideLottieGifRels: LottieGifRel[][] = []
+  const lottieGifMedia = new Map<string, Uint8Array>() // mediaFile -> GIF bytes
+
+  for (const slide of slides) {
+    const gifRels: LottieGifRel[] = []
+    const gifs = slide.lottieGifs
+    if (gifs) {
+      for (const gif of gifs) {
+        gifRels.push({ rId: `rIdGif_${gif.mediaFile.replace(/\./g, '_')}`, mediaFile: gif.mediaFile })
+        lottieGifMedia.set(gif.mediaFile, gif.data)
+        mediaExtensions.add('gif')
+      }
+    }
+    slideLottieGifRels.push(gifRels)
   }
 
   // 4. Embedded font rels: assign rId and font file names
@@ -1066,7 +1046,7 @@ export const writePptxDocument = async (
 
   // Global XML
   files['[Content_Types].xml'] = strToU8(
-    buildContentTypesXml(slideCount, mediaExtensions, hasEmbeddedFonts, hasLottie)
+    buildContentTypesXml(slideCount, mediaExtensions, hasEmbeddedFonts)
   )
   files['_rels/.rels'] = strToU8(buildRootRelsXml())
   files['ppt/presentation.xml'] = strToU8(
@@ -1089,7 +1069,7 @@ export const writePptxDocument = async (
     const imageRelsForSlide = Array.from(relsMap.values())
 
     files[`ppt/slides/slide${i + 1}.xml`] = strToU8(buildSlideXml(slides[i], relsMap, 1))
-    files[`ppt/slides/_rels/slide${i + 1}.xml.rels`] = strToU8(buildSlideRelsXml(imageRelsForSlide, slideLottieRels[i] || []))
+    files[`ppt/slides/_rels/slide${i + 1}.xml.rels`] = strToU8(buildSlideRelsXml(imageRelsForSlide, slideLottieGifRels[i] || []))
   }
 
   // Media files
@@ -1105,9 +1085,9 @@ export const writePptxDocument = async (
     files[`ppt/fonts/${fontFile}`] = ttfBuffer
   }
 
-  // Lottie JSON files
-  for (const [lottieFile, jsonBytes] of lottieFiles) {
-    files[`ppt/lottie/${lottieFile}`] = jsonBytes
+  // Lottie GIF media files
+  for (const [mediaFile, gifBytes] of lottieGifMedia) {
+    files[`ppt/media/${mediaFile}`] = gifBytes
   }
 
   // 6. Generate ZIP and write

@@ -111,6 +111,8 @@ export interface HtmlToPptxTable {
   order?: number
 }
 
+import type { LottieGifCapture } from './lottie-to-gif'
+
 export interface HtmlToPptxSlide {
   title?: string
   backgroundColor?: string
@@ -121,8 +123,10 @@ export interface HtmlToPptxSlide {
   tables?: HtmlToPptxTable[]
   /** Overlay images rendered on top of shapes/texts (e.g. KaTeX formula screenshots) */
   overlayImages?: HtmlToPptxImage[]
-  /** Animation trace collected from the page for Lottie embedding */
+  /** Animation trace collected from the page */
   animationTrace?: string
+  /** Pre-rendered Lottie GIF captures for PPTX embedding */
+  lottieGifs?: LottieGifCapture[]
 }
 
 export interface HtmlToPptxEmbeddedFont {
@@ -136,8 +140,8 @@ export interface HtmlToPptxDocument {
   author?: string
   slides: HtmlToPptxSlide[]
   embeddedFonts?: HtmlToPptxEmbeddedFont[]
-  /** Whether to embed Lottie JSON animation data in the PPTX package */
-  embedLottie?: boolean
+  /** Whether to convert Lottie animations to animated GIF for PPTX embedding */
+  embedLottieAsGif?: boolean
 }
 
 export interface HtmlToPptxExtractOptions {

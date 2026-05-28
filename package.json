@@ -65,6 +65,7 @@
     "electron-updater": "^6.3.9",
     "fflate": "^0.8.2",
     "fonteditor-core": "^2.6.3",
+    "gifenc": "^1.0.3",
     "isomorphic-git": "^1.37.6",
     "katex": "^0.16.45",
     "langchain": "^1.4.1",
