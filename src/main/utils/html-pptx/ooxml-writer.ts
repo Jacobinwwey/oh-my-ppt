@@ -707,7 +707,7 @@ function buildSlideXml(
       const cTnId = 2 + idx
       return `<p:video>
         <p:cMediaNode vol="80000">
-          <p:cTn id="${cTnId}" fill="hold" display="0" restart="whenNotActive">
+          <p:cTn id="${cTnId}" fill="hold" display="0" repeatDur="indefinite">
             <p:stCondLst>
               <p:cond delay="0"/>
             </p:stCondLst>
