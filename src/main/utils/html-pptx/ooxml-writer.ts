@@ -545,25 +545,28 @@ type SlideContentItem =
 const contentOrder = (value: number | undefined, fallback: number): number =>
   Number.isFinite(value) ? Number(value) : fallback
 
-function buildLottieVideoPic(id: number, gifRId: string, video: LottieVideoCapture, videoRId?: string): string {
+function buildLottieVideoPic(id: number, gifRId: string, video: LottieVideoCapture, videoEmbedRId?: string, videoLinkRId?: string): string {
   const cx = inToEmu(video.w)
   const cy = inToEmu(video.h)
   const x = inToEmu(video.x)
   const y = inToEmu(video.y)
-  const hasVideo = videoRId && video.videoData.length > 0
+  const hasVideo = videoEmbedRId && videoLinkRId && video.videoData.length > 0
+  const cNvPrInner = hasVideo
+    ? `<a:hlinkClick r:id="" action="ppaction://media"/>`
+    : ''
   const nvPr = hasVideo
     ? `<p:nvPr>
-      <a:videoFile r:link="${videoRId}"/>
+      <a:videoFile r:link="${videoLinkRId}"/>
       <p:extLst>
-        <p:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}">
-          <p14:media r:embed="${videoRId}" xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"/>
+        <p:ext uri="{DAA4B4D4-6D71-4841-9C94-3DE7FCFB9230}">
+          <p14:media r:embed="${videoEmbedRId}" xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"/>
         </p:ext>
       </p:extLst>
     </p:nvPr>`
     : '<p:nvPr/>'
   return `<p:pic>
     <p:nvPicPr>
-      <p:cNvPr id="${id}" name="Lottie ${video.blockId}"/>
+      <p:cNvPr id="${id}" name="Lottie ${video.blockId}">${cNvPrInner}</p:cNvPr>
       <p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>
       ${nvPr}
     </p:nvPicPr>
@@ -684,15 +687,49 @@ function buildSlideXml(
   }
 
   // Lottie animations: WebM video (primary) + GIF fallback (poster/thumbnail)
+  const videoShapeIds: number[] = []
   if (lottieVideos) {
     for (const video of lottieVideos) {
       nextId++
       const gifRId = `rIdLGif_${video.gifFile.replace(/\./g, '_')}`
-      const videoRId = video.videoData.length > 0
-        ? `rIdLVideo_${video.videoFile.replace(/\./g, '_')}`
-        : undefined
-      shapes.push(buildLottieVideoPic(nextId, gifRId, video, videoRId))
+      const hasVideo = video.videoData.length > 0
+      const videoEmbedRId = hasVideo ? `rIdLEmbed_${video.videoFile.replace(/\./g, '_')}` : undefined
+      const videoLinkRId = hasVideo ? `rIdLLink_${video.videoFile.replace(/\./g, '_')}` : undefined
+      if (hasVideo) videoShapeIds.push(nextId)
+      shapes.push(buildLottieVideoPic(nextId, gifRId, video, videoEmbedRId, videoLinkRId))
     }
+  }
+
+  // Timing section for video playback (required by PowerPoint)
+  let timingXml = ''
+  if (videoShapeIds.length > 0) {
+    const videoTimingEntries = videoShapeIds.map((spid, idx) => {
+      const cTnId = 2 + idx
+      return `<p:video>
+        <p:cMediaNode vol="80000">
+          <p:cTn id="${cTnId}" fill="hold" display="0">
+            <p:stCondLst>
+              <p:cond delay="indefinite"/>
+            </p:stCondLst>
+          </p:cTn>
+          <p:tgtEl>
+            <p:spTgt spid="${spid}"/>
+          </p:tgtEl>
+        </p:cMediaNode>
+      </p:video>`
+    }).join('\n        ')
+    timingXml = `
+  <p:timing>
+    <p:tnLst>
+      <p:par>
+        <p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">
+          <p:childTnLst>
+            ${videoTimingEntries}
+          </p:childTnLst>
+        </p:cTn>
+      </p:par>
+    </p:tnLst>
+  </p:timing>`
   }
 
   return `${XML_HEADER}<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -719,7 +756,7 @@ function buildSlideXml(
   </p:cSld>
   <p:clrMapOvr>
     <a:masterClrMapping/>
-  </p:clrMapOvr>
+  </p:clrMapOvr>${timingXml}
 </p:sld>`
 }
 
@@ -964,7 +1001,8 @@ function buildThemeXml(): string {
 interface LottieMediaRel {
   gifRId: string
   gifFile: string
-  videoRId?: string
+  videoEmbedRId?: string
+  videoLinkRId?: string
   videoFile?: string
 }
 
@@ -981,9 +1019,14 @@ function buildSlideRelsXml(imageRels: ImageRel[], lottieMediaRels: LottieMediaRe
     rels.push(
       `<Relationship Id="${lr.gifRId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${lr.gifFile}"/>`
     )
-    if (lr.videoRId && lr.videoFile) {
+    if (lr.videoEmbedRId && lr.videoLinkRId && lr.videoFile) {
+      // p14:media r:embed — uses MS-specific media relationship
       rels.push(
-        `<Relationship Id="${lr.videoRId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/video" Target="../media/${lr.videoFile}"/>`
+        `<Relationship Id="${lr.videoEmbedRId}" Type="http://schemas.microsoft.com/office/2007/relationships/media" Target="../media/${lr.videoFile}"/>`
+      )
+      // a:videoFile r:link — uses standard video relationship
+      rels.push(
+        `<Relationship Id="${lr.videoLinkRId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/video" Target="../media/${lr.videoFile}"/>`
       )
     }
   }
@@ -1077,7 +1120,8 @@ export const writePptxDocument = async (
         lottieGifMedia.set(v.gifFile, v.gifData)
         mediaExtensions.add('gif')
         if (v.videoData.length > 0) {
-          rel.videoRId = `rIdLVideo_${v.videoFile.replace(/\./g, '_')}`
+          rel.videoEmbedRId = `rIdLEmbed_${v.videoFile.replace(/\./g, '_')}`
+          rel.videoLinkRId = `rIdLLink_${v.videoFile.replace(/\./g, '_')}`
           rel.videoFile = v.videoFile
           lottieVideoMedia.set(v.videoFile, v.videoData)
           mediaExtensions.add('webm')
