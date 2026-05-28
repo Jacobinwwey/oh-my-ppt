@@ -113,6 +113,8 @@ export interface HtmlToPptxTable {
 
 import type { LottieVideoCapture } from './lottie-to-video'
 
+export type LottieVideoFormat = 'mp4' | 'webm' | 'gif'
+
 export interface HtmlToPptxSlide {
   title?: string
   backgroundColor?: string
@@ -140,8 +142,8 @@ export interface HtmlToPptxDocument {
   author?: string
   slides: HtmlToPptxSlide[]
   embeddedFonts?: HtmlToPptxEmbeddedFont[]
-  /** Whether to convert Lottie animations to video+GIF for PPTX embedding */
-  embedLottieAsVideo?: boolean
+  /** Lottie animation export format. mp4=recommended, webm=modern, gif=universal fallback */
+  lottieVideoFormat?: LottieVideoFormat
 }
 
 export interface HtmlToPptxExtractOptions {

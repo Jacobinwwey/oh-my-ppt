@@ -686,7 +686,7 @@ function buildSlideXml(
     }
   }
 
-  // Lottie animations: WebM video (primary) + GIF fallback (poster/thumbnail)
+  // Lottie animations: MP4 video (primary) + GIF fallback (poster/thumbnail)
   const videoShapeIds: number[] = []
   if (lottieVideos) {
     for (const video of lottieVideos) {
@@ -709,7 +709,7 @@ function buildSlideXml(
         <p:cMediaNode vol="80000">
           <p:cTn id="${cTnId}" fill="hold" display="0">
             <p:stCondLst>
-              <p:cond delay="indefinite"/>
+              <p:cond delay="0"/>
             </p:stCondLst>
           </p:cTn>
           <p:tgtEl>
@@ -1124,7 +1124,8 @@ export const writePptxDocument = async (
           rel.videoLinkRId = `rIdLLink_${v.videoFile.replace(/\./g, '_')}`
           rel.videoFile = v.videoFile
           lottieVideoMedia.set(v.videoFile, v.videoData)
-          mediaExtensions.add('webm')
+          const videoExt = v.videoFile.split('.').pop() || 'mp4'
+          mediaExtensions.add(videoExt)
         }
         mediaRels.push(rel)
       }
@@ -1202,7 +1203,7 @@ export const writePptxDocument = async (
     files[`ppt/media/${mediaFile}`] = gifBytes
   }
 
-  // Lottie WebM video media files
+  // Lottie MP4 video media files
   for (const [mediaFile, videoBytes] of lottieVideoMedia) {
     files[`ppt/media/${mediaFile}`] = videoBytes
   }

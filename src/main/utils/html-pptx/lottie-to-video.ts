@@ -22,6 +22,8 @@ export interface LottieVideoCapture {
   h: number
 }
 
+export type LottieVideoFormat = 'mp4' | 'webm' | 'gif'
+
 interface LottieTraceElement {
   type: 'lottie'
   lottieSrc: string
@@ -31,7 +33,7 @@ interface LottieTraceElement {
   rect?: { x: number; y: number; w: number; h: number }
 }
 
-const CAPTURE_SIZE = 400
+const CAPTURE_SIZE = 600
 const TARGET_FPS = 25
 const MAX_DURATION_MS = 5000
 const MAX_FRAMES = 125
@@ -39,10 +41,11 @@ const PALETTE_SIZE = 256
 
 export async function renderLottieAnimations(
   lottieElements: LottieTraceElement[],
-  options?: { lottieAssetDir?: string }
+  options?: { lottieAssetDir?: string; videoFormat?: LottieVideoFormat }
 ): Promise<LottieVideoCapture[]> {
   if (!lottieElements.length) return []
   const results: LottieVideoCapture[] = []
+  const format = options?.videoFormat || 'mp4'
 
   const win = new BrowserWindow({
     show: false,
@@ -59,18 +62,21 @@ export async function renderLottieAnimations(
       const el = lottieElements[i]
       const blockId = el.blockId || `lottie-${i}`
       try {
-        const { videoData, gifData } = await renderSingle(win, el, options)
+        const { videoData, gifData } = await renderSingle(win, el, options, format)
         const slideW = 1600, slideH = 900
         const rect = el.rect || { x: 0, y: 0, w: slideW, h: slideH }
+        const isGifOnly = format === 'gif'
         results.push({
-          videoFile: `lottie${i + 1}.webm`, videoData,
+          videoFile: `lottie${i + 1}.${isGifOnly ? 'gif' : format}`, videoData: isGifOnly ? new Uint8Array(0) : videoData,
           gifFile: `lottie${i + 1}.gif`, gifData,
           width: CAPTURE_SIZE, height: CAPTURE_SIZE, blockId,
           x: (rect.x / slideW) * 13.333, y: (rect.y / slideH) * 7.5,
           w: (rect.w / slideW) * 13.333, h: (rect.h / slideH) * 7.5,
         })
         log.info('[lottie-to-video] rendered', {
-          blockId, webmKB: Math.round(videoData.length / 1024), gifKB: Math.round(gifData.length / 1024),
+          blockId, format,
+          videoKB: isGifOnly ? 0 : Math.round(videoData.length / 1024),
+          gifKB: Math.round(gifData.length / 1024),
         })
       } catch (err) {
         log.warn('[lottie-to-video] failed', { blockId, error: err instanceof Error ? err.message : String(err) })
@@ -82,7 +88,7 @@ export async function renderLottieAnimations(
   return results
 }
 
-async function renderSingle(win: BrowserWindow, el: LottieTraceElement, options?: { lottieAssetDir?: string }) {
+async function renderSingle(win: BrowserWindow, el: LottieTraceElement, options: { lottieAssetDir?: string } | undefined, format: LottieVideoFormat) {
   let lottieSrc = el.lottieSrc
   if (lottieSrc && !lottieSrc.startsWith('http') && !lottieSrc.startsWith('data:')) {
     const base = options?.lottieAssetDir
@@ -114,8 +120,39 @@ async function renderSingle(win: BrowserWindow, el: LottieTraceElement, options?
   }
   gif.finish()
 
-  const videoData = await encodeWebm(frames, CAPTURE_SIZE, CAPTURE_SIZE, TARGET_FPS)
+  const videoData = format === 'gif'
+    ? gif.bytes()
+    : format === 'webm'
+      ? await encodeWebm(frames, CAPTURE_SIZE, CAPTURE_SIZE, TARGET_FPS)
+      : await encodeMp4(frames, CAPTURE_SIZE, CAPTURE_SIZE, TARGET_FPS)
   return { videoData, gifData: gif.bytes() }
+}
+
+function encodeMp4(frames: Uint8Array[], w: number, h: number, fps: number): Promise<Uint8Array> {
+  const tmp = mkdtempSync(join(tmpdir(), 'lottie-'))
+  const paths: string[] = []
+  for (let i = 0; i < frames.length; i++) {
+    const p = join(tmp, `f${String(i).padStart(4, '0')}.png`)
+    writeFileSync(p, rgbaToPng(frames[i], w, h))
+    paths.push(p)
+  }
+  const outPath = join(tmp, 'out.mp4')
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn('ffmpeg', ['-y', '-framerate', String(fps), '-i', join(tmp, 'f%04d.png'),
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-preset', 'slow',
+      '-crf', '18', '-movflags', '+faststart', outPath])
+    proc.on('close', code => {
+      try {
+        const data = code === 0 ? new Uint8Array(readFileSync(outPath)) : new Uint8Array(0)
+        for (const p of paths) try { unlinkSync(p) } catch {}
+        try { unlinkSync(outPath) } catch {}
+        try { rmdirSync(tmp) } catch {}
+        if (code !== 0) log.warn('[lottie-to-video] ffmpeg failed, MP4 skipped')
+        resolve(data)
+      } catch (e) { reject(e) }
+    })
+  })
 }
 
 function encodeWebm(frames: Uint8Array[], w: number, h: number, fps: number): Promise<Uint8Array> {
@@ -130,7 +167,7 @@ function encodeWebm(frames: Uint8Array[], w: number, h: number, fps: number): Pr
 
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', ['-y', '-framerate', String(fps), '-i', join(tmp, 'f%04d.png'),
-      '-c:v', 'libvpx-vp9', '-lossless', '0', '-crf', '30', '-b:v', '0', '-auto-alt-ref', '1', outPath])
+      '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuv420p', '-crf', '30', '-b:v', '0', outPath])
     proc.on('close', code => {
       try {
         const data = code === 0 ? new Uint8Array(readFileSync(outPath)) : new Uint8Array(0)
