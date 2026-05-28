@@ -1,5 +1,6 @@
 import { zipSync, strToU8 } from 'fflate'
 import { writeFileSync } from 'fs'
+import type { LottieGifCapture } from './lottie-to-gif'
 import type {
   HtmlToPptxDocument,
   HtmlToPptxSlide,
@@ -544,10 +545,36 @@ type SlideContentItem =
 const contentOrder = (value: number | undefined, fallback: number): number =>
   Number.isFinite(value) ? Number(value) : fallback
 
+function buildLottieGifPic(id: number, rId: string, gif: LottieGifCapture): string {
+  const cx = inToEmu(gif.w)
+  const cy = inToEmu(gif.h)
+  const x = inToEmu(gif.x)
+  const y = inToEmu(gif.y)
+  return `<p:pic>
+    <p:nvPicPr>
+      <p:cNvPr id="${id}" name="Lottie ${gif.blockId}"/>
+      <p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>
+      <p:nvPr/>
+    </p:nvPicPr>
+    <p:blipFill>
+      <a:blip r:embed="${rId}"/>
+      <a:stretch><a:fillRect/></a:stretch>
+    </p:blipFill>
+    <p:spPr>
+      <a:xfrm>
+        <a:off x="${x}" y="${y}"/>
+        <a:ext cx="${cx}" cy="${cy}"/>
+      </a:xfrm>
+      <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+    </p:spPr>
+  </p:pic>`
+}
+
 function buildSlideXml(
   slide: HtmlToPptxSlide,
   imageRels: Map<string, ImageRel>,
-  idStart: number
+  idStart: number,
+  lottieGifs?: LottieGifCapture[]
 ): string {
   let nextId = idStart
   const shapes: string[] = []
@@ -642,6 +669,15 @@ function buildSlideXml(
     const rel = imageRels.get(img.dataUri)
     if (rel) {
       shapes.push(buildImagePic(nextId, rel.rId, img))
+    }
+  }
+
+  // Lottie animated GIF images (placed at their original position on the slide)
+  if (lottieGifs) {
+    for (const gif of lottieGifs) {
+      nextId++
+      const rId = `rIdGif_${gif.mediaFile.replace(/\./g, '_')}`
+      shapes.push(buildLottieGifPic(nextId, rId, gif))
     }
   }
 
@@ -1068,7 +1104,7 @@ export const writePptxDocument = async (
     const relsMap = slideImageRels[i]
     const imageRelsForSlide = Array.from(relsMap.values())
 
-    files[`ppt/slides/slide${i + 1}.xml`] = strToU8(buildSlideXml(slides[i], relsMap, 1))
+    files[`ppt/slides/slide${i + 1}.xml`] = strToU8(buildSlideXml(slides[i], relsMap, 1, slides[i].lottieGifs))
     files[`ppt/slides/_rels/slide${i + 1}.xml.rels`] = strToU8(buildSlideRelsXml(imageRelsForSlide, slideLottieGifRels[i] || []))
   }
 

@@ -9,6 +9,11 @@ export interface LottieGifCapture {
   width: number
   height: number
   blockId: string
+  /** Slide position in inches (from px conversion) */
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 interface LottieTraceElement {
@@ -17,6 +22,8 @@ interface LottieTraceElement {
   lottieLoop?: boolean
   lottieSpeed?: number
   blockId?: string
+  /** Element position on slide (px) */
+  rect?: { x: number; y: number; w: number; h: number }
 }
 
 // Optimization: small resolution, low fps, limited colors → compact GIF
@@ -69,7 +76,15 @@ export async function renderLottieAnimationsToGif(
 
       try {
         const gifData = await renderSingleLottieToGif(win, el, options)
-        results.push({ mediaFile, data: gifData, width: MAX_CAPTURE_SIZE, height: MAX_CAPTURE_SIZE, blockId })
+        const slideW = 1600, slideH = 900
+        const rect = el.rect || { x: 0, y: 0, w: slideW, h: slideH }
+        results.push({
+          mediaFile, data: gifData, width: MAX_CAPTURE_SIZE, height: MAX_CAPTURE_SIZE, blockId,
+          x: (rect.x / slideW) * 13.333,
+          y: (rect.y / slideH) * 7.5,
+          w: (rect.w / slideW) * 13.333,
+          h: (rect.h / slideH) * 7.5,
+        })
         log.info('[lottie-to-gif] rendered', { blockId, mediaFile, sizeKB: Math.round(gifData.length / 1024) })
       } catch (err) {
         log.warn('[lottie-to-gif] failed', {
