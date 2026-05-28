@@ -1,8 +1,7 @@
 import type { DesignContract, SessionDeckGenerationContext } from '../tools/types'
 import { formatLayoutIntentPrompt } from '@shared/layout-intent'
+import { CHART_SKILL_NAME, formatSkillUsageRequirement } from '../skills/skill-contract'
 import {
-  ANIMATION_CHART_RETRY_FIX,
-  ANIMATION_INTERACTION_RULES,
   CANVAS_CONSTRAINTS,
   CONTENT_LANGUAGE_RULES,
   FRONTEND_CAPABILITIES,
@@ -34,8 +33,6 @@ export function buildDeckGenerationPrompt(context: SessionDeckGenerationContext)
     '',
     FRONTEND_CAPABILITIES,
     '',
-    ANIMATION_INTERACTION_RULES,
-    '',
     PAGE_SEMANTIC_STRUCTURE,
     '',
     'Fill each slide strictly according to the content points in the page outline above.'
@@ -61,8 +58,8 @@ export function buildSinglePageGenerationPrompt(args: {
   }
 }): string {
   const previousError = args.retryContext?.previousError || ''
-  const shouldMentionChartOrAnimationFix =
-    /chart|canvas|animation|animate|anime|PPT\.animate|PPT\.createChart/i.test(previousError)
+  const shouldMentionChartFix =
+    /chart|canvas|PPT\.createChart/i.test(previousError)
   const shouldMentionWriteToolFix =
     /页面未写入|没有成功调用|not written|update_single_page_file|占位|placeholder/i.test(
       previousError
@@ -80,8 +77,8 @@ export function buildSinglePageGenerationPrompt(args: {
         '- Before calling the write tool, mentally validate that the main containers are closed and that no tag is left unfinished at the end.',
         '- If the previous issue was unclosed tags, do not patch the broken fragment. Rewrite a simpler, shallower fragment from scratch: one root div, no page shell (section[data-page-scaffold], main[data-role="content"], or runtime frame), grid/flex direct children, aim for 3 nesting levels and avoid exceeding 4, fewer wrappers, fewer modules.',
         '- If the previous issue was page shell structure, do not include .ppt-page-root, .ppt-page-content, .ppt-page-fit-scope, or data-ppt-guard-root anywhere, including CSS selectors, class names, scripts, and comments.',
-        shouldMentionChartOrAnimationFix
-          ? ANIMATION_CHART_RETRY_FIX
+        shouldMentionChartFix
+          ? `- The previous issue involved chart API usage. Before repairing or writing chart code: ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
           : ''
       ].filter(Boolean)
     : []
@@ -132,8 +129,6 @@ export function buildSinglePageGenerationPrompt(args: {
     LAYOUT_COLLISION_RULES,
     '',
     FRONTEND_CAPABILITIES,
-    '',
-    ANIMATION_INTERACTION_RULES,
     '',
     STABLE_HTML_FRAGMENT_PROTOCOL,
     '',

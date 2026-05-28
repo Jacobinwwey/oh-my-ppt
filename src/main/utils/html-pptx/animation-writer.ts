@@ -3,6 +3,11 @@ import type {
   HtmlToPptxAnimationTrigger,
   HtmlToPptxAnimationType
 } from './types'
+import {
+  getPptxAnimationPreset,
+  resolveTraceMotion,
+  wipeFilterForFrom
+} from '../../animation/pptx-animation-map'
 
 export interface PptxTargetAnimation {
   spid: number
@@ -14,121 +19,6 @@ export interface PptxTargetAnimation {
   order: number
 }
 
-interface AnimationPreset {
-  presetId: number
-  presetClass: 'entr' | 'emph' | 'exit'
-  presetSubtype?: number
-  motion?: 'fromTop' | 'fromBottom' | 'fromLeft' | 'fromRight' | 'fromTrace'
-  scale?: boolean
-  scaleFrom?: number
-  scaleTo?: number
-  fade?: boolean
-  effectFilter?: 'fade' | 'wipe'
-  transition?: 'in' | 'out'
-}
-
-const PRESETS: Record<HtmlToPptxAnimationType, AnimationPreset> = {
-  fade: { presetId: 10, presetClass: 'entr', fade: true },
-  'fade-up': {
-    presetId: 2,
-    presetClass: 'entr',
-    presetSubtype: 8,
-    motion: 'fromBottom',
-    fade: true
-  },
-  'fade-down': {
-    presetId: 2,
-    presetClass: 'entr',
-    presetSubtype: 1,
-    motion: 'fromTop',
-    fade: true
-  },
-  'fade-left': {
-    presetId: 2,
-    presetClass: 'entr',
-    presetSubtype: 3,
-    motion: 'fromRight',
-    fade: true
-  },
-  'fade-right': {
-    presetId: 2,
-    presetClass: 'entr',
-    presetSubtype: 2,
-    motion: 'fromLeft',
-    fade: true
-  },
-  'scale-in': { presetId: 31, presetClass: 'entr', scale: true, fade: true },
-  'slide-up': {
-    presetId: 2,
-    presetClass: 'entr',
-    presetSubtype: 8,
-    motion: 'fromBottom',
-    fade: true
-  },
-  'slide-left': {
-    presetId: 2,
-    presetClass: 'entr',
-    presetSubtype: 3,
-    motion: 'fromRight',
-    fade: true
-  },
-  'fly-in': {
-    presetId: 2,
-    presetClass: 'entr',
-    motion: 'fromTrace',
-    fade: true
-  },
-  wipe: {
-    presetId: 5,
-    presetClass: 'entr',
-    effectFilter: 'wipe'
-  },
-  'zoom-in': {
-    presetId: 31,
-    presetClass: 'entr',
-    scale: true,
-    scaleFrom: 75000,
-    scaleTo: 100000,
-    fade: true
-  },
-  'spin-in': {
-    presetId: 31,
-    presetClass: 'entr',
-    scale: true,
-    scaleFrom: 92000,
-    scaleTo: 100000,
-    fade: true
-  },
-  'grow-shrink': {
-    presetId: 6,
-    presetClass: 'emph',
-    scale: true,
-    scaleFrom: 90000,
-    scaleTo: 108000
-  },
-  pulse: {
-    presetId: 6,
-    presetClass: 'emph',
-    scale: true,
-    scaleFrom: 100000,
-    scaleTo: 106000
-  },
-  'exit-fade': {
-    presetId: 10,
-    presetClass: 'exit',
-    fade: true,
-    transition: 'out'
-  },
-  'exit-fly': {
-    presetId: 2,
-    presetClass: 'exit',
-    motion: 'fromTrace',
-    fade: true,
-    transition: 'out'
-  },
-  path: { presetId: 10, presetClass: 'entr', fade: true }
-}
-
 const clampMs = (value: number, fallback: number): number => {
   const numeric = Number.isFinite(value) ? value : fallback
   return Math.round(Math.max(100, Math.min(5000, numeric)))
@@ -137,7 +27,8 @@ const clampMs = (value: number, fallback: number): number => {
 const targetXml = (spid: number): string => `<p:tgtEl><p:spTgt spid="${spid}"/></p:tgtEl>`
 
 const ctnAttrs = (anim: PptxTargetAnimation, id: number): string => {
-  const preset = PRESETS[anim.type]
+  const preset = getPptxAnimationPreset(anim.type)
+  if (!preset) return ''
   const nodeType = anim.trigger === 'click' ? 'clickEffect' : 'withEffect'
   const subtype =
     preset.presetSubtype === undefined ? '' : ` presetSubtype="${preset.presetSubtype}"`
@@ -199,25 +90,10 @@ const numericAnimXml = (
   </p:tavLst>
 </p:anim>`
 
-const traceMotion = (from: HtmlToPptxAnimationFrom | undefined) => {
-  switch (from) {
-    case 'left':
-      return 'fromLeft'
-    case 'right':
-      return 'fromRight'
-    case 'top':
-      return 'fromTop'
-    case 'bottom':
-    case 'center':
-    default:
-      return 'fromBottom'
-  }
-}
-
 const motionXml = (anim: PptxTargetAnimation, duration: number, nextId: () => number): string[] => {
-  const preset = PRESETS[anim.type]
-  const motion = preset.motion === 'fromTrace' ? traceMotion(anim.from) : preset.motion
-  if (!motion) return []
+  const preset = getPptxAnimationPreset(anim.type)
+  const motion = preset?.motion === 'fromTrace' ? resolveTraceMotion(anim.from) : preset?.motion
+  if (!preset || !motion) return []
 
   const xAway =
     motion === 'fromLeft'
@@ -254,23 +130,9 @@ const scaleXml = (
   <p:to x="${to}" y="${to}"/>
 </p:animScale>`
 
-const wipeFilter = (from: HtmlToPptxAnimationFrom | undefined): string => {
-  switch (from) {
-    case 'right':
-      return 'wipe(l)'
-    case 'top':
-      return 'wipe(d)'
-    case 'bottom':
-      return 'wipe(u)'
-    case 'left':
-    case 'center':
-    default:
-      return 'wipe(r)'
-  }
-}
-
 const effectXml = (anim: PptxTargetAnimation, nextId: () => number): string => {
-  const preset = PRESETS[anim.type]
+  const preset = getPptxAnimationPreset(anim.type)
+  if (!preset) return ''
   const duration = clampMs(anim.duration, 500)
   const delay = Math.max(0, Math.round(Number.isFinite(anim.delay) ? anim.delay : 0))
   const effectId = nextId()
@@ -279,7 +141,7 @@ const effectXml = (anim: PptxTargetAnimation, nextId: () => number): string => {
     chunks.push(scaleXml(anim.spid, nextId(), duration, preset.scaleFrom, preset.scaleTo))
   }
   if (preset.effectFilter === 'wipe') {
-    chunks.push(fadeXml(anim.spid, nextId(), duration, preset.transition ?? 'in', wipeFilter(anim.from)))
+    chunks.push(fadeXml(anim.spid, nextId(), duration, preset.transition ?? 'in', wipeFilterForFrom(anim.from)))
   } else if (preset.fade) {
     chunks.push(fadeXml(anim.spid, nextId(), duration, preset.transition ?? 'in'))
   }
@@ -306,7 +168,7 @@ export function buildSlideTimingXml(animations: PptxTargetAnimation[], startNode
   }
 
   const ordered = [...animations]
-    .filter((anim) => PRESETS[anim.type] && Number.isFinite(anim.spid))
+    .filter((anim) => getPptxAnimationPreset(anim.type) && Number.isFinite(anim.spid))
     .sort((a, b) => a.order - b.order || a.delay - b.delay || a.spid - b.spid)
   if (ordered.length === 0) return ''
 

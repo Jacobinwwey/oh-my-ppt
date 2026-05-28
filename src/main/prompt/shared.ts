@@ -1,6 +1,11 @@
 import { loadStyleSkill } from '../utils/style-skills'
 import { formatLayoutIntentPrompt } from '@shared/layout-intent'
 import type { DesignContract, SessionDeckGenerationContext } from '../tools/types'
+import {
+  CHART_SKILL_NAME,
+  DATA_ANIM_SKILL_NAME,
+  formatSkillUsageRequirement,
+} from '../skills/skill-contract'
 
 export const PAGE_SEMANTIC_STRUCTURE = [
   '## 页面语义结构',
@@ -67,145 +72,32 @@ export const LAYOUT_COLLISION_RULES = [
   '- 写入前做一次版面自检：标题、主视觉、每张卡片、底部元素都必须有独立空间，不能互相覆盖，不能依赖 hover/animation 后才可读。'
 ].join('\n')
 
-export const DATA_ANIM_SUPPORTED_TYPES = [
-  'fade',
-  'fade-up',
-  'fade-down',
-  'fade-left',
-  'fade-right',
-  'scale-in',
-  'slide-up',
-  'slide-left',
-  'fly-in',
-  'wipe',
-  'zoom-in',
-  'spin-in',
-  'grow-shrink',
-  'pulse',
-  'exit-fade',
-  'exit-fly',
-  'path'
-]
-
-export const DATA_ANIM_SUPPORTED_TYPES_TEXT = DATA_ANIM_SUPPORTED_TYPES.join(' | ')
-
-export const DATA_ANIM_ATTRIBUTE_LINES = [
-  `data-anim 支持的类型：${DATA_ANIM_SUPPORTED_TYPES_TEXT}`,
-  'data-anim-from：left | right | top | bottom | center（fly-in / wipe / exit-fly 可用）',
-  'data-anim-delay：数字(ms) 或 stagger(N)（自动错峰，N 为间隔毫秒）',
-  'data-anim-duration：数字(ms)，默认 500',
-  'data-anim-easing：easeOutCubic（默认）| easeOutBack | easeInOut | linear',
-  'data-anim-trigger：load（默认，页面加载即播）| with | after | click（click 低优先级，仅在用户提示词表达点击/按键逐条展示时使用）',
-  'data-anim-repeat：数字或 infinite；data-anim-direction：normal | reverse | alternate；强调动效如 pulse 可用。'
-]
-
-export const DATA_ANIM_LOCAL_EDIT_RULES = [
-  '- 选择器编辑模式下不主动新增动画；仅当用户要求给目标元素添加/修改动画时处理。',
-  '- 简单入场、强调、退出、逐条展示或演讲节奏动画，优先只在目标元素或最小必要父容器上添加/调整 data-anim 属性。',
-  '- 历史页面可能带旧版 ppt-default-motion；添加 data-anim 前先确认页面脚本已包含 runDataAnimMotion 或 scanDataAnim 调用。若没有，不要只添加 data-anim 后声称动画已生效；用户明确要求动画时，才添加最小 scoped PPT.animate(...) 脚本作为历史页兼容方案。',
-  `- 支持 data-anim="${DATA_ANIM_SUPPORTED_TYPES_TEXT}"。`,
-  '- 支持 data-anim-from、data-anim-trigger="load | with | after | click"、data-anim-delay、data-anim-duration、data-anim-easing、data-anim-repeat、data-anim-direction；click 是低优先级方案，只在用户表达点击/按键/逐步展示意图时使用。',
-  '- 普通动画不要新增 <script>、PPT.animate(...) 或 PPT.createTimeline(...)；只有 data-anim 无法表达的复杂时间线或回调才使用脚本。'
-]
-
-export const ANIMATION_GENERATION_PRIORITY_RULE =
-  '- 动画选择要先匹配用户提示词和页面叙事；click 触发是低优先级方案。简单入场、强调、退出和展示节奏优先使用静态呈现、data-anim 的 load/with/after 触发或 stagger 自动错峰；只有用户表达点击/按键/逐步展示意图时才使用 click 触发。'
-
-export const COMPLEX_ANIMATION_SCRIPT_RULE =
-  '- 只有 data-anim 无法表达的复杂时间线、自定义回调或复杂同步编排才使用 <script> + PPT.animate(...) / PPT.createTimeline(...)。'
-
-export const ANIMATION_CHART_RETRY_FIX =
-  '- The previous issue involved animation/chart API usage. Match animation to the original user request and slide narrative. Prefer static/load/with/after/stagger for simple entry, emphasis, exit, or reveal; treat data-anim-trigger="click" as a low-priority option only when the original request asks for click/keyboard/step-by-step presentation control. Use PPT.animate, PPT.createTimeline, and PPT.stagger only for complex scripted animation; use PPT.createChart for charts.'
-
 export const FRONTEND_CAPABILITIES = [
-  '## 前端能力（已内置）',
-  '每个 /<pageId>.html 已预注入 ./assets/anime.v4.js、./assets/tailwindcss.v3.js、./assets/chart.v4.js、./assets/ppt-runtime.js 和 KaTeX。',
-  '禁止重复插入上述 script/link 标签；禁止使用任何 CDN 外链。',
+  '## Runtime capability contract',
+  'Available in every /<pageId>.html:',
+  '- Tailwind CSS, anime.js, Chart.js, ppt-runtime.js, and KaTeX are already loaded from local assets.',
+  '- Do not add CDN links, remote scripts, duplicate runtime tags, or iframe content.',
   '',
-  '### 字体',
-  '装饰字体已由系统根据 design contract 自动注入（@font-face + CSS 变量），直接使用：',
-  '- 标题用 var(--ppt-title-font)',
-  '- 正文用 var(--ppt-body-font)',
-  '禁止手写 @font-face 或 <link> 引入外部字体，系统已自动处理。',
-  '所有 CDN 字体/图标库仍然禁止。',
+  'Fonts:',
+  '- Use var(--ppt-title-font) for titles and var(--ppt-body-font) for body text.',
+  '- Do not declare @font-face or import external font/icon libraries.',
   '',
-  '### 图表 — 必须严格按此模板写',
-  '正确写法（高度写在 canvas 的直接父容器上；父容器用固定 h-[...]，不要混用 h-full/flex-1）：',
-  '```html',
-  '<div class="ppt-chart-frame relative h-[260px] w-full">',
-  '  <canvas class="h-full w-full"></canvas>',
-  '</div>',
-  '```',
-  '```js',
-  'const chart = PPT.createChart(canvasEl, { type: "bar", data: { labels: ["A","B"], datasets: [{ data: [10,20] }] }, options: {} });',
-  '```',
-  '- 类目轴标签必须写在 data.labels；不要给 category x/y 轴自定义 ticks.callback。若确实需要自定义，必须用 function(value) { return this.getLabelForValue(value); } 取回标签，不能直接返回 value（否则会显示 0、1、2、3）。',
-  '⛔ 错误写法（全部会被验证拦截，导致该页生成失败）：',
-  '- new Chart(ctx, config) → 必须用 PPT.createChart(el, config)',
-  '- canvas 上直接写 h-32 / h-full / flex-1 → 高度必须写在父容器',
-  '- canvas 父容器写 h-full / flex-1 / 只有 min-h-* → 父容器必须有明确 h-[...]',
-  '- 把 canvas 直接放进卡片/文本块 → 必须有专属 chart frame 父容器',
+  'Charts:',
+  `- The mandatory chart source of truth is the DeepAgents skill ${CHART_SKILL_NAME}.`,
+  `- Before adding or modifying charts: ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`,
+  '- If the task does not add or modify charts, do not read the full chart reference just to satisfy this contract.',
+  '- Do not call new Chart(ctx, config); chart creation must go through the product runtime helper described by the chart skill.',
   '',
-  '### 动画 — 优先使用 data-anim 声明式属性（推荐）',
-  '简单入场、强调、退出或演讲节奏动画请优先使用 HTML data 属性声明，无需编写 JavaScript。默认使用 load 触发或不加动画：',
-  '```html',
-  '<!-- 单个元素：页面加载时淡入上滑 -->',
-  '<div data-anim="fade-up" data-anim-duration="500">标题卡片</div>',
+  'Animations:',
+  `- The mandatory animation source of truth is the DeepAgents skill ${DATA_ANIM_SKILL_NAME}.`,
+  `- Before adding or modifying animation: ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`,
+  '- If the task does not add or modify animation, do not read the full animation reference just to satisfy this contract.',
+  '- Do not call raw anime(...) or anime.timeline(...). Do not create animation initial hidden states with CSS classes or inline styles.',
   '',
-  '<!-- 列表交错出现：stagger(N) 自动错峰 -->',
-  '<div data-anim="fade-up" data-anim-delay="stagger(100)">第1项</div>',
-  '<div data-anim="fade-up" data-anim-delay="stagger(100)">第2项</div>',
-  '<div data-anim="fade-up" data-anim-delay="stagger(100)">第3项</div>',
-  '',
-  '<!-- click 触发示例：低优先级方案。仅当用户提示词表达点击/按键/逐步讲述控制时使用；默认生成不要照抄 -->',
-  '<div data-anim="fade-up" data-anim-trigger="click">第一条要点</div>',
-  '<div data-anim="fade-up" data-anim-trigger="click">第二条要点</div>',
-  '<div data-anim="fade-up" data-anim-trigger="click">第三条要点</div>',
-  '',
-  '<!-- 方向与强调示例 -->',
-  '<div data-anim="fly-in" data-anim-from="left">侧边指标</div>',
-  '<div data-anim="wipe" data-anim-from="right">流程节点</div>',
-  '<div data-anim="pulse" data-anim-repeat="2" data-anim-direction="alternate">关键数字</div>',
-  '```',
-  '',
-  ...DATA_ANIM_ATTRIBUTE_LINES,
-  '风格预设里的动画词（如 typewriter/glitch-in/path-draw 等）只作动效气质参考；data-anim 属性值必须使用上方支持列表，不要把风格词直接写成 data-anim，也不要为普通动效改写成脚本。',
-  '动画决策规则见下方「动画交互决策规则」章节。',
-  '使用 data-anim 的元素自身不要再写 inline opacity/transform 初始态；需要静态旋转、缩放或透明视觉时，放到内部子元素或外层非动画容器。',
-  '',
-  '### 动画 — PPT.animate() 命令式 API（复杂场景）',
-  '只有当 data-anim 无法表达复杂时间线、自定义回调或复杂同步编排时，才使用 PPT.animate()：',
-  'PPT.animate 的第一个参数是 targets（CSS 选择器字符串或 DOM 元素），第二个参数是动画参数对象：',
-  '```js',
-  '// ✅ 正确：PPT.animate(selector, params)',
-  'PPT.animate(".card", { opacity: [0, 1], translateY: [20, 0], duration: 500, delay: PPT.stagger(100) })',
-  '',
-  '// ❌ 错误：把 targets 放在对象里',
-  'PPT.animate({ targets: ".card", opacity: [0, 1] })  // 会被拦截',
-  'anime({ targets: ".card" })                          // 会被拦截',
-  '```',
-  '创建时间线：PPT.createTimeline(targets, params)',
-  '错峰延迟：PPT.stagger(ms)',
-  '',
-  '### 其他硬校验禁区（违反即失败）',
-  '- 禁止 opacity-0 / invisible / visibility:hidden（初始态必须可见）',
-  '- <style> 中禁止写 opacity:0 / visibility:hidden / display:none（系统会检测并拒绝）',
-  '- 动画初始态写在 PPT.animate 参数里（如 opacity: [0, 1]），不要写在 CSS 或 class 中',
-  '- 数学公式用 \\( \\) 或 $$ $$，不用单 $',
-  '- 动画仅做轻量入场、强调或退出增强（opacity/translate/scale/clipPath，300-1200ms）。默认禁止无限循环；只有用户明确要求循环强调、呼吸感或持续装饰时，才允许 data-anim-repeat="infinite"。'
-].join('\n')
-
-export const ANIMATION_INTERACTION_RULES = [
-  '## 动画交互决策规则',
-  '生成页面时默认按以下策略判断；编辑模式仅在用户要求添加/修改动画，或必须重写动画相关内容时参考。',
-  '- 先分析用户提示词、页面叙事和内容密度，再选择动画：无动画/静态 > load 入场 > stagger 自动错峰 > with/after 顺序编排 > click 触发。click 是低优先级方案，不是流程页、列表页或时间线页的默认选择。',
-  '- 如果用户没有表达点击、按键、逐步讲述、演讲节奏控制或 step-by-step reveal，不要主动写 data-anim-trigger="click"。',
-  '- “流程图、时间线、步骤说明、阶段拆解、路径/链路/过程类页面”并不等于需要点击动画；只有用户提示词体现讲述控制需求时，才考虑 click。',
-  '- 普通列表要点、对比卡片、分步讲解：默认一次显示、静态呈现、load 入场、with/after 顺序编排或 stagger 自动错峰，不要因为“适合演讲”就主动使用 click。',
-  '- 封面、章节页、总结页、纯视觉页、密集数据页：通常使用 load 入场动画或不加动画。',
-  '- 标题、背景装饰、连接线、箭头可以保持静态或使用 load；不要把箭头/连接线单独做成一次 click。',
-  '- 当用户说"点击逐条出现/点一下出一个/演讲节奏/逐步讲解/逐项展开/按键展示"等明确交互需求时，才在对应内容单元上写 data-anim-trigger="click"。',
-  '- 普通动画使用 data-anim 属性；fly-in/wipe/zoom-in/spin-in/pulse/exit-* 都先用 data-anim 表达。不要为这些场景编写 <script> 或 JS 动画逻辑。'
+  'Validation constraints:',
+  '- Keep runtime initial state visible: no opacity-0, invisible, visibility:hidden, display:none, or CSS opacity:0 for animated elements.',
+  '- Put animation initial values inside PPT.animate parameters when scripted animation is truly needed.',
+  '- Use \\( \\) or $$ $$ for math; do not use single-dollar inline math.'
 ].join('\n')
 
 export const CONTENT_WRITING_RULES = [

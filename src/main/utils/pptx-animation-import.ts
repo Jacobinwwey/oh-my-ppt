@@ -1,27 +1,14 @@
 import { unzipSync } from 'fflate'
 import * as cheerio from 'cheerio'
+import type { DataAnimFrom, DataAnimPptxTrigger, DataAnimType } from '../animation/data-anim-schema'
+import {
+  mapPptxPresetToDataAnimFrom,
+  mapPptxPresetToDataAnimType
+} from '../animation/pptx-animation-map'
 
-export type ImportedAnimationType =
-  | 'fade'
-  | 'fade-up'
-  | 'fade-down'
-  | 'fade-left'
-  | 'fade-right'
-  | 'scale-in'
-  | 'slide-up'
-  | 'slide-left'
-  | 'fly-in'
-  | 'wipe'
-  | 'zoom-in'
-  | 'spin-in'
-  | 'grow-shrink'
-  | 'pulse'
-  | 'exit-fade'
-  | 'exit-fly'
-  | 'path'
-
-export type ImportedAnimationTrigger = 'load' | 'click'
-export type ImportedAnimationFrom = 'left' | 'right' | 'top' | 'bottom' | 'center'
+export type ImportedAnimationType = DataAnimType
+export type ImportedAnimationTrigger = DataAnimPptxTrigger
+export type ImportedAnimationFrom = DataAnimFrom
 
 export type ImportedElementAnimation = {
   id: number
@@ -58,64 +45,6 @@ export const normalizePptxShapeName = (value: unknown): string =>
 const clampMs = (value: unknown, fallback: number): number => {
   const n = Number(value)
   return Math.round(Math.max(100, Math.min(5000, Number.isFinite(n) ? n : fallback)))
-}
-
-const normalizeAnimationType = (
-  presetId: string | undefined,
-  presetSubtype: string | undefined,
-  presetClass: string | undefined,
-  hasScale: boolean,
-  effectFilter: string | undefined
-): ImportedAnimationType => {
-  if (presetClass === 'exit') {
-    if (presetId === '2') return 'exit-fly'
-    return 'exit-fade'
-  }
-  if (presetClass === 'emph' && hasScale) return 'pulse'
-  if (effectFilter?.startsWith('wipe') || presetId === '5') return 'wipe'
-  if (hasScale) return 'scale-in'
-  if (presetId === '10') return 'fade'
-  if (presetId === '2') {
-    switch (presetSubtype) {
-      case '1':
-        return 'fade-down'
-      case '2':
-        return 'fade-right'
-      case '3':
-      case '4':
-        return 'fade-left'
-      case '8':
-        return 'fade-up'
-      default:
-        return 'fade-up'
-    }
-  }
-  return 'fade'
-}
-
-const normalizeAnimationFrom = (
-  presetSubtype: string | undefined,
-  effectFilter: string | undefined
-): ImportedAnimationFrom | undefined => {
-  if (effectFilter?.startsWith('wipe')) {
-    if (effectFilter.includes('(l)')) return 'right'
-    if (effectFilter.includes('(r)')) return 'left'
-    if (effectFilter.includes('(u)')) return 'bottom'
-    if (effectFilter.includes('(d)')) return 'top'
-  }
-  switch (presetSubtype) {
-    case '1':
-      return 'top'
-    case '2':
-      return 'left'
-    case '3':
-    case '4':
-      return 'right'
-    case '8':
-      return 'bottom'
-    default:
-      return undefined
-  }
 }
 
 const parseNumericDelay = (value: string | undefined): number => {
@@ -195,14 +124,14 @@ export const parsePptxSlideAnimationPlan = (
     const presetSubtype = ctn.attr('presetSubtype')
     const presetClass = ctn.attr('presetClass')
     const effectFilter = ctn.find('p\\:animEffect').first().attr('filter')
-    const type = normalizeAnimationType(
+    const type = mapPptxPresetToDataAnimType({
       presetId,
       presetSubtype,
       presetClass,
-      ctn.find('p\\:animScale').length > 0,
+      hasScale: ctn.find('p\\:animScale').length > 0,
       effectFilter
-    )
-    const from = normalizeAnimationFrom(presetSubtype, effectFilter)
+    })
+    const from = mapPptxPresetToDataAnimFrom({ presetSubtype, effectFilter })
     const trigger: ImportedAnimationTrigger = nodeType === 'clickEffect' ? 'click' : 'load'
     const delay = parseNumericDelay(
       ctn.children('p\\:stCondLst').find('p\\:cond').first().attr('delay')

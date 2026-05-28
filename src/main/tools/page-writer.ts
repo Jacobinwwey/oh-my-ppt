@@ -515,8 +515,7 @@ function isMarginUtilityClass(cls: string): boolean {
 function hasFixedChartHeightClass(classes: Iterable<string>): boolean {
   return Array.from(classes).some((cls) => {
     const base = classBaseName(cls)
-    if (/^h-(?:full|screen|dvh|svh|lvh|auto)$/.test(base)) return false
-    return /^h-(?:\[[^\]]+\]|(?!0\b)\d+)/.test(base)
+    return /^h-\[\s*(?!0+(?:\.0+)?px\b)\d+(?:\.\d+)?px\s*\]$/.test(base)
   })
 }
 
@@ -524,8 +523,8 @@ function isUnstableChartFrameLayoutClass(cls: string): boolean {
   const base = classBaseName(cls)
   return (
     base === 'flex-1' ||
-    /^h-(?:full|screen|dvh|svh|lvh|auto)$/.test(base) ||
-    /^min-h-(?:full|screen|dvh|svh|lvh|auto)$/.test(base) ||
+    (/^h-/.test(base) && !/^h-\[\s*(?!0+(?:\.0+)?px\b)\d+(?:\.\d+)?px\s*\]$/.test(base)) ||
+    /^min-h-/.test(base) ||
     /^max-h-/.test(base)
   )
 }

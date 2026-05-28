@@ -1,3 +1,9 @@
+import type {
+  DataAnimFrom,
+  DataAnimPptxTrigger,
+  DataAnimType
+} from '../../animation/data-anim-schema'
+
 export type HtmlToPptxTextAlign = 'left' | 'center' | 'right' | 'justify'
 
 export interface HtmlToPptxTextRun {
@@ -111,27 +117,9 @@ export interface HtmlToPptxTable {
   order?: number
 }
 
-export type HtmlToPptxAnimationType =
-  | 'fade'
-  | 'fade-up'
-  | 'fade-down'
-  | 'fade-left'
-  | 'fade-right'
-  | 'scale-in'
-  | 'slide-up'
-  | 'slide-left'
-  | 'fly-in'
-  | 'wipe'
-  | 'zoom-in'
-  | 'spin-in'
-  | 'grow-shrink'
-  | 'pulse'
-  | 'exit-fade'
-  | 'exit-fly'
-  | 'path'
-
-export type HtmlToPptxAnimationTrigger = 'load' | 'click'
-export type HtmlToPptxAnimationFrom = 'left' | 'right' | 'top' | 'bottom' | 'center'
+export type HtmlToPptxAnimationType = DataAnimType
+export type HtmlToPptxAnimationTrigger = DataAnimPptxTrigger
+export type HtmlToPptxAnimationFrom = DataAnimFrom
 
 export interface HtmlToPptxAnimationTrace {
   type: HtmlToPptxAnimationType

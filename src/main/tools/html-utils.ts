@@ -6,6 +6,11 @@ import {
   pageContentEndMarker,
   pageContentStartMarker
 } from './types'
+import {
+  CHART_SKILL_NAME,
+  DATA_ANIM_SKILL_NAME,
+  formatSkillUsageRequirement,
+} from '../skills/skill-contract'
 
 // ── HTML parsing ──
 
@@ -146,20 +151,44 @@ const findRiskyPositionedContent = ($: cheerio.CheerioAPI): string | null => {
   return hit
 }
 
-const hasConcreteChartHeightClass = (classRaw: string): boolean =>
+const hasExplicitChartPixelHeightClass = (classRaw: string): boolean =>
   classRaw
     .split(/\s+/)
     .filter(Boolean)
     .some((cls) => {
       const base = classBaseName(cls)
-      if (/^h-(?:full|screen|dvh|svh|lvh|auto)$/.test(base)) return false
-      return /^h-(?:\[[^\]]+\]|(?!0\b)\d+)/.test(base)
+      return /^h-\[\s*(?!0+(?:\.0+)?px\b)\d+(?:\.\d+)?px\s*\]$/.test(base)
     })
 
 const hasConcreteChartHeightStyle = (styleRaw: string): boolean =>
-  /(?:^|;)\s*height\s*:\s*(?!\s*(?:auto|0(?:px|rem|em|%)?|100%|inherit|initial|unset)\b)[^;]+/i.test(
+  /(?:^|;)\s*height\s*:\s*(?!\s*(?:auto|0(?:px|rem|em|%)?|100%|inherit|initial|unset)\b)\d+(?:\.\d+)?(?:px|rem)\s*(?:;|$)/i.test(
     styleRaw
   )
+
+const validateChartCanvasFrames = ($: cheerio.CheerioAPI, errors: string[]): void => {
+  $('canvas').each((index, node) => {
+    const canvas = $(node)
+    const parent = canvas.parent()
+    if (!parent.length) {
+      errors.push(`第 ${index + 1} 个 canvas 缺少父容器`)
+      return
+    }
+    const parentClassRaw = parent.attr('class') || ''
+    const parentElementChildren = parent.children()
+    const parentIsDedicatedFrame =
+      parentElementChildren.length === 1 && parentElementChildren.get(0) === canvas.get(0)
+    const hasChartFrameClass = classList(parentClassRaw).map(classBaseName).includes('ppt-chart-frame')
+    const hasDirectHeight =
+      hasExplicitChartPixelHeightClass(parentClassRaw) ||
+      hasConcreteChartHeightStyle(parent.attr('style') || '')
+
+    if (!parentIsDedicatedFrame || !hasChartFrameClass || !hasDirectHeight) {
+      errors.push(
+        `第 ${index + 1} 个 canvas 必须放在专用 .ppt-chart-frame 直接父容器中，并由模型选择明确的 h-[Npx] 高度；不要使用 h-full/flex-1/min-h-* 或 h-64 这类缩写。修改图表前请先 ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
+      )
+    }
+  })
+}
 
 const isAllowedRuntimeAsset = (src: string): boolean => {
   const normalized = src.trim().toLowerCase()
@@ -249,24 +278,24 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
     errors.push(`检测到不允许的 script src：${preview}。页面片段禁止引入脚本资源，运行时已预注入。`)
   }
   if (/anime\s*\(\s*\{[\s\S]{0,240}?targets\s*:/im.test(html)) {
-    errors.push('检测到旧版 anime({ targets, ... }) 写法；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.animate(targets, params)')
+    errors.push(`检测到旧版 anime({ targets, ... }) 写法；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`)
   }
   if (/(^|[^\w$])anime\.(?:animate|stagger|createTimeline|timeline)\s*\(/i.test(html)) {
-    errors.push('检测到直接 anime.* 调用；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.animate/PPT.stagger/PPT.createTimeline')
+    errors.push(`检测到直接 anime.* 调用；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`)
   }
   if (/PPT\.animate\s*\(\s*\{[\s\S]{0,240}?targets\s*:/im.test(html)) {
-    errors.push('检测到 PPT.animate({ targets, ... }) 写法，请改为 PPT.animate(targets, params)')
+    errors.push(`检测到 PPT.animate({ targets, ... }) 写法；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`)
   }
   if (
     hasUnqualifiedCall('animate') ||
     hasUnqualifiedCall('stagger') ||
     hasUnqualifiedCall('createTimeline')
   ) {
-    errors.push('检测到未命名空间的动画调用（animate/stagger/createTimeline）；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.*')
+    errors.push(`检测到未命名空间的动画调用（animate/stagger/createTimeline）；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`)
   }
   if (/new\s+Chart\s*\(/i.test(html)) {
     errors.push(
-      '检测到直接 new Chart(...) 调用，请统一改为 PPT.createChart(canvasOrSelector, config)'
+      `检测到直接 new Chart(...) 调用；修改图表前请先 ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
     )
   }
   if (/<[^>]*$/.test(html.trim())) {
@@ -408,24 +437,7 @@ export const validatePersistedPageHtml = (
     errors.push(`data-block-id 重复：${duplicatedBlockIds.join(', ')}`)
   }
 
-  $('canvas').each((index, node) => {
-    const canvas = $(node)
-    const parent = canvas.parent()
-    if (!parent.length) {
-      errors.push(`第 ${index + 1} 个 canvas 缺少父容器`)
-      return
-    }
-    const parentElementChildren = parent.children()
-    const parentIsDedicatedFrame =
-      parentElementChildren.length === 1 && parentElementChildren.get(0) === canvas.get(0)
-    const hasDirectHeight =
-      hasConcreteChartHeightClass(parent.attr('class') || '') ||
-      hasConcreteChartHeightStyle(parent.attr('style') || '')
-
-    if (!parentIsDedicatedFrame || !hasDirectHeight) {
-      errors.push(`第 ${index + 1} 个 canvas 必须放在带固定高度的直接父容器中`)
-    }
-  })
+  validateChartCanvasFrames($, errors)
 
   $('video').each((index, node) => {
     const video = $(node)

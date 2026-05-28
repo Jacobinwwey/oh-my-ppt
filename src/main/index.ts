@@ -9,6 +9,12 @@ import { PPTDatabase } from './db/database'
 import { AgentManager } from './agent'
 import { setupIPC, registerLocalAssetProtocol } from './ipc'
 import { setStyleDb } from './utils/style-skills'
+import {
+  initializeSkills,
+  resolveBuiltinSkillsSourcePath,
+  resolveInstalledSkillsPath,
+  setSkillsRuntime,
+} from './skills'
 import { createTray, destroyTray, showTrayHideBalloon } from './tray'
 import type { UpdateAvailablePayload } from '@shared/app-update'
 
@@ -290,6 +296,34 @@ if (gotSingleInstanceLock) {
       env: is.dev ? 'dev' : 'prod',
       dbPath: dbPath || 'userData/ohmyppt.db',
     })
+
+    const installedSkillsPath = resolveInstalledSkillsPath()
+    const skillsReadyPromise = initializeSkills({
+      builtinSourcePath: resolveBuiltinSkillsSourcePath(),
+      installedRootPath: installedSkillsPath,
+      logger: log,
+    })
+      .then((result) => {
+        log.info('[skills] initialized', {
+          installedSkillsPath,
+          builtinCount: result.builtinCount,
+          copiedCount: result.copiedCount,
+          skippedCount: result.skippedCount,
+          failedCount: result.failedCount,
+        })
+        return result
+      })
+      .catch((error) => {
+        log.warn('[skills] initialize failed', {
+          message: error instanceof Error ? error.message : String(error),
+        })
+        return null
+      })
+    setSkillsRuntime({
+      installedSkillsPath,
+      ready: skillsReadyPromise,
+    })
+
     agentManager = new AgentManager(db)
 
     const window = createWindow()
