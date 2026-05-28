@@ -9,8 +9,14 @@ import type {
   HtmlToPptxImage,
   HtmlToPptxTable,
   HtmlToPptxTableCell,
-  HtmlToPptxEmbeddedFont
+  HtmlToPptxEmbeddedFont,
+  HtmlToPptxAnimationTrace
 } from './types'
+import {
+  buildSlideTimingXml,
+  buildSlideTransitionXml,
+  type PptxTargetAnimation
+} from './animation-writer'
 
 // ─── Constants ───────────────────────────────────────────────────────
 const EMU_PER_INCH = 914400
@@ -544,13 +550,109 @@ type SlideContentItem =
 const contentOrder = (value: number | undefined, fallback: number): number =>
   Number.isFinite(value) ? Number(value) : fallback
 
-function buildSlideXml(
+const PPTX_TRACE_WIDTH_PX = 1600
+const PPTX_TRACE_HEIGHT_PX = 900
+
+const pxTraceToInches = (trace: HtmlToPptxAnimationTrace): { x: number; y: number; w: number; h: number } => ({
+  x: (trace.x / PPTX_TRACE_WIDTH_PX) * SLIDE_WIDTH_IN,
+  y: (trace.y / PPTX_TRACE_HEIGHT_PX) * SLIDE_HEIGHT_IN,
+  w: (trace.w / PPTX_TRACE_WIDTH_PX) * SLIDE_WIDTH_IN,
+  h: (trace.h / PPTX_TRACE_HEIGHT_PX) * SLIDE_HEIGHT_IN
+})
+
+const overlapArea = (
+  left: { x: number; y: number; w: number; h: number },
+  right: { x: number; y: number; w: number; h: number }
+): number => {
+  const x = Math.max(0, Math.min(left.x + left.w, right.x + right.w) - Math.max(left.x, right.x))
+  const y = Math.max(0, Math.min(left.y + left.h, right.y + right.h) - Math.max(left.y, right.y))
+  return x * y
+}
+
+const centerInside = (
+  inner: { x: number; y: number; w: number; h: number },
+  outer: { x: number; y: number; w: number; h: number }
+): boolean => {
+  const cx = inner.x + inner.w / 2
+  const cy = inner.y + inner.h / 2
+  return cx >= outer.x && cx <= outer.x + outer.w && cy >= outer.y && cy <= outer.y + outer.h
+}
+
+function matchAnimationTracesToTargets(
+  traces: HtmlToPptxAnimationTrace[] | undefined,
+  shapePositions: Array<{ pptxId: number; x: number; y: number; w: number; h: number }>
+): PptxTargetAnimation[] {
+  if (!traces?.length || shapePositions.length === 0) return []
+
+  const animations: PptxTargetAnimation[] = []
+  const claimed = new Set<number>()
+  const orderedTraces = [...traces].sort((a, b) => a.order - b.order || a.delay - b.delay)
+
+  for (const trace of orderedTraces) {
+    const traceBox = pxTraceToInches(trace)
+    const traceArea = Math.max(0.0001, traceBox.w * traceBox.h)
+    const candidates = shapePositions
+      .map((shape) => {
+        const shapeBox = { x: shape.x, y: shape.y, w: shape.w, h: shape.h }
+        const overlap = overlapArea(traceBox, shapeBox)
+        const shapeArea = Math.max(0.0001, shape.w * shape.h)
+        const eligible =
+          overlap > 0 &&
+          (centerInside(shapeBox, traceBox) ||
+            overlap / shapeArea >= 0.35 ||
+            overlap / traceArea >= 0.16)
+        return { shape, overlap, eligible }
+      })
+      .filter((candidate) => candidate.eligible && !claimed.has(candidate.shape.pptxId))
+      .sort((a, b) => b.overlap - a.overlap || a.shape.pptxId - b.shape.pptxId)
+
+    const targets = candidates.length > 0
+      ? candidates.map((candidate) => candidate.shape)
+      : shapePositions
+          .map((shape) => {
+            const shapeBox = { x: shape.x, y: shape.y, w: shape.w, h: shape.h }
+            return { shape, overlap: overlapArea(traceBox, shapeBox) }
+          })
+          .filter((candidate) => candidate.overlap > 0 && !claimed.has(candidate.shape.pptxId))
+          .sort((a, b) => b.overlap - a.overlap)
+          .slice(0, 1)
+          .map((candidate) => candidate.shape)
+
+    for (const target of targets) {
+      claimed.add(target.pptxId)
+      animations.push({
+        spid: target.pptxId,
+        type: trace.type,
+        trigger: trace.trigger,
+        from: trace.from,
+        duration: trace.duration,
+        delay: trace.delay,
+        order: trace.order
+      })
+    }
+  }
+
+  return animations
+}
+
+export function buildSlideXml(
   slide: HtmlToPptxSlide,
   imageRels: Map<string, ImageRel>,
   idStart: number
 ): string {
   let nextId = idStart
   const shapes: string[] = []
+  const shapePositions: Array<{ pptxId: number; x: number; y: number; w: number; h: number }> = []
+
+  const recordPos = (id: number, item: { x: number; y: number; w: number; h: number }) => {
+    shapePositions.push({
+      pptxId: id,
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h
+    })
+  }
 
   // Background color
   let bgXml = ''
@@ -558,10 +660,6 @@ function buildSlideXml(
     const hex = normalizeHexColor(slide.backgroundColor)
     bgXml = `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${hex}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`
   }
-
-  // Z-order: keep the extracted DOM paint order instead of placing all shapes
-  // above/below all images. This keeps background SVGs behind cards while card
-  // icons and chart canvases stay above their parent container shapes.
 
   // Background image
   if (slide.backgroundImage) {
@@ -621,17 +719,21 @@ function buildSlideXml(
     nextId++
     if (entry.kind === 'shape') {
       shapes.push(buildShapeXml(nextId, entry.item))
+      recordPos(nextId, entry.item)
     } else if (entry.kind === 'table') {
       shapes.push(buildTableXml(nextId, entry.item))
+      recordPos(nextId, entry.item)
     } else if (entry.kind === 'image') {
       const rel = imageRels.get(entry.item.dataUri)
       if (rel) {
         shapes.push(buildImagePic(nextId, rel.rId, entry.item))
+        recordPos(nextId, entry.item)
       }
     } else {
       const xml = buildTextShape(nextId, entry.item)
       if (xml) {
         shapes.push(xml)
+        recordPos(nextId, entry.item)
       }
     }
   }
@@ -645,9 +747,20 @@ function buildSlideXml(
     }
   }
 
+  // Build animation timing XML from traces
+  const timingXml = buildSlideTimingXml(
+    matchAnimationTracesToTargets(slide.animationTraces, shapePositions)
+  )
+
+  // Build slide transition XML
+  const transitionXml = slide.transitionType
+    ? buildSlideTransitionXml(slide.transitionType, slide.transitionDurationMs)
+    : ''
+
   return `${XML_HEADER}<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
        xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  ${transitionXml}
   <p:cSld>
     ${bgXml}
     <p:spTree>
@@ -667,6 +780,7 @@ function buildSlideXml(
       ${shapes.join('\n      ')}
     </p:spTree>
   </p:cSld>
+  ${timingXml}
   <p:clrMapOvr>
     <a:masterClrMapping/>
   </p:clrMapOvr>
@@ -684,7 +798,10 @@ function buildContentTypesXml(
     `<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>`,
     `<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`,
     `<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>`,
-    `<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>`
+    `<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>`,
+    `<Override PartName="/ppt/viewProps.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.viewProperties+xml"/>`,
+    `<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>`,
+    `<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>`
   ]
   for (let i = 1; i <= slideCount; i++) {
     overrides.push(
@@ -713,6 +830,8 @@ function buildContentTypesXml(
 function buildRootRelsXml(): string {
   return `${XML_HEADER}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
 </Relationships>`
 }
 
@@ -766,11 +885,13 @@ ${variantXml.join('\n')}
     }
   }
 
+  const fontAttrs = embeddedFonts.length > 0
+    ? '\n                embedTrueTypeFonts="1"\n                saveSubsetFonts="1"'
+    : ''
+
   return `${XML_HEADER}<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
                 xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-                xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
-                embedTrueTypeFonts="1"
-                saveSubsetFonts="1">
+                xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"${fontAttrs}>
   <p:sldMasterIdLst>
     <p:sldMasterId id="2147483648" r:id="rIdSm"/>
   </p:sldMasterIdLst>
@@ -778,7 +899,7 @@ ${variantXml.join('\n')}
     ${sldIds.join('\n    ')}
   </p:sldIdLst>
   <p:sldSz cx="${SLIDE_WIDTH_EMU}" cy="${SLIDE_HEIGHT_EMU}" type="wide"/>
-  <p:notesSz cx="${SLIDE_HEIGHT_EMU}" cy="${SLIDE_WIDTH_EMU}"/>${embeddedFontLstXml}
+  <p:notesSz cx="6858000" cy="9144000"/>${embeddedFontLstXml}
 </p:presentation>`
 }
 
@@ -787,7 +908,8 @@ function buildPresentationRelsXml(
   fontRelEntries: Array<{ key: string; rId: string; fontFile: string }> = []
 ): string {
   const rels: string[] = [
-    `<Relationship Id="rIdSm" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>`
+    `<Relationship Id="rIdSm" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>`,
+    `<Relationship Id="rIdVp" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProperties" Target="viewProps.xml"/>`
   ]
   for (let i = 1; i <= slideCount; i++) {
     rels.push(
@@ -924,6 +1046,38 @@ function buildSlideRelsXml(imageRels: ImageRel[]): string {
 </Relationships>`
 }
 
+function buildDocPropsCoreXml(title: string): string {
+  const now = new Date().toISOString()
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                   xmlns:dc="http://purl.org/dc/elements/1.1/"
+                   xmlns:dcterms="http://purl.org/dc/terms/"
+                   xmlns:dcmitype="http://purl.org/dc/dcmitype/"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>${title}</dc:title>
+  <dc:creator>OhMyPPT</dc:creator>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
+</cp:coreProperties>`
+}
+
+function buildDocPropsAppXml(slideCount: number): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+            xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>OhMyPPT</Application>
+  <Slides>${slideCount}</Slides>
+  <HiddenSlides>0</HiddenSlides>
+</Properties>`
+}
+
+function buildViewPropsXml(): string {
+  return `${XML_HEADER}<p:viewPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                              xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+</p:viewPr>`
+}
+
 // ─── Media helpers ───────────────────────────────────────────────────
 
 function dataUriToBuffer(dataUri: string): { buffer: Uint8Array; ext: string } | null {
@@ -1038,6 +1192,11 @@ export const writePptxDocument = async (
   files['ppt/slideMasters/_rels/slideMaster1.xml.rels'] = strToU8(buildSlideMasterRelsXml())
   files['ppt/slideLayouts/slideLayout1.xml'] = strToU8(buildSlideLayoutXml())
   files['ppt/slideLayouts/_rels/slideLayout1.xml.rels'] = strToU8(buildSlideLayoutRelsXml())
+
+  // Document properties (required by PowerPoint)
+  files['docProps/core.xml'] = strToU8(buildDocPropsCoreXml(document.title))
+  files['docProps/app.xml'] = strToU8(buildDocPropsAppXml(slideCount))
+  files['ppt/viewProps.xml'] = strToU8(buildViewPropsXml())
 
   // Per-slide
   for (let i = 0; i < slideCount; i++) {

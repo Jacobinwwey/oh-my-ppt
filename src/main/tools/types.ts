@@ -1,5 +1,6 @@
 import log from "electron-log/main.js";
 import type { LayoutIntent } from "@shared/layout-intent";
+import type { AnimationIntent } from "@shared/animation-intent";
 
 // ── Marker constants ──
 
@@ -19,6 +20,7 @@ export interface OutlineItem {
   title: string;
   contentOutline: string;
   layoutIntent?: LayoutIntent;
+  animationIntent?: AnimationIntent;
 }
 
 export interface DesignContract {

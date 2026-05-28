@@ -1,5 +1,6 @@
 import { loadStyleSkill } from '../utils/style-skills'
 import { formatLayoutIntentPrompt } from '@shared/layout-intent'
+import { formatAnimationIntentPrompt } from '@shared/animation-intent'
 import type { DesignContract, SessionDeckGenerationContext } from '../tools/types'
 
 export const PAGE_SEMANTIC_STRUCTURE = [
@@ -112,14 +113,50 @@ export const FRONTEND_CAPABILITIES = [
   '<div data-anim="fade-up" data-anim-trigger="click">第三条要点</div>',
   '```',
   '',
-  'data-anim 支持的类型：fade | fade-up | fade-down | fade-left | fade-right | scale-in | slide-up | slide-left',
+  'data-anim 支持的类型：',
+  '  入场（entrance）：fade | fade-up | fade-down | fade-left | fade-right | scale-in | slide-up | slide-left',
+  '  强调（emphasis）：pulse | shake | bounce | glow（元素已可见时使用；可与入场动画组合）',
+  '  复杂动效：lottie',
   'data-anim-delay：数字(ms) 或 stagger(N)（自动错峰，N 为间隔毫秒）',
   'data-anim-duration：数字(ms)，默认 500',
   'data-anim-easing：easeOutCubic（默认）| easeOutBack | easeInOut | linear',
   'data-anim-trigger：load（默认，页面加载即播）| click（低优先级，仅在用户提示词表达点击/按键逐条展示时使用）',
+  'data-anim-loop：true（循环播放，用于装饰元素持续动效，禁止用于正文内容）',
   '风格预设里的动画词（如 typewriter/glitch-in/path-draw 等）只作动效气质参考；data-anim 属性值必须使用上方支持列表，不要把风格词直接写成 data-anim，也不要为普通动效改写成脚本。',
   '动画决策规则见下方「动画交互决策规则」章节。',
   '使用 data-anim 的元素自身不要再写 inline opacity/transform 初始态；需要静态旋转、缩放或透明视觉时，放到内部子元素或外层非动画容器。',
+  '',
+  '### 强调动画 — 装饰性弹性动效',
+  'pulse、shake、bounce、glow 是强调类动画，用于元素已可见后的装饰性弹性效果：',
+  '```html',
+  '<!-- 关键数字脉冲（呼吸感） -->',
+  '<div data-anim="pulse" data-anim-duration="600" data-anim-loop="true">300%</div>',
+  '',
+  '<!-- 通知徽章抖动 -->',
+  '<div data-anim="shake" data-anim-duration="500">New</div>',
+  '```',
+  '- 强调动画默认在 load 时播放一次；添加 data-anim-loop="true" 可循环（仅用于装饰元素）',
+  '- 强调动画不适合大段正文或核心信息卡片',
+  '',
+  '### Lottie 动画 — 复杂视觉动效（声明式引用）',
+  '对于图标动画、品牌动效、装饰循环动画、加载状态等 data-anim 预设无法表达的复杂视觉表现，使用 data-anim="lottie"：',
+  '```html',
+  '<div data-anim="lottie"',
+  '     data-anim-lottie-src="https://assets.lottiefiles.com/packages/lf20_xxx.json"',
+  '     data-anim-lottie-loop="true"',
+  '     data-anim-lottie-speed="1">',
+  '</div>',
+  '```',
+  'data-anim-lottie-src：Lottie JSON URL 或项目内资产路径（必填）',
+  'data-anim-lottie-loop：默认 true（装饰动画建议循环）',
+  'data-anim-lottie-autoplay：默认 true',
+  'data-anim-lottie-speed：播放速度倍数，默认 1',
+  '',
+  'AI 动画选型优先级：',
+  '1. 内容入场动画（标题/卡片/列表）→ data-anim 8 种预设（fade-up 等），不写脚本',
+  '2. 复杂视觉动效（图标动效/品牌动画/装饰循环/特殊效果）→ data-anim="lottie"',
+  '3. 复杂时间线编排或自定义回调 → PPT.animate() / PPT.createTimeline()',
+  '禁止为普通入场动效编写 lottie 或 PPT.animate()；声明式属性优先。',
   '',
   '### 动画 — PPT.animate() 命令式 API（复杂场景）',
   '只有当 data-anim 无法表达复杂时间线、自定义回调或复杂同步编排时，才使用 PPT.animate()：',
@@ -189,7 +226,10 @@ export function buildOutlinePageList(context: SessionDeckGenerationContext): str
       const layoutIntent = item.layoutIntent
         ? `\n   ${formatLayoutIntentPrompt(item.layoutIntent).replace(/\n/g, '\n   ')}`
         : ''
-      return `${i + 1}. ${item.title}\n   Content points: ${item.contentOutline}${layoutIntent}`
+      const animationIntent = item.animationIntent
+        ? `\n   ${formatAnimationIntentPrompt(item.animationIntent).replace(/\n/g, '\n   ')}`
+        : ''
+      return `${i + 1}. ${item.title}\n   Content points: ${item.contentOutline}${layoutIntent}${animationIntent}`
     })
     .join('\n')
 }

@@ -488,12 +488,34 @@
     _activeAnimations.forEach(function (anim) {
       try { if (typeof anim.pause === "function") anim.pause(); } catch (_err) {}
     });
+    // Also pause Lottie instances
+    try {
+      var root = document.querySelector('.ppt-page-root');
+      if (root) {
+        root.querySelectorAll('[data-pptx-lottie]').forEach(function (el) {
+          if (el.__lottieInstance && typeof el.__lottieInstance.pause === 'function') {
+            el.__lottieInstance.pause();
+          }
+        });
+      }
+    } catch (_err) {}
   };
 
   ppt.resumeAnimations = function () {
     _activeAnimations.forEach(function (anim) {
       try { if (typeof anim.play === "function") anim.play(); } catch (_err) {}
     });
+    // Also resume Lottie instances
+    try {
+      var root = document.querySelector('.ppt-page-root');
+      if (root) {
+        root.querySelectorAll('[data-pptx-lottie]').forEach(function (el) {
+          if (el.__lottieInstance && typeof el.__lottieInstance.play === 'function') {
+            el.__lottieInstance.play();
+          }
+        });
+      }
+    } catch (_err) {}
   };
 
   ppt.clicks = {
@@ -639,7 +661,12 @@
     "fade-right": { opacity: "0", transform: "translateX(-20px)" },
     "scale-in":   { opacity: "0", transform: "scale(0.85)" },
     "slide-up":   { opacity: "0", transform: "translateY(40px)" },
-    "slide-left": { opacity: "0", transform: "translateX(40px)" }
+    "slide-left": { opacity: "0", transform: "translateX(40px)" },
+    // Emphasis presets (used as data-anim types, played after entrance or standalone)
+    "pulse":      { transform: "scale(1)" },
+    "shake":      { transform: "translateX(0)" },
+    "bounce":     { transform: "translateY(0)" },
+    "glow":       { opacity: "1" }
   };
 
   function applyInitialHiddenState(el, type) {
@@ -710,6 +737,11 @@
         animDef.lottieAutoplay = el.getAttribute("data-anim-lottie-autoplay") !== "false";
       }
 
+      // Loop support for non-lottie animations
+      if (el.getAttribute("data-anim-loop") === "true") {
+        animDef.loop = true;
+      }
+
       animConfigs.push(animDef);
     });
 
@@ -739,6 +771,11 @@
         easing: animDef.easing,
         delay: animDef.delay
       };
+
+      // Loop support: data-anim-loop="true" repeats the animation
+      if (animDef.loop) {
+        params.loop = true;
+      }
 
       switch (animDef.type) {
         case "fade":
@@ -772,6 +809,23 @@
           params.opacity = [0, 1];
           params.translateX = [40, 0];
           break;
+        // Emphasis presets
+        case "pulse":
+          params.scale = [1, 1.05, 1];
+          params.duration = animDef.duration || 600;
+          break;
+        case "shake":
+          params.translateX = [0, -6, 6, -4, 4, -2, 2, 0];
+          params.duration = animDef.duration || 500;
+          break;
+        case "bounce":
+          params.translateY = [0, -10, -4, 0];
+          params.duration = animDef.duration || 600;
+          break;
+        case "glow":
+          params.opacity = [1, 0.7, 1];
+          params.duration = animDef.duration || 800;
+          break;
         default:
           params.opacity = [0, 1];
           params.translateY = [20, 0];
@@ -783,7 +837,208 @@
   }
 
   // no-op until lottie-web injected
-  ppt.playLottie = function (_el, _animDef) {};
+  ppt.playLottie = function (el, animDef) {
+    var Lottie = global.lottie || global.bodymovin;
+    if (!Lottie || typeof Lottie.loadAnimation !== 'function') return;
+
+    if (!el || el.nodeType !== 1) return;
+    if (!animDef || typeof animDef !== 'object') return;
+
+    // Destroy existing instance if re-initializing
+    if (el.__lottieInstance) {
+      try {
+        if (typeof el.__lottieInstance.destroy === 'function') {
+          el.__lottieInstance.destroy();
+        }
+      } catch (_err) {}
+      el.__lottieInstance = null;
+    }
+
+    var src = String(animDef.lottieSrc || '').trim();
+    if (!src) return;
+
+    var animationData = null;
+
+    // Inline JSON (small animations embedded in the data attr)
+    if (src.charAt(0) === '{') {
+      try {
+        animationData = JSON.parse(src);
+      } catch (_err) {
+        // Not valid JSON — try loading as a URL/path instead
+      }
+    }
+
+    var opts = {
+      container: el,
+      loop: animDef.lottieLoop !== false,
+      autoplay: animDef.lottieAutoplay !== false,
+      renderer: 'svg'
+    };
+
+    if (animationData) {
+      opts.animationData = animationData;
+    } else {
+      opts.path = src;
+    }
+
+    var instance = Lottie.loadAnimation(opts);
+    el.__lottieInstance = instance;
+
+    // Speed control
+    var speed = Number(animDef.lottieSpeed);
+    if (Number.isFinite(speed) && speed > 0 && instance && typeof instance.setSpeed === 'function') {
+      instance.setSpeed(speed);
+    }
+
+    // Mark for PPTX export and cleanup
+    el.setAttribute('data-pptx-lottie', '1');
+
+    return instance;
+  };
+
+  ppt.stopLottie = function (el) {
+    if (!el || el.nodeType !== 1) return;
+    if (el.__lottieInstance) {
+      try {
+        if (typeof el.__lottieInstance.destroy === 'function') {
+          el.__lottieInstance.destroy();
+        }
+      } catch (_err) {}
+      el.__lottieInstance = null;
+    }
+  };
+
+  // Seek to a named marker in the Lottie animation timeline.
+  // Markers are defined inside the Lottie JSON and represent named
+  // time points (e.g. "highlight", "transition", "loop-start").
+  ppt.triggerLottieMarker = function (el, markerName) {
+    if (!el || el.nodeType !== 1) return;
+    var instance = el.__lottieInstance;
+    if (!instance) return;
+    var markers = instance.animationData && instance.animationData.markers;
+    if (!markers || !Array.isArray(markers)) return;
+    for (var i = 0; i < markers.length; i++) {
+      if (markers[i].cm === markerName) {
+        var frame = typeof markers[i].tm === 'number' ? markers[i].tm : 0;
+        if (typeof instance.goToAndPlay === 'function') {
+          instance.goToAndPlay(frame, true);
+        } else if (typeof instance.goToAndStop === 'function') {
+          instance.goToAndStop(frame, true);
+        }
+        return;
+      }
+    }
+  };
+
+  // Return array of marker names defined in the Lottie animation.
+  ppt.getLottieMarkers = function (el) {
+    if (!el || el.nodeType !== 1) return [];
+    var instance = el.__lottieInstance;
+    if (!instance) return [];
+    var markers = instance.animationData && instance.animationData.markers;
+    if (!markers || !Array.isArray(markers)) return [];
+    var names = [];
+    for (var i = 0; i < markers.length; i++) {
+      if (markers[i].cm) names.push(markers[i].cm);
+    }
+    return names;
+  };
+
+  // Play a specific segment (frame range) of the Lottie animation.
+  ppt.playLottieSegment = function (el, startFrame, endFrame) {
+    if (!el || el.nodeType !== 1) return;
+    var instance = el.__lottieInstance;
+    if (!instance || typeof instance.playSegments !== 'function') return;
+    var start = Number(startFrame) || 0;
+    var end = Number(endFrame);
+    if (!Number.isFinite(end)) end = instance.totalFrames || 60;
+    instance.playSegments([[start, end]], true);
+  };
+
+  // Parse speech script text for [lottie:elementId:markerName] annotations.
+  // Returns an array of { elementId, markerName, position } objects where
+  // position is the character index of the annotation in the text.
+  ppt.parseSpeechLottieAnnotations = function (text) {
+    if (typeof text !== 'string') return [];
+    var results = [];
+    var regex = /\[lottie:([^\]]+)\]/g;
+    var match;
+    while ((match = regex.exec(text)) !== null) {
+      var parts = match[1].split(':');
+      if (parts.length >= 2) {
+        results.push({
+          elementId: parts[0].trim(),
+          markerName: parts.slice(1).join(':').trim(),
+          position: match.index
+        });
+      }
+    }
+    return results;
+  };
+
+  // Execute all Lottie marker annotations found in a speech text.
+  // Looks up elements by data-block-id matching the annotation targets.
+  ppt.executeSpeechLottieAnnotations = function (text, root) {
+    root = root || document.querySelector('.ppt-page-root') || document;
+    var annotations = ppt.parseSpeechLottieAnnotations(text);
+    for (var i = 0; i < annotations.length; i++) {
+      var a = annotations[i];
+      var el = root.querySelector('[data-block-id="' + a.elementId + '"]');
+      if (el) {
+        ppt.triggerLottieMarker(el, a.markerName);
+      }
+    }
+  };
+
+  // ── Exit / Outro animations (data-anim-out) ───────────────────────
+
+  // Map exit animation type to anime.js params (reverse of entrance).
+  var EXIT_ANIM_MAP = {
+    "fade":         { opacity: [1, 0] },
+    "fade-up":      { opacity: [1, 0], translateY: [0, -20] },
+    "fade-down":    { opacity: [1, 0], translateY: [0, 20] },
+    "fade-left":    { opacity: [1, 0], translateX: [0, -20] },
+    "fade-right":   { opacity: [1, 0], translateX: [0, 20] },
+    "scale-out":    { opacity: [1, 0], scale: [1, 0.85] },
+    "slide-up":     { opacity: [1, 0], translateY: [0, -40] },
+    "slide-down":   { opacity: [1, 0], translateY: [0, 40] },
+    "slide-left":   { opacity: [1, 0], translateX: [0, -40] },
+    "slide-right":  { opacity: [1, 0], translateX: [0, 40] }
+  };
+
+  ppt.playExitAnimations = function (root) {
+    root = root || document.querySelector('.ppt-page-root') || document;
+    var elements = Array.from(root.querySelectorAll('[data-anim-out]'));
+    if (elements.length === 0) return;
+
+    var promises = [];
+    elements.forEach(function (el) {
+      var type = (el.getAttribute('data-anim-out') || 'fade').trim();
+      var exitDef = EXIT_ANIM_MAP[type] || EXIT_ANIM_MAP['fade'];
+      var duration = Number(el.getAttribute('data-anim-out-duration')) || 300;
+      var delay = Number(el.getAttribute('data-anim-out-delay')) || 0;
+      var easing = (el.getAttribute('data-anim-out-easing') || 'easeInCubic').trim();
+
+      var params = {};
+      for (var key in exitDef) {
+        if (Object.prototype.hasOwnProperty.call(exitDef, key)) {
+          params[key] = exitDef[key];
+        }
+      }
+      params.duration = duration;
+      params.delay = delay;
+      params.easing = easing;
+
+      var anim = ppt.animate(el, params);
+      if (anim && anim.finished) {
+        promises.push(anim.finished);
+      }
+    });
+
+    return Promise.all(promises);
+  };
+
+  // ──────────────────────────────────────────────────────────────────
 
   ppt.scanDataAnim = function (root) {
     return scanDataAnimElements(root);
@@ -944,4 +1199,56 @@
       emitPrintReadyOnce();
     });
   }
+
+  // Animation trace for PPTX export — collects declarative animation data
+  // from the DOM so the export pipeline can embed Lottie JSON equivalents.
+  ppt.__collectAnimationTrace = function (root) {
+    root = root || document.querySelector('.ppt-page-root');
+    if (!root) return { version: '1.0', elements: [] };
+
+    var elements = [];
+    var animated = root.querySelectorAll('[data-anim], [data-pptx-lottie]');
+    var seen = {};
+
+    animated.forEach(function (el) {
+      // Deduplicate: an element may have both data-anim and data-pptx-lottie
+      if (seen[el]) return;
+      seen[el] = true;
+
+      var entry = {};
+
+      if (el.hasAttribute('data-pptx-lottie')) {
+        entry.type = 'lottie';
+        entry.lottieSrc = (el.getAttribute('data-anim-lottie-src') || '').trim();
+        entry.lottieLoop = el.getAttribute('data-anim-lottie-loop') !== 'false';
+        entry.lottieAutoplay = el.getAttribute('data-anim-lottie-autoplay') !== 'false';
+        var speed = Number(el.getAttribute('data-anim-lottie-speed'));
+        if (Number.isFinite(speed) && speed > 0) entry.lottieSpeed = speed;
+        // Also include data-anim attributes for trigger/timing
+        var animType = (el.getAttribute('data-anim') || '').trim();
+        if (animType) entry.animType = animType;
+        entry.trigger = (el.getAttribute('data-anim-trigger') || 'load').trim();
+      } else {
+        var animTypeVal = (el.getAttribute('data-anim') || 'fade-up').trim();
+        entry.type = 'data-anim';
+        entry.animType = animTypeVal;
+        entry.duration = Number(el.getAttribute('data-anim-duration')) || 500;
+        entry.delay = (el.getAttribute('data-anim-delay') || '0').trim();
+        entry.trigger = (el.getAttribute('data-anim-trigger') || 'load').trim();
+        entry.easing = (el.getAttribute('data-anim-easing') || 'easeOutCubic').trim();
+      }
+
+      // Common fields
+      var blockId = el.getAttribute('data-block-id');
+      if (blockId) entry.blockId = blockId;
+      entry.tagName = el.tagName.toLowerCase();
+      entry.className = (el.className && typeof el.className === 'string')
+        ? el.className.replace(/\s+/g, ' ').trim().slice(0, 120)
+        : '';
+
+      elements.push(entry);
+    });
+
+    return { version: '1.0', elements: elements };
+  };
 })(typeof globalThis !== "undefined" ? globalThis : window);
