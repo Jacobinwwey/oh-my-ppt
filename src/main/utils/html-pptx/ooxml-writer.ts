@@ -1,6 +1,6 @@
 import { zipSync, strToU8 } from 'fflate'
 import { writeFileSync } from 'fs'
-import type { LottieGifCapture } from './lottie-to-gif'
+import type { LottieVideoCapture } from './lottie-to-video'
 import type {
   HtmlToPptxDocument,
   HtmlToPptxSlide,
@@ -545,19 +545,30 @@ type SlideContentItem =
 const contentOrder = (value: number | undefined, fallback: number): number =>
   Number.isFinite(value) ? Number(value) : fallback
 
-function buildLottieGifPic(id: number, rId: string, gif: LottieGifCapture): string {
-  const cx = inToEmu(gif.w)
-  const cy = inToEmu(gif.h)
-  const x = inToEmu(gif.x)
-  const y = inToEmu(gif.y)
+function buildLottieVideoPic(id: number, gifRId: string, video: LottieVideoCapture, videoRId?: string): string {
+  const cx = inToEmu(video.w)
+  const cy = inToEmu(video.h)
+  const x = inToEmu(video.x)
+  const y = inToEmu(video.y)
+  const hasVideo = videoRId && video.videoData.length > 0
+  const nvPr = hasVideo
+    ? `<p:nvPr>
+      <a:videoFile r:link="${videoRId}"/>
+      <p:extLst>
+        <p:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}">
+          <p14:media r:embed="${videoRId}" xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"/>
+        </p:ext>
+      </p:extLst>
+    </p:nvPr>`
+    : '<p:nvPr/>'
   return `<p:pic>
     <p:nvPicPr>
-      <p:cNvPr id="${id}" name="Lottie ${gif.blockId}"/>
+      <p:cNvPr id="${id}" name="Lottie ${video.blockId}"/>
       <p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>
-      <p:nvPr/>
+      ${nvPr}
     </p:nvPicPr>
     <p:blipFill>
-      <a:blip r:embed="${rId}"/>
+      <a:blip r:embed="${gifRId}"/>
       <a:stretch><a:fillRect/></a:stretch>
     </p:blipFill>
     <p:spPr>
@@ -574,7 +585,7 @@ function buildSlideXml(
   slide: HtmlToPptxSlide,
   imageRels: Map<string, ImageRel>,
   idStart: number,
-  lottieGifs?: LottieGifCapture[]
+  lottieVideos?: LottieVideoCapture[]
 ): string {
   let nextId = idStart
   const shapes: string[] = []
@@ -672,12 +683,15 @@ function buildSlideXml(
     }
   }
 
-  // Lottie animated GIF images (placed at their original position on the slide)
-  if (lottieGifs) {
-    for (const gif of lottieGifs) {
+  // Lottie animations: WebM video (primary) + GIF fallback (poster/thumbnail)
+  if (lottieVideos) {
+    for (const video of lottieVideos) {
       nextId++
-      const rId = `rIdGif_${gif.mediaFile.replace(/\./g, '_')}`
-      shapes.push(buildLottieGifPic(nextId, rId, gif))
+      const gifRId = `rIdLGif_${video.gifFile.replace(/\./g, '_')}`
+      const videoRId = video.videoData.length > 0
+        ? `rIdLVideo_${video.videoFile.replace(/\./g, '_')}`
+        : undefined
+      shapes.push(buildLottieVideoPic(nextId, gifRId, video, videoRId))
     }
   }
 
@@ -737,7 +751,7 @@ function buildContentTypesXml(
   }
 
   for (const ext of mediaExtensions) {
-    const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'svg' ? 'image/svg+xml' : `image/${ext}`
+    const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'svg' ? 'image/svg+xml' : ext === 'webm' ? 'video/webm' : ext === 'mp4' ? 'video/mp4' : `image/${ext}`
     defaults.push(`<Default Extension="${ext}" ContentType="${mime}"/>`)
   }
 
@@ -947,12 +961,14 @@ function buildThemeXml(): string {
 </a:theme>`
 }
 
-interface LottieGifRel {
-  rId: string
-  mediaFile: string
+interface LottieMediaRel {
+  gifRId: string
+  gifFile: string
+  videoRId?: string
+  videoFile?: string
 }
 
-function buildSlideRelsXml(imageRels: ImageRel[], lottieGifRels: LottieGifRel[] = []): string {
+function buildSlideRelsXml(imageRels: ImageRel[], lottieMediaRels: LottieMediaRel[] = []): string {
   const rels: string[] = [
     `<Relationship Id="rIdLayout" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>`
   ]
@@ -961,10 +977,15 @@ function buildSlideRelsXml(imageRels: ImageRel[], lottieGifRels: LottieGifRel[] 
       `<Relationship Id="${r.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${r.mediaFile}"/>`
     )
   }
-  for (const lr of lottieGifRels) {
+  for (const lr of lottieMediaRels) {
     rels.push(
-      `<Relationship Id="${lr.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${lr.mediaFile}"/>`
+      `<Relationship Id="${lr.gifRId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${lr.gifFile}"/>`
     )
+    if (lr.videoRId && lr.videoFile) {
+      rels.push(
+        `<Relationship Id="${lr.videoRId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/video" Target="../media/${lr.videoFile}"/>`
+      )
+    }
   }
   return `${XML_HEADER}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   ${rels.join('\n  ')}
@@ -1039,21 +1060,32 @@ export const writePptxDocument = async (
     mediaExtensions.add(media.ext)
   }
 
-  // 2b. Accept pre-rendered Lottie GIF captures (if provided by the renderer)
-  const slideLottieGifRels: LottieGifRel[][] = []
-  const lottieGifMedia = new Map<string, Uint8Array>() // mediaFile -> GIF bytes
+  // 2b. Accept pre-rendered Lottie video+GIF captures
+  const slideLottieMediaRels: LottieMediaRel[][] = []
+  const lottieGifMedia = new Map<string, Uint8Array>()
+  const lottieVideoMedia = new Map<string, Uint8Array>()
 
   for (const slide of slides) {
-    const gifRels: LottieGifRel[] = []
-    const gifs = slide.lottieGifs
-    if (gifs) {
-      for (const gif of gifs) {
-        gifRels.push({ rId: `rIdGif_${gif.mediaFile.replace(/\./g, '_')}`, mediaFile: gif.mediaFile })
-        lottieGifMedia.set(gif.mediaFile, gif.data)
+    const mediaRels: LottieMediaRel[] = []
+    const videos = slide.lottieVideos
+    if (videos) {
+      for (const v of videos) {
+        const rel: LottieMediaRel = {
+          gifRId: `rIdLGif_${v.gifFile.replace(/\./g, '_')}`,
+          gifFile: v.gifFile,
+        }
+        lottieGifMedia.set(v.gifFile, v.gifData)
         mediaExtensions.add('gif')
+        if (v.videoData.length > 0) {
+          rel.videoRId = `rIdLVideo_${v.videoFile.replace(/\./g, '_')}`
+          rel.videoFile = v.videoFile
+          lottieVideoMedia.set(v.videoFile, v.videoData)
+          mediaExtensions.add('webm')
+        }
+        mediaRels.push(rel)
       }
     }
-    slideLottieGifRels.push(gifRels)
+    slideLottieMediaRels.push(mediaRels)
   }
 
   // 4. Embedded font rels: assign rId and font file names
@@ -1104,8 +1136,8 @@ export const writePptxDocument = async (
     const relsMap = slideImageRels[i]
     const imageRelsForSlide = Array.from(relsMap.values())
 
-    files[`ppt/slides/slide${i + 1}.xml`] = strToU8(buildSlideXml(slides[i], relsMap, 1, slides[i].lottieGifs))
-    files[`ppt/slides/_rels/slide${i + 1}.xml.rels`] = strToU8(buildSlideRelsXml(imageRelsForSlide, slideLottieGifRels[i] || []))
+    files[`ppt/slides/slide${i + 1}.xml`] = strToU8(buildSlideXml(slides[i], relsMap, 1, slides[i].lottieVideos))
+    files[`ppt/slides/_rels/slide${i + 1}.xml.rels`] = strToU8(buildSlideRelsXml(imageRelsForSlide, slideLottieMediaRels[i] || []))
   }
 
   // Media files
@@ -1121,9 +1153,14 @@ export const writePptxDocument = async (
     files[`ppt/fonts/${fontFile}`] = ttfBuffer
   }
 
-  // Lottie GIF media files
+  // Lottie GIF media files (fallback / poster thumbnails)
   for (const [mediaFile, gifBytes] of lottieGifMedia) {
     files[`ppt/media/${mediaFile}`] = gifBytes
+  }
+
+  // Lottie WebM video media files
+  for (const [mediaFile, videoBytes] of lottieVideoMedia) {
+    files[`ppt/media/${mediaFile}`] = videoBytes
   }
 
   // 6. Generate ZIP and write

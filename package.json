@@ -96,6 +96,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "adm-zip": "^0.5.17",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.4",
     "electron": "^39.2.6",
