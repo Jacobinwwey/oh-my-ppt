@@ -114,6 +114,7 @@ export interface HtmlToPptxTable {
 import type { LottieVideoCapture } from './lottie-to-video'
 
 export type LottieVideoFormat = 'mp4' | 'webm' | 'gif'
+export type LottieVideoQuality = 'low' | 'medium' | 'high' | 'ultra'
 
 export interface HtmlToPptxSlide {
   title?: string
@@ -144,6 +145,8 @@ export interface HtmlToPptxDocument {
   embeddedFonts?: HtmlToPptxEmbeddedFont[]
   /** Lottie animation export format. mp4=recommended, webm=modern, gif=universal fallback */
   lottieVideoFormat?: LottieVideoFormat
+  /** Lottie animation capture resolution. low=800, medium=1600, high=2400, ultra=3600 */
+  lottieVideoQuality?: LottieVideoQuality
 }
 
 export interface HtmlToPptxExtractOptions {

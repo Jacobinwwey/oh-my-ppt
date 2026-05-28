@@ -23,6 +23,14 @@ export interface LottieVideoCapture {
 }
 
 export type LottieVideoFormat = 'mp4' | 'webm' | 'gif'
+export type LottieVideoQuality = 'low' | 'medium' | 'high' | 'ultra'
+
+export const LOTTIE_QUALITY_PRESETS: Record<LottieVideoQuality, number> = {
+  low: 800,
+  medium: 1600,
+  high: 2400,
+  ultra: 3600,
+}
 
 interface LottieTraceElement {
   type: 'lottie'
@@ -33,7 +41,7 @@ interface LottieTraceElement {
   rect?: { x: number; y: number; w: number; h: number }
 }
 
-const CAPTURE_SIZE = 600
+const DEFAULT_CAPTURE_SIZE = 800
 const TARGET_FPS = 25
 const MAX_DURATION_MS = 5000
 const MAX_FRAMES = 125
@@ -41,15 +49,16 @@ const PALETTE_SIZE = 256
 
 export async function renderLottieAnimations(
   lottieElements: LottieTraceElement[],
-  options?: { lottieAssetDir?: string; videoFormat?: LottieVideoFormat }
+  options?: { lottieAssetDir?: string; videoFormat?: LottieVideoFormat; videoQuality?: LottieVideoQuality }
 ): Promise<LottieVideoCapture[]> {
   if (!lottieElements.length) return []
   const results: LottieVideoCapture[] = []
   const format = options?.videoFormat || 'mp4'
+  const captureSize = options?.videoQuality ? LOTTIE_QUALITY_PRESETS[options.videoQuality] : DEFAULT_CAPTURE_SIZE
 
   const win = new BrowserWindow({
     show: false,
-    width: CAPTURE_SIZE, height: CAPTURE_SIZE,
+    width: captureSize, height: captureSize,
     backgroundColor: '#00000000',
     webPreferences: {
       contextIsolation: true, sandbox: false,
@@ -62,19 +71,19 @@ export async function renderLottieAnimations(
       const el = lottieElements[i]
       const blockId = el.blockId || `lottie-${i}`
       try {
-        const { videoData, gifData } = await renderSingle(win, el, options, format)
+        const { videoData, gifData } = await renderSingle(win, el, options, format, captureSize)
         const slideW = 1600, slideH = 900
         const rect = el.rect || { x: 0, y: 0, w: slideW, h: slideH }
         const isGifOnly = format === 'gif'
         results.push({
           videoFile: `lottie${i + 1}.${isGifOnly ? 'gif' : format}`, videoData: isGifOnly ? new Uint8Array(0) : videoData,
           gifFile: `lottie${i + 1}.gif`, gifData,
-          width: CAPTURE_SIZE, height: CAPTURE_SIZE, blockId,
+          width: captureSize, height: captureSize, blockId,
           x: (rect.x / slideW) * 13.333, y: (rect.y / slideH) * 7.5,
           w: (rect.w / slideW) * 13.333, h: (rect.h / slideH) * 7.5,
         })
         log.info('[lottie-to-video] rendered', {
-          blockId, format,
+          blockId, format, captureSize,
           videoKB: isGifOnly ? 0 : Math.round(videoData.length / 1024),
           gifKB: Math.round(gifData.length / 1024),
         })
@@ -88,14 +97,14 @@ export async function renderLottieAnimations(
   return results
 }
 
-async function renderSingle(win: BrowserWindow, el: LottieTraceElement, options: { lottieAssetDir?: string } | undefined, format: LottieVideoFormat) {
+async function renderSingle(win: BrowserWindow, el: LottieTraceElement, options: { lottieAssetDir?: string } | undefined, format: LottieVideoFormat, captureSize: number) {
   let lottieSrc = el.lottieSrc
   if (lottieSrc && !lottieSrc.startsWith('http') && !lottieSrc.startsWith('data:')) {
     const base = options?.lottieAssetDir
     if (base) lottieSrc = `file://${base.replace(/\/$/, '')}/${lottieSrc.replace(/^\.\//, '')}`
   }
   const speed = el.lottieSpeed && el.lottieSpeed > 0 ? el.lottieSpeed : 1
-  await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildHtml(lottieSrc, speed))}`)
+  await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildHtml(lottieSrc, speed, captureSize))}`)
   await waitForReady(win, 3000)
 
   const info = await win.webContents.executeJavaScript(
@@ -116,15 +125,15 @@ async function renderSingle(win: BrowserWindow, el: LottieTraceElement, options:
     const rgba = bgraToRgba(img.toBitmap(), sz.width, sz.height)
     frames.push(rgba)
     const pal = quantize(rgba, PALETTE_SIZE)
-    if (pal) gif.writeFrame(applyPalette(rgba, pal), CAPTURE_SIZE, CAPTURE_SIZE, { palette: pal, delay: delayCs })
+    if (pal) gif.writeFrame(applyPalette(rgba, pal), captureSize, captureSize, { palette: pal, delay: delayCs })
   }
   gif.finish()
 
   const videoData = format === 'gif'
     ? gif.bytes()
     : format === 'webm'
-      ? await encodeWebm(frames, CAPTURE_SIZE, CAPTURE_SIZE, TARGET_FPS)
-      : await encodeMp4(frames, CAPTURE_SIZE, CAPTURE_SIZE, TARGET_FPS)
+      ? await encodeWebm(frames, captureSize, captureSize, TARGET_FPS)
+      : await encodeMp4(frames, captureSize, captureSize, TARGET_FPS)
   return { videoData, gifData: gif.bytes() }
 }
 
@@ -192,10 +201,10 @@ async function waitForReady(win: BrowserWindow, ms: number) {
   throw new Error('Lottie load timeout')
 }
 
-function buildHtml(src: string, speed: number) {
+function buildHtml(src: string, speed: number, size: number) {
   return `<!DOCTYPE html><html><head>
 <script src="${SESSION_ASSET_SCRIPT_SRCS.lottie}"></script>
-<style>*{margin:0;padding:0}body{width:${CAPTURE_SIZE}px;height:${CAPTURE_SIZE}px;overflow:hidden;background:transparent}#c{width:${CAPTURE_SIZE}px;height:${CAPTURE_SIZE}px}</style>
+<style>*{margin:0;padding:0}body{width:${size}px;height:${size}px;overflow:hidden;background:transparent}#c{width:${size}px;height:${size}px}</style>
 </head><body><div id="c"></div>
 <script>var a=lottie.loadAnimation({container:document.getElementById('c'),renderer:'svg',loop:false,autoplay:false,path:'${src.replace(/'/g,"\\'")}'});a.setSpeed(${speed});window.__lottieAnim=a;window.__lottieReady=false;a.addEventListener('data_ready',function(){window.__lottieReady=true});a.addEventListener('data_failed',function(){window.__lottieReady='failed'});</script>
 </body></html>`
