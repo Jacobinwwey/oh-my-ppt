@@ -17,7 +17,15 @@ describe('PPTX animation browser scripts', () => {
   it('collects command-style anime targets as fade-up traces', () => {
     expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain('[data-anime]')
     expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain('[data-animate]')
-    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("collectTrace(el, 'fade-up', 'load', 560, index * 45")
+    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("collectTrace(el, 'fade-up', 'load', 'bottom', 560, index * 45")
     expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("el.setAttribute('data-pptx-native-anim', '1');")
+  })
+
+  it('collects extended data-anim metadata for native PPTX export', () => {
+    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("'fly-in'")
+    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("'exit-fly'")
+    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("const supportedTriggers = new Set(['load', 'click', 'with', 'after'])")
+    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain('from,')
+    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("collectTrace(el, type, effectiveTrigger, from")
   })
 })

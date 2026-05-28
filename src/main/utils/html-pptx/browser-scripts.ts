@@ -503,18 +503,62 @@ export const COLLECT_PPTX_ANIMATION_TRACES_SCRIPT = `
     'fade-right',
     'scale-in',
     'slide-up',
-    'slide-left'
+    'slide-left',
+    'fly-in',
+    'wipe',
+    'zoom-in',
+    'spin-in',
+    'grow-shrink',
+    'pulse',
+    'exit-fade',
+    'exit-fly',
+    'path'
   ]);
-  const supportedTriggers = new Set(['load', 'click']);
+  const supportedTriggers = new Set(['load', 'click', 'with', 'after']);
   const staggerCounters = {};
+  let lastSequenceStart = 0;
+  let lastSequenceEnd = 0;
   const traces = [];
-  const collectTrace = (el, type, trigger, duration, delay, order) => {
+  const normalizeType = (value) => {
+    const type = String(value || 'fade-up').trim().toLowerCase();
+    if (type === 'none') return 'none';
+    if (type === 'fly' || type === 'flyin') return 'fly-in';
+    if (type === 'zoom' || type === 'zoomin') return 'zoom-in';
+    if (type === 'spin' || type === 'spinin') return 'spin-in';
+    if (type === 'grow' || type === 'growshrink') return 'grow-shrink';
+    if (type === 'emphasis') return 'pulse';
+    return supportedTypes.has(type) ? type : 'fade-up';
+  };
+  const normalizeTrigger = (value) => {
+    const trigger = String(value || 'load').trim().toLowerCase();
+    if (trigger === 'on-click') return 'click';
+    if (trigger === 'after-previous') return 'after';
+    if (trigger === 'with-previous') return 'with';
+    return supportedTriggers.has(trigger) ? trigger : 'load';
+  };
+  const defaultFrom = (type) => {
+    if (type === 'fade-down') return 'top';
+    if (type === 'fade-left' || type === 'slide-left') return 'right';
+    if (type === 'fade-right') return 'left';
+    return 'bottom';
+  };
+  const normalizeFrom = (value, fallback) => {
+    const from = String(value || fallback || 'bottom').trim().toLowerCase();
+    if (from === 'up' || from === 'top') return 'top';
+    if (from === 'down' || from === 'bottom') return 'bottom';
+    if (from === 'start') return 'left';
+    if (from === 'end') return 'right';
+    if (from === 'left' || from === 'right' || from === 'center') return from;
+    return fallback || 'bottom';
+  };
+  const collectTrace = (el, type, trigger, from, duration, delay, order) => {
     const rect = el.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) return;
     el.setAttribute('data-pptx-native-anim', '1');
     traces.push({
       type,
       trigger,
+      from,
       duration: Math.max(100, Math.min(5000, Number(duration) || 500)),
       delay: Math.max(0, Math.min(30000, Number(delay) || 0)),
       order,
@@ -528,18 +572,19 @@ export const COLLECT_PPTX_ANIMATION_TRACES_SCRIPT = `
   const elements = Array.from(root.querySelectorAll('[data-anim]'));
 
   elements.forEach((el, order) => {
-    const type = (el.getAttribute('data-anim') || 'fade-up').trim().toLowerCase();
-    if (type === 'none' || !supportedTypes.has(type)) return;
+    const type = normalizeType(el.getAttribute('data-anim'));
+    if (type === 'none') return;
 
-    const triggerRaw = (el.getAttribute('data-anim-trigger') || 'load').trim().toLowerCase();
-    const trigger = supportedTriggers.has(triggerRaw) ? triggerRaw : 'load';
+    const trigger = normalizeTrigger(el.getAttribute('data-anim-trigger'));
+    const effectiveTrigger = trigger === 'click' ? 'click' : 'load';
+    const from = normalizeFrom(el.getAttribute('data-anim-from'), defaultFrom(type));
     const duration = Math.max(100, Math.min(5000, Number(el.getAttribute('data-anim-duration')) || 500));
     const delayRaw = (el.getAttribute('data-anim-delay') || '0').trim();
     let delay = 0;
     if (delayRaw.indexOf('stagger') === 0) {
       const match = delayRaw.match(/stagger\\s*\\(\\s*(\\d+)\\s*\\)/);
       const gap = match ? Number(match[1]) : 50;
-      const key = trigger;
+      const key = effectiveTrigger;
       if (staggerCounters[key] === undefined) staggerCounters[key] = 0;
       delay = staggerCounters[key] * gap;
       staggerCounters[key] += 1;
@@ -547,14 +592,28 @@ export const COLLECT_PPTX_ANIMATION_TRACES_SCRIPT = `
       delay = Number(delayRaw) || 0;
     }
 
-    collectTrace(el, type, trigger, duration, delay, order);
+    if (effectiveTrigger === 'load') {
+      if (trigger === 'after') {
+        delay += lastSequenceEnd;
+        lastSequenceStart = delay;
+        lastSequenceEnd = Math.max(lastSequenceEnd, delay + duration);
+      } else if (trigger === 'with') {
+        delay += lastSequenceStart;
+        lastSequenceEnd = Math.max(lastSequenceEnd, delay + duration);
+      } else {
+        lastSequenceStart = delay;
+        lastSequenceEnd = Math.max(lastSequenceEnd, delay + duration);
+      }
+    }
+
+    collectTrace(el, type, effectiveTrigger, from, duration, delay, order);
   });
 
   const directMarkers = Array.from(
     root.querySelectorAll('.opacity-0, [data-anime], [data-animate]')
   ).filter((el) => !el.closest('[data-anim]'));
   directMarkers.slice(0, 16).forEach((el, index) => {
-    collectTrace(el, 'fade-up', 'load', 560, index * 45, elements.length + index);
+    collectTrace(el, 'fade-up', 'load', 'bottom', 560, index * 45, elements.length + index);
   });
 
   if (traces.length === 0) {
@@ -562,7 +621,7 @@ export const COLLECT_PPTX_ANIMATION_TRACES_SCRIPT = `
       root.querySelectorAll('h1, h2, h3, p, li, .card, .panel, .text-section, .diagram-section, .timeline-node, section, section > *')
     ).filter((el) => !el.closest('[data-anim]'));
     legacyTargets.slice(0, 16).forEach((el, index) => {
-      collectTrace(el, 'fade-up', 'load', 560, index * 45, index);
+      collectTrace(el, 'fade-up', 'load', 'bottom', 560, index * 45, index);
     });
   }
 

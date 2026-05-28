@@ -1,9 +1,14 @@
-import type { HtmlToPptxAnimationTrigger, HtmlToPptxAnimationType } from './types'
+import type {
+  HtmlToPptxAnimationFrom,
+  HtmlToPptxAnimationTrigger,
+  HtmlToPptxAnimationType
+} from './types'
 
 export interface PptxTargetAnimation {
   spid: number
   type: HtmlToPptxAnimationType
   trigger: HtmlToPptxAnimationTrigger
+  from?: HtmlToPptxAnimationFrom
   duration: number
   delay: number
   order: number
@@ -11,11 +16,15 @@ export interface PptxTargetAnimation {
 
 interface AnimationPreset {
   presetId: number
-  presetClass: 'entr'
+  presetClass: 'entr' | 'emph' | 'exit'
   presetSubtype?: number
-  motion?: 'fromTop' | 'fromBottom' | 'fromLeft' | 'fromRight'
+  motion?: 'fromTop' | 'fromBottom' | 'fromLeft' | 'fromRight' | 'fromTrace'
   scale?: boolean
+  scaleFrom?: number
+  scaleTo?: number
   fade?: boolean
+  effectFilter?: 'fade' | 'wipe'
+  transition?: 'in' | 'out'
 }
 
 const PRESETS: Record<HtmlToPptxAnimationType, AnimationPreset> = {
@@ -62,7 +71,62 @@ const PRESETS: Record<HtmlToPptxAnimationType, AnimationPreset> = {
     presetSubtype: 3,
     motion: 'fromRight',
     fade: true
-  }
+  },
+  'fly-in': {
+    presetId: 2,
+    presetClass: 'entr',
+    motion: 'fromTrace',
+    fade: true
+  },
+  wipe: {
+    presetId: 5,
+    presetClass: 'entr',
+    effectFilter: 'wipe'
+  },
+  'zoom-in': {
+    presetId: 31,
+    presetClass: 'entr',
+    scale: true,
+    scaleFrom: 75000,
+    scaleTo: 100000,
+    fade: true
+  },
+  'spin-in': {
+    presetId: 31,
+    presetClass: 'entr',
+    scale: true,
+    scaleFrom: 92000,
+    scaleTo: 100000,
+    fade: true
+  },
+  'grow-shrink': {
+    presetId: 6,
+    presetClass: 'emph',
+    scale: true,
+    scaleFrom: 90000,
+    scaleTo: 108000
+  },
+  pulse: {
+    presetId: 6,
+    presetClass: 'emph',
+    scale: true,
+    scaleFrom: 100000,
+    scaleTo: 106000
+  },
+  'exit-fade': {
+    presetId: 10,
+    presetClass: 'exit',
+    fade: true,
+    transition: 'out'
+  },
+  'exit-fly': {
+    presetId: 2,
+    presetClass: 'exit',
+    motion: 'fromTrace',
+    fade: true,
+    transition: 'out'
+  },
+  path: { presetId: 10, presetClass: 'entr', fade: true }
 }
 
 const clampMs = (value: number, fallback: number): number => {
@@ -100,8 +164,10 @@ const visibilitySetXml = (spid: number, id: number): string => `<p:set>
 const fadeXml = (
   spid: number,
   id: number,
-  duration: number
-): string => `<p:animEffect transition="in" filter="fade">
+  duration: number,
+  transition: 'in' | 'out' = 'in',
+  filter = 'fade'
+): string => `<p:animEffect transition="${transition}" filter="${filter}">
   <p:cBhvr>
     <p:cTn id="${id}" dur="${duration}" fill="hold"/>
     ${targetXml(spid)}
@@ -133,37 +199,75 @@ const numericAnimXml = (
   </p:tavLst>
 </p:anim>`
 
+const traceMotion = (from: HtmlToPptxAnimationFrom | undefined) => {
+  switch (from) {
+    case 'left':
+      return 'fromLeft'
+    case 'right':
+      return 'fromRight'
+    case 'top':
+      return 'fromTop'
+    case 'bottom':
+    case 'center':
+    default:
+      return 'fromBottom'
+  }
+}
+
 const motionXml = (anim: PptxTargetAnimation, duration: number, nextId: () => number): string[] => {
-  const motion = PRESETS[anim.type].motion
+  const preset = PRESETS[anim.type]
+  const motion = preset.motion === 'fromTrace' ? traceMotion(anim.from) : preset.motion
   if (!motion) return []
 
-  const xFrom =
+  const xAway =
     motion === 'fromLeft'
       ? '#ppt_x-#ppt_w/2'
       : motion === 'fromRight'
         ? '#ppt_x+#ppt_w/2'
         : '#ppt_x'
-  const yFrom =
+  const yAway =
     motion === 'fromTop'
       ? '#ppt_y-#ppt_h/2'
       : motion === 'fromBottom'
         ? '#ppt_y+#ppt_h/2'
         : '#ppt_y'
+  const isExit = preset.presetClass === 'exit'
 
   return [
-    numericAnimXml(anim.spid, nextId(), duration, 'ppt_x', xFrom, '#ppt_x'),
-    numericAnimXml(anim.spid, nextId(), duration, 'ppt_y', yFrom, '#ppt_y')
+    numericAnimXml(anim.spid, nextId(), duration, 'ppt_x', isExit ? '#ppt_x' : xAway, isExit ? xAway : '#ppt_x'),
+    numericAnimXml(anim.spid, nextId(), duration, 'ppt_y', isExit ? '#ppt_y' : yAway, isExit ? yAway : '#ppt_y')
   ]
 }
 
-const scaleXml = (spid: number, id: number, duration: number): string => `<p:animScale>
+const scaleXml = (
+  spid: number,
+  id: number,
+  duration: number,
+  from = 85000,
+  to = 100000
+): string => `<p:animScale>
   <p:cBhvr additive="base">
     <p:cTn id="${id}" dur="${duration}" fill="hold"/>
     ${targetXml(spid)}
   </p:cBhvr>
-  <p:from x="85000" y="85000"/>
-  <p:to x="100000" y="100000"/>
+  <p:from x="${from}" y="${from}"/>
+  <p:to x="${to}" y="${to}"/>
 </p:animScale>`
+
+const wipeFilter = (from: HtmlToPptxAnimationFrom | undefined): string => {
+  switch (from) {
+    case 'right':
+      return 'wipe(l)'
+    case 'top':
+      return 'wipe(d)'
+    case 'bottom':
+      return 'wipe(u)'
+    case 'left':
+    case 'center':
+    default:
+      return 'wipe(r)'
+  }
+}
 
 const effectXml = (anim: PptxTargetAnimation, nextId: () => number): string => {
   const preset = PRESETS[anim.type]
@@ -171,8 +275,14 @@ const effectXml = (anim: PptxTargetAnimation, nextId: () => number): string => {
   const delay = Math.max(0, Math.round(Number.isFinite(anim.delay) ? anim.delay : 0))
   const effectId = nextId()
   const chunks = [visibilitySetXml(anim.spid, nextId()), ...motionXml(anim, duration, nextId)]
-  if (preset.scale) chunks.push(scaleXml(anim.spid, nextId(), duration))
-  if (preset.fade) chunks.push(fadeXml(anim.spid, nextId(), duration))
+  if (preset.scale) {
+    chunks.push(scaleXml(anim.spid, nextId(), duration, preset.scaleFrom, preset.scaleTo))
+  }
+  if (preset.effectFilter === 'wipe') {
+    chunks.push(fadeXml(anim.spid, nextId(), duration, preset.transition ?? 'in', wipeFilter(anim.from)))
+  } else if (preset.fade) {
+    chunks.push(fadeXml(anim.spid, nextId(), duration, preset.transition ?? 'in'))
+  }
 
   return `<p:par>
   <p:cTn ${ctnAttrs(anim, effectId)}>

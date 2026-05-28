@@ -67,4 +67,41 @@ describe('parsePptxSlideAnimationPlan', () => {
       sourceName: 'Icon'
     })
   })
+
+  it('imports native wipe and exit timing as extended data-anim entries', () => {
+    const xml = `<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <p:cSld><p:spTree>
+    <p:sp><p:nvSpPr><p:cNvPr id="4" name="Panel"/></p:nvSpPr></p:sp>
+    <p:sp><p:nvSpPr><p:cNvPr id="5" name="Outro"/></p:nvSpPr></p:sp>
+  </p:spTree></p:cSld>
+  <p:timing><p:tnLst>
+    <p:par><p:cTn id="20" presetID="5" presetClass="entr" nodeType="withEffect">
+      <p:childTnLst><p:animEffect transition="in" filter="wipe(l)">
+        <p:cBhvr><p:cTn id="21" dur="600"/><p:tgtEl><p:spTgt spid="4"/></p:tgtEl></p:cBhvr>
+      </p:animEffect></p:childTnLst>
+    </p:cTn></p:par>
+    <p:par><p:cTn id="30" presetID="2" presetClass="exit" presetSubtype="8" nodeType="clickEffect">
+      <p:childTnLst><p:anim>
+        <p:cBhvr><p:cTn id="31" dur="500"/><p:tgtEl><p:spTgt spid="5"/></p:tgtEl></p:cBhvr>
+      </p:anim></p:childTnLst>
+    </p:cTn></p:par>
+  </p:tnLst></p:timing>
+</p:sld>`
+
+    const plan = parsePptxSlideAnimationPlan(xml, null, { width: 960, height: 540 })
+
+    expect(plan.animations[0]).toMatchObject({
+      type: 'wipe',
+      from: 'right',
+      trigger: 'load',
+      duration: 600,
+      sourceName: 'Panel'
+    })
+    expect(plan.animations[1]).toMatchObject({
+      type: 'exit-fly',
+      from: 'bottom',
+      trigger: 'click',
+      sourceName: 'Outro'
+    })
+  })
 })

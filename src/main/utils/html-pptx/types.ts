@@ -120,12 +120,23 @@ export type HtmlToPptxAnimationType =
   | 'scale-in'
   | 'slide-up'
   | 'slide-left'
+  | 'fly-in'
+  | 'wipe'
+  | 'zoom-in'
+  | 'spin-in'
+  | 'grow-shrink'
+  | 'pulse'
+  | 'exit-fade'
+  | 'exit-fly'
+  | 'path'
 
 export type HtmlToPptxAnimationTrigger = 'load' | 'click'
+export type HtmlToPptxAnimationFrom = 'left' | 'right' | 'top' | 'bottom' | 'center'
 
 export interface HtmlToPptxAnimationTrace {
   type: HtmlToPptxAnimationType
   trigger: HtmlToPptxAnimationTrigger
+  from?: HtmlToPptxAnimationFrom
   duration: number
   delay: number
   order: number

@@ -104,4 +104,79 @@ describe('buildSlideXml animation export', () => {
     expect(xml).toContain('<p:bldP spid="2" grpId="0"/>')
     expect(xml).toContain('<p:spTgt spid="2"/>')
   })
+
+  it('exports fly-in direction as native movement timing', () => {
+    const slide: HtmlToPptxSlide = {
+      texts: [{ text: 'Fly', x: 1, y: 1, w: 3, h: 1, fontSize: 24 }],
+      shapes: [],
+      images: [],
+      tables: [],
+      animationTraces: [
+        {
+          type: 'fly-in',
+          trigger: 'load',
+          from: 'left',
+          duration: 500,
+          delay: 0,
+          order: 0,
+          x: 100,
+          y: 100,
+          w: 300,
+          h: 100
+        }
+      ]
+    }
+
+    const xml = buildSlideXml(slide, new Map(), 1)
+
+    expect(xml).toContain('presetID="2" presetClass="entr"')
+    expect(xml).toContain('<p:attrName>ppt_x</p:attrName>')
+    expect(xml).toContain('val="#ppt_x-#ppt_w/2"')
+    expect(xml).toContain('val="#ppt_x"')
+  })
+
+  it('exports wipe and exit animations instead of dropping extended data-anim types', () => {
+    const slide: HtmlToPptxSlide = {
+      texts: [
+        { text: 'Wipe', x: 1, y: 1, w: 3, h: 1, fontSize: 24 },
+        { text: 'Exit', x: 1, y: 2.2, w: 3, h: 1, fontSize: 24 }
+      ],
+      shapes: [],
+      images: [],
+      tables: [],
+      animationTraces: [
+        {
+          type: 'wipe',
+          trigger: 'load',
+          from: 'right',
+          duration: 500,
+          delay: 0,
+          order: 0,
+          x: 100,
+          y: 100,
+          w: 300,
+          h: 100
+        },
+        {
+          type: 'exit-fly',
+          trigger: 'click',
+          from: 'bottom',
+          duration: 500,
+          delay: 0,
+          order: 1,
+          x: 100,
+          y: 220,
+          w: 300,
+          h: 100
+        }
+      ]
+    }
+
+    const xml = buildSlideXml(slide, new Map(), 1)
+
+    expect(xml).toContain('filter="wipe(l)"')
+    expect(xml).toContain('presetClass="exit"')
+    expect(xml).toContain('nodeType="clickEffect"')
+    expect(xml).toContain('val="#ppt_y+#ppt_h/2"')
+  })
 })

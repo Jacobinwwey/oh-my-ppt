@@ -631,6 +631,7 @@ function matchAnimationTracesToTargets(
         spid: target.pptxId,
         type: trace.type,
         trigger: trace.trigger,
+        from: trace.from,
         duration: trace.duration,
         delay: trace.delay,
         order: trace.order

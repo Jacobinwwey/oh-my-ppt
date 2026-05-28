@@ -10,13 +10,24 @@ export type ImportedAnimationType =
   | 'scale-in'
   | 'slide-up'
   | 'slide-left'
+  | 'fly-in'
+  | 'wipe'
+  | 'zoom-in'
+  | 'spin-in'
+  | 'grow-shrink'
+  | 'pulse'
+  | 'exit-fade'
+  | 'exit-fly'
+  | 'path'
 
 export type ImportedAnimationTrigger = 'load' | 'click'
+export type ImportedAnimationFrom = 'left' | 'right' | 'top' | 'bottom' | 'center'
 
 export type ImportedElementAnimation = {
   id: number
   type: ImportedAnimationType
   trigger: ImportedAnimationTrigger
+  from?: ImportedAnimationFrom
   duration: number
   delay: number
   sourceId: string
@@ -52,8 +63,16 @@ const clampMs = (value: unknown, fallback: number): number => {
 const normalizeAnimationType = (
   presetId: string | undefined,
   presetSubtype: string | undefined,
-  hasScale: boolean
+  presetClass: string | undefined,
+  hasScale: boolean,
+  effectFilter: string | undefined
 ): ImportedAnimationType => {
+  if (presetClass === 'exit') {
+    if (presetId === '2') return 'exit-fly'
+    return 'exit-fade'
+  }
+  if (presetClass === 'emph' && hasScale) return 'pulse'
+  if (effectFilter?.startsWith('wipe') || presetId === '5') return 'wipe'
   if (hasScale) return 'scale-in'
   if (presetId === '10') return 'fade'
   if (presetId === '2') {
@@ -72,6 +91,31 @@ const normalizeAnimationType = (
     }
   }
   return 'fade'
+}
+
+const normalizeAnimationFrom = (
+  presetSubtype: string | undefined,
+  effectFilter: string | undefined
+): ImportedAnimationFrom | undefined => {
+  if (effectFilter?.startsWith('wipe')) {
+    if (effectFilter.includes('(l)')) return 'right'
+    if (effectFilter.includes('(r)')) return 'left'
+    if (effectFilter.includes('(u)')) return 'bottom'
+    if (effectFilter.includes('(d)')) return 'top'
+  }
+  switch (presetSubtype) {
+    case '1':
+      return 'top'
+    case '2':
+      return 'left'
+    case '3':
+    case '4':
+      return 'right'
+    case '8':
+      return 'bottom'
+    default:
+      return undefined
+  }
 }
 
 const parseNumericDelay = (value: string | undefined): number => {
@@ -149,7 +193,16 @@ export const parsePptxSlideAnimationPlan = (
     const nodeType = ctn.attr('nodeType')
     const presetId = ctn.attr('presetID')
     const presetSubtype = ctn.attr('presetSubtype')
-    const type = normalizeAnimationType(presetId, presetSubtype, ctn.find('p\\:animScale').length > 0)
+    const presetClass = ctn.attr('presetClass')
+    const effectFilter = ctn.find('p\\:animEffect').first().attr('filter')
+    const type = normalizeAnimationType(
+      presetId,
+      presetSubtype,
+      presetClass,
+      ctn.find('p\\:animScale').length > 0,
+      effectFilter
+    )
+    const from = normalizeAnimationFrom(presetSubtype, effectFilter)
     const trigger: ImportedAnimationTrigger = nodeType === 'clickEffect' ? 'click' : 'load'
     const delay = parseNumericDelay(
       ctn.children('p\\:stCondLst').find('p\\:cond').first().attr('delay')
@@ -177,6 +230,7 @@ export const parsePptxSlideAnimationPlan = (
         id,
         type,
         trigger,
+        from,
         duration: clampMs(duration, 500),
         delay,
         sourceId: spid,

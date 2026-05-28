@@ -1,6 +1,7 @@
 import type { DesignContract, SessionDeckGenerationContext } from '../tools/types'
 import { formatLayoutIntentPrompt } from '@shared/layout-intent'
 import {
+  ANIMATION_CHART_RETRY_FIX,
   ANIMATION_INTERACTION_RULES,
   CANVAS_CONSTRAINTS,
   CONTENT_LANGUAGE_RULES,
@@ -80,7 +81,7 @@ export function buildSinglePageGenerationPrompt(args: {
         '- If the previous issue was unclosed tags, do not patch the broken fragment. Rewrite a simpler, shallower fragment from scratch: one root div, no page shell (section[data-page-scaffold], main[data-role="content"], or runtime frame), grid/flex direct children, aim for 3 nesting levels and avoid exceeding 4, fewer wrappers, fewer modules.',
         '- If the previous issue was page shell structure, do not include .ppt-page-root, .ppt-page-content, .ppt-page-fit-scope, or data-ppt-guard-root anywhere, including CSS selectors, class names, scripts, and comments.',
         shouldMentionChartOrAnimationFix
-          ? '- The previous issue involved animation/chart API usage. Match animation to the original user request and slide narrative. Prefer static/load/stagger for simple entry or reveal; treat data-anim-trigger="click" as a low-priority option only when the original request asks for click/keyboard/step-by-step presentation control. Use PPT.animate, PPT.createTimeline, and PPT.stagger only for complex scripted animation; use PPT.createChart for charts.'
+          ? ANIMATION_CHART_RETRY_FIX
           : ''
       ].filter(Boolean)
     : []

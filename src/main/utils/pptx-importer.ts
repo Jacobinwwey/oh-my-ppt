@@ -597,6 +597,7 @@ const buildAnimationAttrs = (animation: ImportedElementAnimation | undefined): s
   if (!animation) return ''
   return [
     `data-anim="${animation.type}"`,
+    animation.from ? `data-anim-from="${animation.from}"` : '',
     `data-anim-duration="${animation.duration}"`,
     `data-anim-delay="${animation.delay}"`,
     animation.trigger === 'click' ? 'data-anim-trigger="click"' : '',
