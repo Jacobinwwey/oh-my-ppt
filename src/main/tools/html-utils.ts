@@ -101,56 +101,6 @@ const classList = (classRaw: string): string[] =>
     .map((cls) => cls.trim())
     .filter(Boolean)
 
-const isPositionedContentClass = (classRaw: string): boolean => {
-  const classes = classList(classRaw).map(classBaseName)
-  return classes.some((cls) => cls === 'absolute' || cls === 'fixed')
-}
-
-const hasRiskyContentPositionClass = (classRaw: string): boolean => {
-  const classes = classList(classRaw).map(classBaseName)
-  return classes.some((cls) =>
-    /^-(?:top|right|bottom|left)-/.test(cls) ||
-    /^-?translate-[xy]-/.test(cls)
-  )
-}
-
-const isTextBearingLayoutNode = ($: cheerio.CheerioAPI, node: CheerioElement): boolean => {
-  const el = $(node)
-  if (el.is('svg, path, line, circle, rect, ellipse, polygon, polyline')) return false
-  if (el.find('h1,h2,h3,h4,h5,h6,p,li,[data-role="title"]').length > 0) return true
-  const text = el
-    .clone()
-    .find('svg,script,style')
-    .remove()
-    .end()
-    .text()
-    .replace(/\s+/g, '')
-  return text.length >= 8
-}
-
-const findRiskyPositionedContent = ($: cheerio.CheerioAPI): string | null => {
-  let hit: string | null = null
-  $('[class]').each((_, node) => {
-    const el = $(node)
-    const classRaw = el.attr('class') || ''
-    if (!isPositionedContentClass(classRaw)) return undefined
-    if (!hasRiskyContentPositionClass(classRaw)) return undefined
-    if (!isTextBearingLayoutNode($, node)) return undefined
-    const textPreview = el
-      .clone()
-      .find('svg,script,style')
-      .remove()
-      .end()
-      .text()
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 24)
-    hit = textPreview || classRaw
-    return false
-  })
-  return hit
-}
-
 const hasExplicitChartPixelHeightClass = (classRaw: string): boolean =>
   classRaw
     .split(/\s+/)
@@ -186,6 +136,31 @@ const validateChartCanvasFrames = ($: cheerio.CheerioAPI, errors: string[]): voi
       errors.push(
         `第 ${index + 1} 个 canvas 必须放在专用 .ppt-chart-frame 直接父容器中，并由模型选择明确的 h-[Npx] 高度；不要使用 h-full/flex-1/min-h-* 或 h-64 这类缩写。修改图表前请先 ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
       )
+    } else {
+      const heightMatch = parentClassRaw.match(/h-\[\s*(\d+(?:\.\d+)?)\s*px\s*\]/)
+      const styleMatch = (parent.attr('style') || '').match(/height\s*:\s*(\d+(?:\.\d+)?)px/i)
+      const heightPx = heightMatch
+        ? parseFloat(heightMatch[1])
+        : styleMatch
+          ? parseFloat(styleMatch[1])
+          : 0
+      if (heightPx > 0 && heightPx < 100) {
+        errors.push(
+          `第 ${index + 1} 个图表高度 h-[${heightPx}px] 过小（最小 100px），请从布局预算反推图表高度：884px − 标题 − 指标 − gap − 卡片内边距 = 图表可用空间`
+        )
+      }
+      // Check budget comment vs actual chart height
+      const prevSibling = parent.prev()
+      const prevText = prevSibling.length ? prevSibling.text() : ''
+      const budgetNumbers = [...prevText.matchAll(/=\s*[~]?\s*(\d+)\s*px/g)].map(
+        (m) => parseInt(m[1], 10)
+      )
+      const budgetedPx = budgetNumbers.length > 0 ? budgetNumbers[budgetNumbers.length - 1] : 0
+      if (budgetedPx > 200 && heightPx > 0 && heightPx < budgetedPx * 0.75) {
+        errors.push(
+          `第 ${index + 1} 个图表高度 h-[${heightPx}px] 远小于预算计算的 ${budgetedPx}px。请将图表高度改为 h-[${Math.round(budgetedPx * 0.9)}px] 左右（预留 10% 余量）`
+        )
+      }
     }
   })
 }
@@ -298,6 +273,16 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
       `检测到直接 new Chart(...) 调用；修改图表前请先 ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
     )
   }
+  if (/addEventListener\s*\(\s*['"](?:ppt-ready|ppt-rendered|ppt-page-ready)['"]/i.test(html)) {
+    errors.push(
+      `检测到自定义事件（ppt-ready/ppt-rendered/ppt-page-ready）绑定 chart 代码，这些事件运行时不会触发。请改用 DOMContentLoaded。${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
+    )
+  }
+  if (/PPT\.createChart/i.test(html) && !/DOMContentLoaded/i.test(html)) {
+    errors.push(
+      `PPT.createChart 未包裹在 DOMContentLoaded 回调中，图表可能无法渲染。${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
+    )
+  }
   if (/<[^>]*$/.test(html.trim())) {
     errors.push('HTML 末尾存在未闭合标签，内容可能被截断')
   }
@@ -338,12 +323,6 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
       .map(([id]) => id)
     if (duplicatedBlockIds.length > 0) {
       errors.push(`data-block-id 必须唯一，重复项：${duplicatedBlockIds.join(', ')}`)
-    }
-    const riskyPositionedContent = findRiskyPositionedContent($)
-    if (riskyPositionedContent) {
-      errors.push(
-        `检测到正文内容使用 absolute/fixed + translate/负偏移定位，容易导致重叠：${riskyPositionedContent}。正文卡片请使用 grid/flex 分区，absolute 仅用于装饰或连接线。`
-      )
     }
   } catch {
     errors.push('HTML 片段结构解析失败')
@@ -417,12 +396,6 @@ export const validatePersistedPageHtml = (
   const content = $('.ppt-page-content').first()
   if (!content.length) {
     errors.push('缺少 .ppt-page-content')
-  }
-  const riskyPositionedContent = findRiskyPositionedContent($)
-  if (riskyPositionedContent) {
-    errors.push(
-      `正文内容使用 absolute/fixed + translate/负偏移定位，容易导致重叠：${riskyPositionedContent}。正文卡片请使用 grid/flex 分区。`
-    )
   }
   const blockIds = new Map<string, number>()
   $('[data-block-id]').each((_, node) => {

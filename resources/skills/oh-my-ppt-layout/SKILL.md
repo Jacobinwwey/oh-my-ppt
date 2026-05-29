@@ -5,15 +5,38 @@ description: Must be read before creating, relaying out, or repairing Oh My PPT 
 
 # Oh My PPT Layout
 
-Use this skill whenever you create a new slide, rewrite a whole slide, choose a slide composition, repair overflow/collision, or handle a layout intent such as cover, data-focus, comparison, timeline, process, concept, summary, quote, or image-focus.
+For supplementary examples (collision avoidance code comparison, height budget walkthrough), read `references/layout.md`.
 
-Read `references/layout.md` before making layout decisions.
+## When to use
 
-## How to lay out a slide
+- Creating a new slide or rewriting a whole slide
+- Choosing a slide composition or layout intent (cover, data-focus, comparison, etc.)
+- Repairing overflow, collision, or content exceeding the canvas
 
-### 1. Decide archetype, then write HTML
+## When not to use
 
-Before writing any HTML, decide in order:
+- Tiny text/style edits that do not affect layout (color, wording, single element)
+
+## 30-second decision checklist
+
+Before writing HTML, answer these in order:
+
+1. **Role**: What is this slide? (cover / data exhibit / comparison / timeline / concept / process / summary / quote / image-focus)
+2. **Reading path**: What does the audience see first → understand second → remember last?
+3. **Select**: Which content supports the reading path? Drop everything else — a slide is a message, not a document. Keep only the core claim and strongest 2-3 evidence points. Remove: secondary explanations, repeated data, decorative summary rows, metrics already shown elsewhere in the same slide.
+4. **Density**: Low (generous whitespace, one hero), medium (main + 2-3 support), or high (grid/table/cards)?
+5. **Budget**: Does the selected content fit in 884px? Title + modules + gaps + chart/tables + notes ≤ 884px? If not, go back to step 3 and cut more.
+
+## Canvas and spacing
+
+- Design for 16:9 canvas: 1600×900. Usable content area: ~1584×884 (runtime has p-2 padding).
+- Use Tailwind grid/flex layout. The root container usually uses `w-full h-full`; avoid fixed pixel values on the root.
+- All content must be fully visible within the canvas. Use shorter text or fewer modules when content exceeds the area.
+- Background fills the entire canvas, defined on the outermost container.
+- Use `text-base` (16px) as the smallest class for all visible text — body, labels, annotations, footnotes.
+- Use `text-5xl` as the largest heading scale. Use `text-2xl` through `text-4xl` for subtitles and metric labels.
+
+## Layout decision order
 
 1. **Slide role**: cover, section divider, big number, key message, text-image, list, data exhibit, comparison, timeline/process, framework/matrix, quote, Q&A, executive summary, closing takeaway.
 2. **Reading path**: what the audience sees first, understands second, and remembers last.
@@ -21,132 +44,136 @@ Before writing any HTML, decide in order:
 4. **Module budget**: title area, main visual/data area, supporting evidence, annotation/footer if truly needed.
 5. **Height budget**: outer margins + title + modules + gaps + chart/tables + notes must fit in 884px.
 
-### 2. Use grid/flex flow for body content
+## Body content uses grid/flex flow
 
 - Lay out body content with grid/flex document flow.
 - Use `absolute`/`fixed` only for background decoration, connectors, and non-text visual accents.
-- Elements containing h1, h2, h3, p, li, or primary slide text must use grid/flex cells, not absolute positioning.
+- Elements containing h1, h2, h3, p, li, or primary slide text use grid/flex cells, not absolute positioning.
+- Put `gap-*` on grid/flex containers. Put `min-w-0` on long-text children.
+- Avoid combining h-full, min-h-*, large padding, large gaps, and multi-paragraph text across nested vertical levels.
+- For radial/surround/center-image layouts: use explicit grid (e.g. 3-col 3-row), put each module in its own cell, connector lines as SVG decoration layer.
 
-### 3. Minimum font size is 16px — no exceptions
+## Height budgeting
 
-Every piece of visible text on the slide must be at least 16px. Use `text-base` (16px) as the smallest class.
+Total canvas height: 884px. Before writing HTML, calculate the height budget in order:
 
-- Use `text-base` for body text, labels, annotations, footnotes, and source lines.
-- Use `text-lg` or `text-xl` for subtitles, card titles, and metric labels.
-- Use `text-2xl` to `text-5xl` for headings and hero numbers.
-- `text-xs` (12px), `text-sm` (14px), `text-[12px]`, `text-[14px]`, `text-[13px]` — never use any of these. They are unreadable at presentation distance.
+1. Outer padding (e.g. `p-6` = 48px, `p-8` = 64px)
+2. Title + subtitle area (~60-80px including gap)
+3. Gaps between modules (each `gap-4` = 16px, `gap-6` = 24px)
+4. Remaining = maximum space for chart/data modules
 
-If text does not fit, shorten the text or reduce the number of modules. Never shrink below 16px.
+Chart frame `h-[Npx]` must fit within the remaining space. Hero chart max 380px. If the total exceeds 884px, reduce chart height first, then reduce padding.
 
-### 4. Each slide focuses on one claim
+Charts, tables, timelines, and long lists must share the same budget as titles and notes. Budget the chart frame height before writing HTML — see the chart skill for chart-specific height rules.
 
-If content exceeds one slide, reduce modules, merge points, shorten text, or prioritize the main conclusion and strongest evidence.
+## Density rules
 
-## When content feels thin — how to fill the whole page
+Low-density: large title/message scale, one core number, one strong visual symbol, generous whitespace, diagonal or asymmetric layout. Sparse content should feel intentional.
 
-Clean layout does not mean empty. When source content is short, turn one idea into a richer visual argument that occupies the full canvas. The page should feel intentionally composed, not like content was abandoned halfway.
+Medium-density: primary/secondary zones, one main visual + 2-3 supporting evidence blocks, left-right narrative, timeline, step ladder, matrix, or comparison. Clear hierarchy between main message and supporting points.
 
-### Strategies for sparse content
+High-density: disciplined grids, tables, compact lists, multi-card structures. Module count justified by real information volume. Equal-weight cards only for truly parallel items. 4-column cards only for real four-object comparison.
 
-1. **Expand the argument structure**: a single claim can be supported with context, comparison, baseline, reason, implication, or a "so what" line.
-2. **Add a visual anchor**: build a simple diagram, axis, progress bar, timeline strip, comparison bracket, or quadrant using divs/SVG. This occupies visual space and communicates structure.
-3. **Use an evidence rail**: 2-4 small supporting cards, metric chips, or contextual anchors alongside the main message.
-4. **Split into zones**: divide the page into 2-3 areas (claim + evidence, number + context, before + after, cause + effect) so the full canvas has purposeful content.
-5. **Give the main idea more room**: scale up the hero text or number, add a short subtitle for scope/audience/time, and let whitespace frame it intentionally.
+Less is more. When source content has more data points than fit comfortably, do not compress everything into the slide. Select the strongest evidence for the reading path; the rest can go on another slide. A clear message with 3 strong points beats a crowded page with 8 weak ones.
 
-### Sparse-slide composition patterns
+## Title readability
 
-- **Big claim + evidence rail**: hero statement on one side, 3 supporting cards on the other. Use `grid grid-cols-[1fr_1fr]` or `grid grid-cols-[2fr_1fr]`.
-- **Key number + context**: one large metric, a baseline/previous value, and a short interpretation block. Arrange vertically or left-right.
-- **Before/after contrast**: two large zones with 2-3 concrete differences. Use `grid grid-cols-2`.
-- **Cause → effect chain**: 3 steps with short text and a final implication. Use `grid grid-cols-3` or horizontal flex with arrow connectors.
-- **Center concept + satellites**: one central idea with 3 surrounding explanation blocks in explicit grid cells. Use a 3x3 or custom grid.
-- **Image/scene + annotations**: visual-dominant area with 2-4 labeled annotations. Use `grid grid-cols-[2fr_1fr]`.
+Titles are part of the reading path, not a fixed header decoration.
 
-Do not fill space with: emoji, stickers, decorative meta rows, fabricated metrics, repeated summaries, or empty cards.
+- Cover/summary slides: title can be at visual center.
+- Data slides: title can be near a key number or beside the chart.
+- Comparison slides: title where it clarifies the contrast.
+- Within one deck, vary title position and card grid across consecutive pages.
+- Vertical title text: only for short Chinese labels of 2-6 characters.
+- Titles with English, numbers, years, mixed text, or long phrases must be horizontal.
+
+## When content feels thin — fill the whole page
+
+Clean layout does not mean empty. When source content is short, turn one idea into a richer visual argument.
+
+Strategies:
+
+1. **Expand the argument**: add context, comparison, baseline, reason, implication, or a "so what" line.
+2. **Add a visual anchor**: diagram, axis, progress bar, timeline strip, comparison bracket, or quadrant using divs/SVG.
+3. **Evidence rail**: 2-4 supporting cards or metric chips alongside the main message.
+4. **Split into zones**: claim + evidence, number + context, before + after, cause + effect.
+5. **Give the main idea more room**: scale up hero text/number, add subtitle, whitespace as framing.
+
+Composition patterns:
+
+- **Big claim + evidence rail**: hero on one side, 3 cards on the other. `grid grid-cols-[1fr_1fr]`.
+- **Key number + context**: large metric, baseline/previous, interpretation block.
+- **Before/after contrast**: two zones with 2-3 differences. `grid grid-cols-2`.
+- **Cause → effect chain**: 3 steps + final implication. `grid grid-cols-3`.
+- **Center concept + satellites**: central idea + 3 surrounding blocks in grid cells.
+- **Image + annotation rail**: visual-dominant area + 2-4 annotations. `grid grid-cols-[2fr_1fr]`.
+
+## Layout creativity
+
+Vary layout aggressively across a deck. Consecutive slides should feel different, not like the same template with swapped content.
+
+Creative techniques:
+
+- **Asymmetric splits**: `grid grid-cols-[2fr_1fr]` or `grid-cols-[1fr_2fr]` — unequal zones feel more editorial.
+- **Overlap / layering**: a card or badge overlapping two zones creates depth. Use relative positioning and negative margin (`-mt-8`).
+- **Split-tone backgrounds**: different background colors in left vs right zone. Use `bg-*` on each grid child.
+- **Bento grid**: `grid grid-cols-3 grid-rows-2` with some cells spanning 2 columns or 2 rows (`col-span-2`, `row-span-2`). Feels like a magazine dashboard.
+- **Floating cards over a color field**: full-slide color background, cards with `bg-white/90 backdrop-blur` positioned asymmetrically.
+- **Diagonal accent**: a tilted decorative band (`rotate-3` or `skew-y-2`) behind the title or across the page. Content stays flat.
+- **Staircase / cascade**: items offset vertically with increasing `ml-*` or `pl-*`, creating a stepped flow.
+- **Edge-to-edge hero**: a full-width color block or gradient taking 40-60% of the page height, with text overlaid and detail cards below.
+
+For complete HTML examples of these techniques, read `references/layout.md`.
 
 ## Layout intent composition guide
 
-Each intent describes a slide's narrative purpose. Use these as starting points — adapt freely based on the actual content.
-
 ### `cover` — opening or section divider
 
-The title or core message is the visual focus.
+Large title at visual center. Short subtitle for scope, date, or thesis. Optional accent line or background color block.
 
-- Large title at visual center or dominant position.
-- Add a short subtitle for scope, date, or one-line thesis.
-- Optional: accent line, small author/date label, background color block or gradient.
-- Composition: centered hero, left-aligned hero with decorative band, or asymmetric with title on one side and visual accent on the other.
+### `data-focus` — metrics, KPIs, charts
 
-### `data-focus` — metrics, KPIs, charts, quantitative evidence
+1-2 hero numbers with label, unit, context. Charts get the largest area. Budget chart height from remaining space.
 
-Numbers and data visuals dominate the page.
+### `comparison` — options, alternatives, before/after
 
-- 1-2 hero numbers with large scale, each supported by a label, unit, and brief context (baseline, change, period).
-- If using charts: give them the largest area on the page. Budget chart height from the remaining space after title and labels.
-- Optional: comparison bars, sparklines, or a small table as secondary evidence.
-- Composition: metrics row + chart below; chart hero + sidebar numbers; or 2x2 metric grid with one chart.
+Split into 2-3 zones with clear boundaries. Same dimensions in each zone for fair comparison.
 
-### `comparison` — 2+ options, alternatives, before/after
+### `timeline` — phases, stages, roadmap
 
-Make differences easy to compare side by side.
+Horizontal strip with labeled nodes, or vertical staircase with alternating cards. Each phase: label + time + 1-2 sentences.
 
-- Split the canvas into 2-3 comparison zones with clear visual boundaries.
-- Each zone should show the same dimensions (features, metrics, pros/cons) for fair comparison.
-- Use consistent card structure but different accent colors or icons to distinguish sides.
-- Composition: two equal columns; three-column feature matrix; before (left) → after (right) with arrow.
+### `concept` — ideas, frameworks
 
-### `timeline` — phases, stages, roadmap, progression
+Central idea with supporting dimensions. Or structured breakdown: definition + aspects + example.
 
-Show progression through time or stages.
+### `process` — steps, flow, mechanism
 
-- Horizontal timeline strip with labeled nodes and brief descriptions below each.
-- Or vertical timeline with alternating left-right cards.
-- Each phase needs: label, time/step indicator, 1-2 sentences.
-- Optional: progress indicator, connecting line, milestone markers.
-- Composition: horizontal strip + description cards below; vertical staircase; or phase blocks in a grid.
+Numbered steps flowing left-to-right or top-to-bottom. Each step: short title + 1-2 sentences.
 
-### `concept` — ideas, frameworks, principles
+### `summary` — conclusion, takeaways
 
-Explain a concept with clear visual hierarchy.
+Opening conclusion in large text. 2-4 evidence blocks below.
 
-- Central idea at the core, with supporting dimensions radiating outward.
-- Or a structured breakdown: definition + key aspects + example.
-- Use diagrams, matrices, or labeled zones to make abstract ideas concrete.
-- Composition: center + satellites in grid; 3-column aspect breakdown; definition card + 3 supporting blocks.
+### `quote` — single statement
 
-### `process` — steps, flow, mechanism, cause-and-effect
-
-Show how something works step by step.
-
-- Numbered or arrow-connected steps flowing left-to-right or top-to-bottom.
-- Each step: short title + 1-2 sentences explaining what happens.
-- Optional: simple flow diagram using divs/SVG with arrows.
-- Composition: horizontal step cards with arrows; vertical numbered list with descriptions; or input → process → output zones.
-
-### `summary` — conclusion, takeaways, synthesis
-
-Lead with the conclusion, then compact supporting evidence.
-
-- Opening conclusion or key takeaway in large text at the top or center.
-- 2-4 compact evidence blocks or metric summaries below.
-- Optional: action items, next steps, or a brief "what this means" line.
-- Composition: hero conclusion + evidence row; conclusion card + 3 supporting metrics; or numbered key takeaways.
-
-### `quote` — single statement or judgment
-
-The statement itself is the main visual anchor.
-
-- Large quotation text occupying most of the page.
-- Attribution below or beside the quote.
-- Optional: a brief context line explaining why this matters.
-- Composition: centered quote with generous whitespace; quote on one side + context on the other; or quote overlay on background accent.
+Large quotation text. Attribution below. Optional context line.
 
 ### `image-focus` — products, scenes, visual material
 
-Visual material dominates, text supports it.
+Visual takes 60-70% of page. Text compact: title + 1-2 lines + labels.
 
-- Image or visual element takes 60-70% of the page area.
-- Text is compact: title, 1-2 description lines, maybe labels or annotations.
-- Optional: caption, source, or annotation callouts pointing to parts of the image.
-- Composition: image left + text right; full-bleed image with text overlay strip; or image center + annotation cards around edges.
+## Failure repair strategy
+
+When a slide has overflow, collision, or exceeds the canvas:
+
+1. **Cut content first**: remove the lowest-value module. Ask: does this card add new information, or just repeat the title / another card? If redundant, cut it.
+2. **Shorten text**: merge related points, use phrases instead of sentences.
+3. **Switch to a tighter structure**: replace asymmetric layout with a grid, reduce columns from 3 to 2.
+4. **Rebudget chart height**: if the page has a chart, reduce its h-[Npx] to make room.
+5. **Check nesting**: flatten any deep wrapper chains that consume vertical space.
+
+## Cross-skill references
+
+- When a slide needs a chart, budget the chart frame height first (see chart skill), then lay out the remaining modules.
+- Animation should follow the reading path (see animation skill), not replace layout.

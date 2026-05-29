@@ -1,128 +1,238 @@
-# Oh My PPT Layout Reference
+# Oh My PPT Layout — Supplementary Reference
 
-This reference is the product source of truth for slide layout decisions in Oh My PPT.
+Deep-dive examples, composition patterns, collision avoidance techniques, and height budget walkthroughs. The core rules are in SKILL.md — this file adds practical detail.
 
-## Canvas Model
+## Collision avoidance — code comparison
 
-Design for the original 16:9 canvas: 1600x900. Preview scaling only fits the window; it is not a layout fallback.
+### Radial / surround layout — grid, not absolute
 
-The usable content area is about 1584x884 because the runtime frame has outer padding. All titles, body text, charts, notes, and decorative elements must fit in that area.
+```html
+<!-- Risky: cards positioned with absolute/translate -->
+<div class="relative">
+  <div class="absolute top-0 left-[20%]">Card A</div>
+  <div class="absolute top-0 right-[20%]">Card B</div>
+  <div class="absolute bottom-0 left-[20%]">Card C</div>
+  <div class="absolute bottom-0 right-[20%]">Card D</div>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">Center</div>
+</div>
 
-Use Tailwind grid/flex layout. Do not lock the canvas with `w-[1600px]`, `h-[900px]`, `100vw`, `100vh`, `w-screen`, or `h-screen`.
+<!-- Reliable: explicit grid with cells -->
+<div class="grid grid-cols-3 grid-rows-3 gap-4 h-full">
+  <div class="col-start-1 row-start-1">Card A</div>
+  <div class="col-start-3 row-start-1">Card B</div>
+  <div class="col-start-1 row-start-3">Card C</div>
+  <div class="col-start-3 row-start-3">Card D</div>
+  <div class="col-start-2 row-start-2">Center</div>
+</div>
+```
 
-Avoid viewport-based text such as `vw`, `vh`, or `text-[clamp(...)]`. Use `text-5xl` as the largest normal h1 scale. Do not use `text-6xl`, `text-7xl`, or `text-8xl`.
+Grid cells participate in document flow, expand to fit their content, and never overlap. Absolute elements can collide, overflow, or clip when content varies.
 
-Minimum readable font size is 16px (`text-base`). This applies to all visible text: body, labels, annotations, footnotes, and source lines. Never use `text-xs` (12px), `text-sm` (14px), `text-[12px]`, `text-[13px]`, `text-[14px]`, or any value below 16px. If text does not fit, shorten the text or reduce modules — do not shrink the font.
+### Comparison layout — equal-width columns
 
-Do not use iframe. Do not reference runtime frame class names (.ppt-page-root, .ppt-page-content, .ppt-page-fit-scope, data-ppt-guard-root).
+```html
+<!-- Risky: left side may push right side out -->
+<div class="flex">
+  <div class="w-[55%]">Option A content</div>
+  <div class="w-[45%]">Option B content</div>
+</div>
 
-All main content must be fully visible within the 1600x900 canvas. Do not rely on overflow-hidden clipping, scrollbars, runtime scaling, or smaller font sizes as fallbacks.
+<!-- Reliable: grid with equal tracks -->
+<div class="grid grid-cols-2 gap-6">
+  <div>Option A content</div>
+  <div>Option B content</div>
+</div>
+```
 
-## Density Rules
+### Card with text — avoid deep nesting
 
-Low-density slides:
+```html
+<!-- Risky: 5 levels deep, easy to miss a closing tag -->
+<div class="flex">
+  <div class="flex-1">
+    <div class="p-4">
+      <div class="bg-white rounded-lg">
+        <div>
+          <h3>Title</h3>
+          <p>Content</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-- Use large title/message scale, one core number, one strong visual symbol, generous whitespace, diagonal composition, or asymmetric layout.
-- Sparse content should feel intentional. Use whitespace and rhythm as design, not empty filler.
+<!-- Reliable: 3 levels, same visual result -->
+<div class="grid grid-cols-2 gap-4">
+  <div class="p-4 bg-white rounded-lg">
+    <h3>Title</h3>
+    <p>Content</p>
+  </div>
+  <div class="p-4 bg-white rounded-lg">
+    <h3>Title</h3>
+    <p>Content</p>
+  </div>
+</div>
+```
 
-Medium-density slides:
+## Height budget walkthrough
 
-- Use primary/secondary zones, one main visual plus 2-3 supporting evidence blocks, left-right narrative, timeline, step ladder, matrix, or comparison structure.
-- Keep a clear hierarchy between the main message and supporting points.
+### Data-focus slide: title + metrics + chart
 
-High-density slides:
+```
+884px total height
+- p-8 (32px top + 32px bottom) = 64px → 820px remaining
+- Title area (h1 + gap) = 60px → 760px
+- Metric cards row (grid-cols-4) = 100px → 660px
+- Gap = 24px → 636px
+- Chart frame: h-[360px] = 360px → 276px
+- Annotation line = 24px → 252px (spare)
+```
 
-- Use disciplined grids, tables, compact lists, or multi-card structures.
-- Module count should be justified by real information volume.
-- Use equal-weight cards only when the items are truly parallel and equally important.
-- Use 4-column cards only for a real four-object comparison.
+Chart height (360px) is chosen to fit the remaining budget. If you need a taller chart, reduce padding to `p-6` or use a shorter title area.
 
-If content is too large, keep the main conclusion and strongest evidence. Remove secondary explanations, repeated summaries, decorative meta rows, and low-value cards.
+### Comparison slide: title + two zones
 
-## Title Readability
+```
+884px total height
+- p-6 (24px top + 24px bottom) = 48px → 836px remaining
+- Title + subtitle = 70px → 766px
+- Gap = 16px → 750px
+- Two comparison zones (grid-cols-2) → each gets 750px height
+```
 
-Titles are part of the reading path, not a fixed header decoration.
+### Timeline slide: title + horizontal strip
 
-- Cover and summary slides may put the title/message at the visual center.
-- Data slides may place the title near a key number or beside the chart.
-- Comparison slides should place the title where it clarifies the contrast.
-- Within one deck, avoid repeating the same title position and card grid on consecutive pages.
-- Vertical title text is only acceptable for short Chinese labels of 2-6 characters.
-- Titles containing English, numbers, years, mixed Chinese-English text, or long phrases must be horizontal.
-- Preserve the full title's readability. Do not sacrifice reading for decoration.
+```
+884px total height
+- p-6 = 48px → 836px
+- Title = 60px → 776px
+- Gap = 16px → 760px
+- Timeline strip (horizontal) = 120px → 640px
+- Detail cards below = 200px → 440px (spare)
+```
 
-## Collision Avoidance
+## Composition patterns
 
-Body content, cards, titles, charts, and lists must be carried by normal grid/flex flow.
+These are structural archetypes. Adapt the grid structure and density to match the slide's content — do not copy content or styling literally.
 
-Use `absolute` or `fixed` only for:
+### Big claim + evidence rail
 
-- background decorations
-- connector lines
-- non-text SVG marks
-- visual accents that do not carry body text
+Hero statement on one side, 2-4 evidence cards stacked on the other. Use `grid grid-cols-[1fr_1fr]` or `grid-cols-[2fr_1fr]` for emphasis asymmetry. Cards are simple `p-4 rounded-lg bg-*-50` blocks with a number + label.
 
-Elements containing `h1`, `h2`, `h3`, `p`, `li`, or primary slide text should not use `absolute` or `fixed`.
+### Before / after contrast
 
-For radial, five-point, surround, or center-image layouts, use an explicit grid. For example, a three-column, three-row grid can allocate left-top, center-top, right-top, left-bottom, right-bottom, and center cells. Put the center visual and each explanation card in its own grid cell. Connector lines can be an SVG decoration layer.
+Two zones with same internal structure but different colors (e.g. `bg-red-50` vs `bg-green-50`). Use `grid grid-cols-2 gap-6`. Keep the same number of data points in each zone for fair comparison.
 
-Every major content area needs stable size and spacing:
+### Center concept + satellites
 
-- Put `gap-*` on grid/flex containers.
-- Put `min-w-0` on long-text grid/flex children.
-- Avoid several nested vertical levels all using `h-full`, `min-h-*`, large padding, large gaps, and long paragraphs.
+Central element in a `grid-cols-3 grid-rows-3` grid at `col-start-2 row-start-2`. Satellites at corners. Center gets bold background (`bg-blue-600 text-white`); satellites get light background (`bg-blue-50`).
 
-## Height Budgeting
+### Cause → effect chain
 
-Before writing, estimate the vertical budget:
+3-4 sequential cards in `grid grid-cols-3`. Progress color from neutral → action → result (`bg-slate-100` → `bg-blue-50` → `bg-green-50`). Each card: short title + 1-2 sentence explanation.
 
-- outer margins/padding
-- title and subtitle area
-- module rows or chart area
-- gaps between modules
-- annotations or footnotes
-- any decorative band that consumes actual space
+### Quote slide
 
-Charts, tables, timelines, and long lists must share the same budget as titles and notes. Do not fill the canvas with a chart first and then squeeze explanations outside the page.
+Centered text block with `max-w-3xl`, large quotation in `text-4xl font-bold`, attribution below in `text-xl`. Generous padding (`p-12`). No grid — just centered `flex items-center justify-center`.
 
-If a slide needs a chart, also follow the chart skill. The chart frame height must be budgeted as part of the slide height plan before writing HTML, and the direct `.ppt-chart-frame` parent must use a deliberate explicit height that fits alongside the title, notes, labels, and supporting modules.
+## Density levels
 
-Avoid combining h-full, min-h-*, large padding, large gaps, and multi-paragraph text across several nested vertical levels. This combination is the most common cause of content exceeding the canvas.
+### Low-density
 
-## Sparse-content visual fullness patterns
+One hero element (big number, key phrase, image) centered with generous whitespace. Use `p-12`, `text-5xl`, `max-w-2xl` or `max-w-3xl`. Keep supporting text to 1-2 lines. Sparse content should feel intentional — whitespace is framing, not emptiness.
 
-When source content is short, the goal is not to add fake facts. The goal is to make the page feel intentionally composed by turning one idea into a richer visual argument.
+### Medium-density
 
-Use HTML structure to create visual fullness:
+Title area + `grid grid-cols-3` with evidence cards. Each card: `p-5 rounded-xl bg-*-50` with a title + 1-2 line explanation. Clear visual hierarchy: title dominates, cards support.
 
-- Strong message area: one large title or thesis, plus a short subtitle that clarifies scope, time, audience, or implication.
-- Evidence rail: a small number of compact supporting chips or mini cards with qualitative evidence, source labels, or contextual anchors.
-- Reading path: a left-to-right, top-to-bottom, or center-plus-side structure that shows what to read first and what supports it.
-- Anchor visual: a simple diagram, scale marker, axis, timeline strip, progress bar, quadrant, or comparison bracket built with divs/SVG.
-- Interpretation note: one compact "so what" line, risk note, or implication callout.
-- Grounding footer: only when useful, include source/date/scope in a quiet small block using at least 16px text.
+### High-density
 
-Good sparse-slide patterns:
+Compact metric row (`grid grid-cols-4`, `p-3 rounded-lg`) + chart or table below. Tighter padding (`p-6`), smaller text sizes. Module count justified by real information volume. Use `ppt-chart-frame h-[220px]` for supporting charts in this mode.
 
-- Big claim + evidence rail: hero statement on one side, 3 supporting cards on the other.
-- Key number + context: one metric, a baseline/previous value, and a short interpretation block.
-- Before/after contrast: two large zones with 2-3 concrete differences.
-- Cause/effect chain: 3 steps with short explanatory text and a final implication.
-- Center concept + satellites: one central idea with 3 surrounding explanation blocks in explicit grid cells.
-- Image/scene focus + annotation rail: visual-dominant area with 2-4 labeled annotations.
+## Title placement variations
 
-Element-level guidance:
+Within a deck, vary title positions to maintain visual rhythm across consecutive slides:
 
-- Use real modules, not loose text fragments. Prefer `header`, one main `section`, and a few direct child modules chosen for the content.
-- A module can be a claim block, evidence card, contrast cell, annotation, timeline node, metric pair, quote block, or conclusion strip.
-- Avoid making every module the same size. Give the main idea more area, then use smaller supporting elements.
+1. **Top-left** (standard): `p-8` container with title as first element.
+2. **Top-center**: `text-center` on the title, left-align body below.
+3. **Left sidebar**: `grid grid-cols-[200px_1fr]` with title in the left column, rotated only if it's a short Chinese label (2–6 characters).
+4. **Bottom**: title at the bottom of the slide, chart or visual above. Works for reveal slides.
+5. **Visual center**: for cover, quote, and summary slides — title is the dominant element, centered vertically and horizontally.
 
-## Content Integrity
+Mixed-language titles (English + numbers + Chinese) should always be horizontal. Vertical text only works for short pure-Chinese labels.
 
-Do not add unsourced precise KPI values, decorative explanations, footer meta bars, or repeated summaries just to make the slide look full.
+## Creative layout techniques
 
-When no reliable source exists, use qualitative framing or mark values as illustrative.
+These are building blocks — individual techniques to combine and adapt. Do not copy them as-is; adapt the principle to each slide's content and role.
 
-Do not use emoji or sticker decoration by default.
+### Technique: Unequal zones
 
-Keep each section to at most three columns unless the content truly requires a wider comparison grid.
+**Why it works**: Equal `grid-cols-2` feels balanced but static. Unequal splits (`[2fr_1fr]`, `[1fr_3fr]`) feel editorial and intentional. The larger zone gets visual dominance; the smaller zone anchors with context.
+
+**Key classes**: `grid grid-cols-[1fr_2fr]` or `grid-cols-[2fr_1fr]`
+
+**When to use**: Hero content + supporting detail, claim + evidence, narrative + data.
+
+### Technique: Overlap / layering
+
+**Why it works**: An element overlapping a zone boundary creates perceived depth and draws attention. The overlap point becomes a visual anchor.
+
+**Key mechanism**: Content cards use negative margin (`-mt-8`) to overlap into the adjacent zone. `absolute` + translate is only for decorative elements (accent lines, connector shapes), never for content cards or text.
+
+**When to use**: Highlighting a key metric that bridges two zones, or cards floating up into a hero color block.
+
+### Technique: Bento grid
+
+**Why it works**: Some cards spanning 2 columns or 2 rows creates size hierarchy within a grid. The largest card gets implicit importance. Mix sizes to avoid a uniform dashboard feel.
+
+**Key classes**: `grid grid-cols-4 grid-rows-3` with `col-span-2` or `row-span-2` on the hero card.
+
+**When to use**: Dashboards, product overviews, capability maps — any slide with 5+ equal items that need differentiation.
+
+### Technique: Split-tone background
+
+**Why it works**: Different background colors on left vs right (or top vs bottom) halves create an instant visual split without borders. Each zone's content inherits its background mood.
+
+**Key mechanism**: Each grid child gets its own `bg-*`. No gap (`gap-0`), or add `rounded-l-xl` / `rounded-r-xl` for soft boundaries.
+
+**When to use**: Before/after, problem/solution, dark/light mood contrast.
+
+### Technique: Floating cards over color field
+
+**Why it works**: A full-slide dark or gradient background with semi-transparent cards on top feels modern and cohesive. The shared background unifies disparate content.
+
+**Key classes**: Root gets `bg-gradient-to-br from-slate-900 to-slate-800`. Cards get `bg-white/10 backdrop-blur border border-white/10`.
+
+**When to use**: Process steps, feature showcases, brand slides.
+
+### Technique: Vertical cascade / staircase
+
+**Why it works**: Items offset with increasing `ml-*` or `pl-*` create a diagonal reading flow. Each step feels progressive. Works with descending opacity or color gradation for extra rhythm.
+
+**Key classes**: Each child gets incrementing `ml-0`, `ml-16`, `ml-32`, `ml-48`. Optionally pair with `bg-blue-600`, `bg-blue-500`, `bg-blue-400` for color cascade.
+
+**When to use**: Steps, phases, methodology, any sequential content.
+
+### Technique: Edge-to-edge hero band
+
+**Why it works**: A full-width color block (40-60% of page height) creates dramatic visual weight. Cards below overlap into the band with negative margin, connecting the two zones.
+
+**Key mechanism**: Top section is a `bg-*` div with generous `pb-16`. Below it, a card row uses `-mt-8` to float up into the color block. Cards get `shadow-lg` for separation.
+
+**When to use**: Key results, hero metrics, section openers.
+
+### Technique: Diagonal / skewed accent
+
+**Why it works**: A tilted decorative band (`rotate-3` or `skew-x-[-6deg]`) adds energy and breaks the rectangular monotony. Content stays flat (un-rotated) on top.
+
+**Key mechanism**: A decorative div with `absolute`, `bg-*`, and `transform skew-x-[-6deg]` sits behind the content layer. Content has `relative z-10`.
+
+**When to use**: Cover slides, case studies, any slide that needs energy without affecting content layout.
+
+### Technique: Asymmetric whitespace
+
+**Why it works**: Placing content off-center (e.g. left 60% of slide) with large empty space on one side feels editorial and confident. The whitespace itself becomes a design element.
+
+**Key classes**: `grid grid-cols-[3fr_1fr]` where the 1fr column is empty. Or `max-w-2xl` on centered content with a decorative element in the remaining space.
+
+**When to use**: Quotes, key messages, low-density slides where the idea should breathe.

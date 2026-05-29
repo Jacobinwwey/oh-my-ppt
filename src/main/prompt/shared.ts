@@ -42,20 +42,17 @@ export const STABLE_HTML_FRAGMENT_PROTOCOL = [
 
 export const CANVAS_CONSTRAINTS = [
   '## 画布约束',
-  `- Layout budgeting, density, and collision rules are in the skill ${LAYOUT_SKILL_NAME}. ${formatSkillUsageRequirement(LAYOUT_SKILL_NAME)}`,
-  '- 16:9 原始画布为 1600×900；可用内容区约 1584×884。所有内容必须在这个区域内。',
-  '- 用 Tailwind flex/grid 布局。禁止 w-[1600px]/h-[900px]/100vw/100vh/w-screen/h-screen。',
-  '- 禁止 vw/vh 字体单位和 text-[clamp(...)]；h1 统一 text-5xl，禁 text-6xl/7xl/8xl。',
-  '- 全局最小字号 16px（text-base）。所有可见文本——正文、标签、注释、脚注、来源——都不得小于 16px。text-xs/text-sm/text-[12px]/text-[13px]/text-[14px] 一律不用。放不下就缩短文案或减少模块，不要缩小字号。',
-  '- 整套页面复用同一背景体系/主色/字体；背景铺满画布，定义在最外层容器上。',
-  '- 禁止 iframe。禁止引用系统骨架类。'
+  `- Layout details (density, archetype, height budget) are in the skill ${LAYOUT_SKILL_NAME}. ${formatSkillUsageRequirement(LAYOUT_SKILL_NAME)}`,
+  '- 16:9 画布 1600×900，可用区 1584×884。用 Tailwind grid/flex。',
+  '- 最小字号 16px（text-base）。text-xs/text-sm/text-[12px]/text-[13px]/text-[14px]/text-[15px] 一律不用。放不下就减模块。',
+  '- h1 最大 text-5xl（48px）。text-6xl/7xl/8xl、vw/vh、text-[clamp(...)] 不用。',
+  '- 禁止 w-[1600px]/h-[900px]/100vw/100vh/w-screen/h-screen。禁止 iframe。'
 ].join('\n')
 
 export const LAYOUT_COLLISION_RULES = [
-  '## 布局防重叠规则',
-  `- Full collision avoidance guide is in the skill ${LAYOUT_SKILL_NAME}. ${formatSkillUsageRequirement(LAYOUT_SKILL_NAME)}`,
-  '- 正文内容用 grid/flex 正常文档流承载。absolute/fixed 仅用于背景装饰、连接线、非文字 SVG。',
-  '- 需要环绕/放射/中心图布局时，用明确 grid 模板，每个模块占独立 cell。'
+  '## 布局防重叠',
+  `- Full collision guide is in the skill ${LAYOUT_SKILL_NAME}. ${formatSkillUsageRequirement(LAYOUT_SKILL_NAME)}`,
+  '- 正文内容用 grid/flex 正常文档流。absolute/fixed 仅用于背景装饰、连接线。正文卡片不得用 absolute/fixed。'
 ].join('\n')
 
 export const FRONTEND_CAPABILITIES = [
@@ -69,21 +66,13 @@ export const FRONTEND_CAPABILITIES = [
   '- Do not declare @font-face or import external font/icon libraries.',
   '',
   'Charts:',
-  `- The mandatory chart source of truth is the DeepAgents skill ${CHART_SKILL_NAME}.`,
-  `- Before adding or modifying charts: ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`,
-  '- If the task does not add or modify charts, do not read the full chart reference just to satisfy this contract.',
-  '- Do not call new Chart(ctx, config); chart creation must go through the product runtime helper described by the chart skill.',
-  '- Wrap all PPT.createChart calls inside document.addEventListener("DOMContentLoaded", function() { ... }). The runtime only guarantees Chart.js is ready at DOMContentLoaded.',
+  `- Chart details are in the skill ${CHART_SKILL_NAME}. ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`,
+  '- Wrap in document.addEventListener("DOMContentLoaded", function() { PPT.createChart(...) }). Do not use ppt-ready/ppt-rendered or other custom events.',
   '',
   'Animations:',
-  `- The mandatory animation source of truth is the DeepAgents skill ${DATA_ANIM_SKILL_NAME}.`,
-  `- Before adding or modifying animation: ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`,
-  '- If the task does not add or modify animation, do not read the full animation reference just to satisfy this contract.',
-  '- Do not call raw anime(...) or anime.timeline(...). Do not create animation initial hidden states with CSS classes or inline styles.',
+  `- Animation rules are in the skill ${DATA_ANIM_SKILL_NAME}. ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`,
   '',
-  'Validation constraints:',
-  '- Keep runtime initial state visible: no opacity-0, invisible, visibility:hidden, display:none, or CSS opacity:0 for animated elements.',
-  '- Put animation initial values inside PPT.animate parameters when scripted animation is truly needed.',
+  'Validation:',
   '- Use \\( \\) or $$ $$ for math; do not use single-dollar inline math.'
 ].join('\n')
 

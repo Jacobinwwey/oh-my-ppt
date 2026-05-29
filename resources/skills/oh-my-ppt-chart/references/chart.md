@@ -1,6 +1,6 @@
 # Chart Reference
 
-Oh My PPT loads Chart.js and exposes `PPT.createChart(canvasEl, config)`. Use the helper so preview, validation, and export workflows see charts consistently.
+Deep-dive examples, layout integration patterns, and Chart.js options that work reliably in Oh My PPT.
 
 ## Complete working example
 
@@ -35,22 +35,232 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 ```
 
-## Chart frame height
+## How PPT.createChart works
 
-The `.ppt-chart-frame` direct parent must carry an explicit `h-[Npx]` height. Choose the value from the slide layout:
+`PPT.createChart` wraps `new Chart()` and adds several layers of safety:
 
-- Hero or primary charts: taller, occupying most of the main content area.
-- Charts paired with text: leave room for both chart and reading path.
-- Small supporting charts: shorter, but still readable at presentation distance.
-- Dense labels, legends, or many categories: more height, not smaller text.
+1. **Readiness guard**: waits for Chart.js v4 to be loaded before creating the instance.
+2. **Auto-cleanup**: if a chart already exists on the same canvas, it calls `.destroy()` first — safe to re-render on the same element.
+3. **Number formatting**: injects tick callbacks for value axes (trims floating-point noise) and tooltip callbacks that prefix the dataset label.
+4. **Category label fix**: on category axes, injects `this.getLabelForValue(value)` so labels always render as strings.
+5. **Post-creation resize**: waits 2 animation frames, then calls `chart.resize()` and `chart.update("none")` to ensure correct rendering after layout settles.
+6. **Instance registry**: tracks the chart in a global registry for `PPT.updateChart`, `PPT.destroyChart`, and `PPT.resizeCharts`.
 
-Use `h-[Npx]` (e.g. `h-[360px]`, `h-[240px]`). Do not use `h-full`, `flex-1`, `min-h-*`, or Tailwind scale shortcuts like `h-64` for the chart frame height.
+Use `PPT.createChart` — never `new Chart(...)`.
 
-## Chart script rules
+## Chart frame height guide
 
-- Always wrap in `document.addEventListener('DOMContentLoaded', function() { ... })`. This is the only event the runtime guarantees. The runtime never fires `ppt-ready`, `ppt-rendered`, `ppt-page-ready`, or any similar event.
-- Always call `PPT.createChart(canvasElement, config)`. Pass the canvas DOM element as the first argument.
-- Always call `PPT.createChart` — never `new Chart(...)`.
+The `.ppt-chart-frame` parent must have an explicit `h-[Npx]` height. Chart.js requires a concrete pixel height to render — relative values (`flex-1`, `h-full`, `min-h-*`) are unreliable.
+
+### Mandatory: write a budget comment before the chart
+
+Before writing the chart frame div, write an HTML comment showing your height calculation. You MUST do this — it forces you to compute instead of guessing.
+
+```html
+<!-- budget: 884 - 64(p-8) - 60(title) - 20(gap-5) - 100(metrics) = 640px for chart area -->
+<!-- chart card: 640 - 40(h3+mb-2) - 16(p-2) = 584px → h-[560px] -->
+<div class="ppt-chart-frame relative h-[560px] w-full overflow-hidden">
+  <canvas id="my-chart" class="h-full w-full"></canvas>
+</div>
+```
+
+Calculation steps:
+1. Start from **884px** (usable height after runtime p-2 padding)
+2. Subtract outer padding (p-6=48, p-8=64)
+3. Subtract all modules above the chart: title, subtitle, metrics row, legends
+4. Subtract all gaps between modules
+5. If chart is inside a card: subtract card padding and card title/heading
+6. Give the chart most of the remaining space, leave ~20px margin
+7. Minimum 100px. If budget < 100px, the slide has too many modules — cut content.
+
+Do not skip the budget comment. Do not guess — always calculate first.
+
+### What not to use for height
+
+Use only `h-[Npx]` for the chart frame. These do not work reliably:
+
+- `h-full` — depends on parent having a fixed height, which may not exist
+- `flex-1` — the chart frame is not inside a flex column with bounded height
+- `min-h-*` — sets a minimum but Chart.js needs an exact height to render
+- `h-64` or other Tailwind scale shortcuts — they use rem units which may not match the layout budget
+
+## Chart type selection guide
+
+### bar — comparisons across categories
+
+Best for: revenue by quarter, survey results, regional comparisons.
+
+```js
+{
+  type: 'bar',
+  data: {
+    labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+    datasets: [{
+      label: 'Revenue (M)',
+      data: [12, 19, 15, 22],
+      backgroundColor: '#3B82F6'
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true } }
+  }
+}
+```
+
+Horizontal bar: set `options.indexAxis: 'y'`. Good for ranking lists or long category labels.
+
+### line — trends over time
+
+Best for: monthly trends, growth trajectories, multi-series comparison over time.
+
+```js
+{
+  type: 'line',
+  data: {
+    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+    datasets: [
+      {
+        label: '2025',
+        data: [30, 45, 42, 60, 55],
+        borderColor: '#3B82F6',
+        tension: 0.3,
+        fill: false
+      },
+      {
+        label: '2024',
+        data: [20, 35, 38, 45, 40],
+        borderColor: '#94A3B8',
+        tension: 0.3,
+        fill: false
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom' } },
+    scales: { y: { beginAtZero: true } }
+  }
+}
+```
+
+Use `tension: 0.3` for smooth curves. Use `fill: true` with `backgroundColor` at low opacity for area charts.
+
+### pie / doughnut — parts of a whole
+
+Best for: market share, budget allocation, category breakdown. Limit to 4–6 slices for readability.
+
+```js
+{
+  type: 'doughnut',
+  data: {
+    labels: ['Product A', 'Product B', 'Product C', 'Other'],
+    datasets: [{
+      data: [40, 25, 20, 15],
+      backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#94A3B8']
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right' }
+    }
+  }
+}
+```
+
+Doughnut is usually better than pie — the center can hold a total or label.
+
+### radar — multi-axis profiles
+
+Best for: skill comparisons, product feature matrices, performance across dimensions. Use 4–8 axes.
+
+```js
+{
+  type: 'radar',
+  data: {
+    labels: ['Speed', 'Reliability', 'Cost', 'Support', 'Features'],
+    datasets: [
+      {
+        label: 'Product A',
+        data: [85, 70, 60, 90, 75],
+        borderColor: '#3B82F6',
+        backgroundColor: 'rgba(59, 130, 246, 0.15)'
+      },
+      {
+        label: 'Product B',
+        data: [65, 85, 80, 60, 90],
+        borderColor: '#10B981',
+        backgroundColor: 'rgba(16, 185, 129, 0.15)'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      r: { beginAtZero: true, max: 100 }
+    }
+  }
+}
+```
+
+### scatter / bubble — correlations
+
+Best for: showing correlations, distributions, or data points with 2–3 dimensions.
+
+```js
+// Scatter: two variables
+{
+  type: 'scatter',
+  data: {
+    datasets: [{
+      label: 'Team A',
+      data: [{ x: 10, y: 20 }, { x: 15, y: 35 }, { x: 25, y: 30 }],
+      backgroundColor: '#3B82F6'
+    }]
+  }
+}
+
+// Bubble: three variables (x, y, r=size)
+{
+  type: 'bubble',
+  data: {
+    datasets: [{
+      label: 'Markets',
+      data: [
+        { x: 20, y: 30, r: 15 },
+        { x: 40, y: 10, r: 8 },
+        { x: 30, y: 22, r: 20 }
+      ]
+    }]
+  }
+}
+```
+
+## Updating an existing chart
+
+Use `PPT.updateChart` to modify data or options without recreating the chart:
+
+```js
+// Patch data and options
+PPT.updateChart('#my-chart', {
+  data: { labels: ['New A', 'New B'], datasets: [{ data: [50, 60] }] },
+  mode: 'active'
+});
+
+// Or use a callback for complex updates
+PPT.updateChart('#my-chart', function(chart) {
+  chart.data.datasets[0].data.push(42);
+  chart.update();
+});
+```
+
+`PPT.updateChart` accepts a canvas element, a CSS selector string, or an existing Chart instance.
 
 ## Category axis labels
 
@@ -63,7 +273,7 @@ data: {
 }
 ```
 
-If a `ticks.callback` is truly needed on a category axis, use a normal function and return the label:
+The runtime auto-injects `ticks.callback` for category axes. If you need a custom callback:
 
 ```js
 ticks: {
@@ -73,9 +283,16 @@ ticks: {
 }
 ```
 
-## Layout
+## Layout integration tips
 
-- Reserve space for legends, long labels, and axis ticks.
-- Prefer fewer categories over tiny unreadable labels.
-- Use chart containers as dedicated visual modules, not as decoration nested inside cards.
-- Use `responsive: true` and `maintainAspectRatio: false` in chart options — they work with the explicit-height frame.
+- Reserve space for legends, long labels, and axis ticks when budgeting chart height.
+- Prefer fewer categories over tiny unreadable labels. If labels are long, use horizontal bar (`indexAxis: 'y'`).
+- Place charts as dedicated visual modules in the grid, not nested inside cards with other content.
+- Always set `responsive: true` and `maintainAspectRatio: false` — they work with the explicit-height frame.
+- For a chart + metric cards layout, use `grid grid-cols-[1fr_1fr]` or `grid grid-cols-3` with the chart spanning 2 columns.
+
+## Common patterns
+
+- **Hero metric + chart**: `grid grid-cols-[1fr_2fr]` — metric card on the left with `text-5xl` number, chart on the right. Chart height ~300px.
+- **Two charts side by side**: `grid grid-cols-2` — each chart in its own column with a small heading above. Chart height ~260px.
+- **Metrics row + chart below**: compact `grid-cols-4` metric cards (p-3) on top, single chart spanning full width below.

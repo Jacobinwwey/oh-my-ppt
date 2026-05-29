@@ -71,7 +71,11 @@ export const BASE_PAGE_STYLE_TAG = `<style id="ppt-page-guard-style">
     font-family: var(--ppt-title-font);
   }
   .ppt-page-content .text-xs,
-  .ppt-page-content .text-sm {
+  .ppt-page-content .text-sm,
+  .ppt-page-content [class*="text-[12px]"],
+  .ppt-page-content [class*="text-[13px]"],
+  .ppt-page-content [class*="text-[14px]"],
+  .ppt-page-content [class*="text-[15px]"] {
     font-size: 1rem !important;
     line-height: 1.5 !important;
   }
@@ -717,6 +721,21 @@ function repairMalformedCreativeFragment(content: string): string | null {
   }
 }
 
+function enforceMinimumFontSize(html: string): string {
+  return html.replace(
+    /font-size\s*:\s*([0-9.]+)\s*(px|rem|em)/gi,
+    (match, valueStr, unit) => {
+      const value = parseFloat(valueStr)
+      const u = unit.toLowerCase()
+      const px = u === 'px' ? value : u === 'rem' || u === 'em' ? value * 16 : value
+      if (px > 0 && px < 16) {
+        return `font-size: 1rem`
+      }
+      return match
+    }
+  )
+}
+
 function countHtmlTag(content: string, tagName: string): { open: number; close: number } {
   const withoutNonStructuralBlocks = content
     .replace(/<!--[\s\S]*?-->/g, '')
@@ -956,8 +975,9 @@ export function createPageWriteTools(args: {
         titleFont: context.designContract?.titleFont || 'Inter',
         bodyFont: context.designContract?.bodyFont || 'Inter'
       }
+      const fixedContent = enforceMinimumFontSize(preparedContent.content)
       const normalized = await normalizeAndInjectPageRuntime(
-        preparedContent.content,
+        fixedContent,
         resolvedPageId,
         context.projectDir,
         designFonts
