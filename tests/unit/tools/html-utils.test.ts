@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { validateHtmlContent } from '../../../src/main/tools/html-utils'
+import { validateHtmlContent, validatePersistedPageHtml } from '../../../src/main/tools/html-utils'
+import {
+  DATA_ANIM_SKILL_NAME,
+  formatSkillUsageRequirement,
+} from '../../../src/main/skills/skill-contract'
 
 describe('validateHtmlContent animation validation', () => {
   it('allows declarative data-anim stagger delay', () => {
@@ -12,7 +16,7 @@ describe('validateHtmlContent animation validation', () => {
     `)
 
     expect(result.errors).not.toContain(
-      '检测到未命名空间的动画调用（animate/stagger/createTimeline）；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.*'
+      `检测到未命名空间的动画调用（animate/stagger/createTimeline）；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`
     )
   })
 
@@ -25,7 +29,35 @@ describe('validateHtmlContent animation validation', () => {
     `)
 
     expect(result.errors).toContain(
-      '检测到未命名空间的动画调用（animate/stagger/createTimeline）；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.*'
+      `检测到未命名空间的动画调用（animate/stagger/createTimeline）；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`
     )
+  })
+})
+
+describe('validatePersistedPageHtml chart validation', () => {
+  const pageWithChartFrame = (frameClass: string): string => `
+    <html>
+      <body>
+        <section class="ppt-page-root" data-ppt-guard-root="1">
+          <main class="ppt-page-content">
+            <div class="ppt-chart-frame relative ${frameClass}">
+              <canvas id="chart" class="h-full w-full"></canvas>
+            </div>
+          </main>
+        </section>
+      </body>
+    </html>
+  `
+
+  it('accepts the chart fallback height class used by page writer', () => {
+    const result = validatePersistedPageHtml(pageWithChartFrame('h-[240px]'), 'page-1')
+
+    expect(result.valid).toBe(true)
+  })
+
+  it('rejects Tailwind scale height shortcuts after persistence validation', () => {
+    const result = validatePersistedPageHtml(pageWithChartFrame('h-64'), 'page-1')
+
+    expect(result.errors.join('\n')).toContain('h-[Npx]')
   })
 })

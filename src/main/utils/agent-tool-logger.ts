@@ -1,4 +1,9 @@
 import log from 'electron-log/main.js'
+import {
+  PRODUCT_SKILLS_ROUTE,
+  REQUIRED_PRODUCT_SKILL_NAMES,
+  type RequiredProductSkillName
+} from '../skills/skill-contract'
 
 const getRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
@@ -23,6 +28,39 @@ export const previewStr = (value: unknown, max = 240): string => {
         })()
   const compact = source.replace(/\s+/g, ' ').trim()
   return compact.length > max ? `${compact.slice(0, max)}...` : compact
+}
+
+const parseToolArgs = (value: unknown): Record<string, unknown> | null => {
+  if (typeof value === 'string') {
+    const source = value.trim()
+    if (!source) return null
+    try {
+      return getRecord(JSON.parse(source))
+    } catch {
+      return null
+    }
+  }
+  return getRecord(value)
+}
+
+const readToolPathArg = (args: Record<string, unknown> | null): string => {
+  if (!args) return ''
+  const value =
+    args.path ??
+    args.file_path ??
+    args.filePath ??
+    args.absolute_path ??
+    args.absolutePath
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+const resolveProductSkillName = (filePath: string): RequiredProductSkillName | null => {
+  const normalized = filePath.replace(/\\/g, '/')
+  if (!normalized.startsWith(PRODUCT_SKILLS_ROUTE)) return null
+  for (const skillName of REQUIRED_PRODUCT_SKILL_NAMES) {
+    if (normalized.includes(`/${skillName}/`)) return skillName
+  }
+  return null
 }
 
 export function logAgentToolEvents(
@@ -62,6 +100,20 @@ export function logAgentToolEvents(
           argsLength: typeof rawArgs === 'string' ? rawArgs.length : 0,
           argsPreview: argsText
         })
+
+        if (name === 'read_file') {
+          const filePath = readToolPathArg(parseToolArgs(rawArgs))
+          const skillName = filePath ? resolveProductSkillName(filePath) : null
+          if (skillName) {
+            log.info(`[${tag}] product_skill_read_file`, {
+              source,
+              toolName: name,
+              toolCallId: id || null,
+              skillName,
+              path: filePath
+            })
+          }
+        }
       }
     }
 

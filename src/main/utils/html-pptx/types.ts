@@ -1,3 +1,9 @@
+import type {
+  DataAnimFrom,
+  DataAnimPptxTrigger,
+  DataAnimType
+} from '../../animation/data-anim-schema'
+
 export type HtmlToPptxTextAlign = 'left' | 'center' | 'right' | 'justify'
 
 export interface HtmlToPptxTextRun {
@@ -111,6 +117,23 @@ export interface HtmlToPptxTable {
   order?: number
 }
 
+export type HtmlToPptxAnimationType = DataAnimType
+export type HtmlToPptxAnimationTrigger = DataAnimPptxTrigger
+export type HtmlToPptxAnimationFrom = DataAnimFrom
+
+export interface HtmlToPptxAnimationTrace {
+  type: HtmlToPptxAnimationType
+  trigger: HtmlToPptxAnimationTrigger
+  from?: HtmlToPptxAnimationFrom
+  duration: number
+  delay: number
+  order: number
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export interface HtmlToPptxSlide {
   title?: string
   backgroundColor?: string
@@ -121,6 +144,11 @@ export interface HtmlToPptxSlide {
   tables?: HtmlToPptxTable[]
   /** Overlay images rendered on top of shapes/texts (e.g. KaTeX formula screenshots) */
   overlayImages?: HtmlToPptxImage[]
+  /** Element animation boxes collected from data-anim attributes in the source HTML. */
+  animationTraces?: HtmlToPptxAnimationTrace[]
+  /** Native slide transition type, when configured by callers. */
+  transitionType?: string
+  transitionDurationMs?: number
 }
 
 export interface HtmlToPptxEmbeddedFont {

@@ -431,7 +431,18 @@ export function registerSessionHandlers(ctx: IpcContext): void {
     }> = []
     const sessionPages = await db.listSessionPages(sessionId)
     if (sessionPages.length === 0) {
-      throw new Error('session_pages is empty after migration; please re-run migration patch')
+      return {
+        session: normalizeSession({
+          ...(session as unknown as Record<string, unknown>),
+          page_count: 0,
+          generated_count: 0,
+          failed_count: 0
+        }),
+        messages: messages.map((message) =>
+          normalizeMessage(message as unknown as Record<string, unknown>)
+        ),
+        generatedPages: []
+      }
     }
     const projectDir = await resolveSessionProjectDir(sessionId)
     await ensureSessionRuntimeCompatible(ctx, projectDir)

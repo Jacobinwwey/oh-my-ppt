@@ -18,6 +18,7 @@ import {
   ensureHistoryBaselineSafe,
   recordHistoryOperationStrict
 } from '../../history/git-history-service'
+import { CHART_SKILL_NAME, formatSkillUsageRequirement } from '../../skills/skill-contract'
 
 // ── Independent RetrySinglePage context ──
 
@@ -246,7 +247,7 @@ export async function executeRetrySinglePageGeneration(
     },
     buildRetryRunArgs: (runArgs) => ({
       ...runArgs,
-      userMessage: `重新生成第 ${context.pageNumber} 页「${context.title}」，确保使用 PPT.createChart 而不是 new Chart。`
+      userMessage: `重新生成第 ${context.pageNumber} 页「${context.title}」。如果需要图表，先 ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
     })
   })
 

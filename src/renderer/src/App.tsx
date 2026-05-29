@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation, matchPath } from 'react-router-dom'
 import { Sidebar } from './components/layout/Sidebar'
 import { HomePage } from './pages/home'
@@ -14,35 +14,25 @@ import { FontsPage } from './pages/fonts'
 import { StyleEditorPage } from './pages/style-editor'
 import { TemplatesPage } from './pages/templates'
 import { AppToaster } from './components/AppToaster'
+import { UpdateAvailableDialog } from './components/UpdateAvailableDialog'
 import { ScrollArea } from './components/ui/ScrollArea'
-import { useT } from './i18n'
 import { ipc } from './lib/ipc'
-import { useToastStore } from './store'
+import type { UpdateAvailablePayload } from '@shared/app-update.js'
 
 function App(): React.JSX.Element {
   const location = useLocation()
   const isSessionDetailRoute = Boolean(matchPath('/sessions/:id/*', location.pathname))
   const isThinkingRoute = Boolean(matchPath('/thinking/:thinkingId', location.pathname))
-  const { info } = useToastStore()
-  const t = useT()
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateAvailablePayload | null>(null)
 
   useEffect(() => {
     const unsubscribe = ipc.onUpdateAvailable((update) => {
-      info(t('app.updateAvailable', { version: update.latestVersion }), {
-        description: t('app.updateAvailableDescription', { currentVersion: update.currentVersion }),
-        duration: 12000,
-        action: {
-          label: t('app.open'),
-          onClick: () => {
-            window.open(update.releaseUrl, '_blank', 'noopener,noreferrer')
-          }
-        }
-      })
+      setAvailableUpdate(update)
     })
     return () => {
       unsubscribe?.()
     }
-  }, [info, t])
+  }, [])
 
   if (isSessionDetailRoute) {
     return (
@@ -55,6 +45,7 @@ function App(): React.JSX.Element {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
+        <UpdateAvailableDialog update={availableUpdate} onClose={() => setAvailableUpdate(null)} />
         <AppToaster />
       </>
     )
@@ -96,6 +87,7 @@ function App(): React.JSX.Element {
           </div>
         </div>
       </div>
+      <UpdateAvailableDialog update={availableUpdate} onClose={() => setAvailableUpdate(null)} />
       <AppToaster />
     </>
   )

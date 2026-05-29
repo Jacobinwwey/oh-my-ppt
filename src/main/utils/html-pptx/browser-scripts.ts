@@ -190,9 +190,11 @@ export const FREEZE_PAGE_FOR_EXPORT_SCRIPT = `
     return Number(getComputedStyle(node).opacity || '1') <= 0.04;
   };
 
-  // Mark [data-anim] elements as animated for PPTX background capture
+  // Mark [data-anim] elements for native PPT animation export. They must not
+  // remain baked into the static background, otherwise the animation appears
+  // to do nothing because the final state is already visible.
   root.querySelectorAll('[data-anim]').forEach(function (el) {
-    el.setAttribute('data-pptx-animated', '1');
+    el.setAttribute('data-pptx-native-anim', '1');
   });
 
   const motionTargets = root.querySelectorAll(
@@ -383,6 +385,11 @@ export const HIDE_FOR_PPTX_BACKGROUND_SCRIPT = `
     // Precisely hide extracted shapes (background/border) and images (visibility)
     '[data-pptx-extracted-shape] { background-color: transparent !important; border-color: transparent !important; }',
     '[data-pptx-extracted-image] { opacity: 0 !important; visibility: hidden !important; }',
+    // Hide native animation sources from the static background. Their exported
+    // PPT shapes/text/images are animated separately in slide timing XML.
+    '[data-pptx-native-anim] { background-color: transparent !important; border-color: transparent !important; box-shadow: none !important; }',
+    '[data-pptx-native-anim], [data-pptx-native-anim] * { color: transparent !important; -webkit-text-fill-color: transparent !important; -webkit-text-stroke-color: transparent !important; text-shadow: none !important; text-decoration-color: transparent !important; caret-color: transparent !important; }',
+    '[data-pptx-native-anim] img, [data-pptx-native-anim] canvas, img[data-pptx-native-anim], canvas[data-pptx-native-anim] { opacity: 0 !important; visibility: hidden !important; }',
     // Hide non-animated images (fallback for non-extracted decorative images)
     'img:not([data-pptx-animated]):not([data-pptx-extracted-image]), canvas:not([data-pptx-animated]):not([data-pptx-extracted-image]) { opacity: 0 !important; visibility: hidden !important; }',
     // Make container backgrounds transparent (catch-all for non-extracted containers)
@@ -481,6 +488,144 @@ export const MARK_KATEX_BLOCKS_SCRIPT = `
     count++;
   }
   return count;
+})()
+`
+
+export const COLLECT_PPTX_ANIMATION_TRACES_SCRIPT = `
+(() => {
+  const root = document.querySelector('.ppt-page-root') || document.body;
+  const pageRect = root.getBoundingClientRect();
+  const supportedTypes = new Set([
+    'fade',
+    'fade-up',
+    'fade-down',
+    'fade-left',
+    'fade-right',
+    'scale-in',
+    'slide-up',
+    'slide-left',
+    'fly-in',
+    'wipe',
+    'zoom-in',
+    'spin-in',
+    'grow-shrink',
+    'pulse',
+    'exit-fade',
+    'exit-fly',
+    'path'
+  ]);
+  const supportedTriggers = new Set(['load', 'click', 'with', 'after']);
+  const staggerCounters = {};
+  let lastSequenceStart = 0;
+  let lastSequenceEnd = 0;
+  const traces = [];
+  const normalizeType = (value) => {
+    const type = String(value || 'fade-up').trim().toLowerCase();
+    if (type === 'none') return 'none';
+    if (type === 'fly' || type === 'flyin') return 'fly-in';
+    if (type === 'zoom' || type === 'zoomin') return 'zoom-in';
+    if (type === 'spin' || type === 'spinin') return 'spin-in';
+    if (type === 'grow' || type === 'growshrink') return 'grow-shrink';
+    if (type === 'emphasis') return 'pulse';
+    return supportedTypes.has(type) ? type : 'fade-up';
+  };
+  const normalizeTrigger = (value) => {
+    const trigger = String(value || 'load').trim().toLowerCase();
+    if (trigger === 'on-click') return 'click';
+    if (trigger === 'after-previous') return 'after';
+    if (trigger === 'with-previous') return 'with';
+    return supportedTriggers.has(trigger) ? trigger : 'load';
+  };
+  const defaultFrom = (type) => {
+    if (type === 'fade-down') return 'top';
+    if (type === 'fade-left' || type === 'slide-left') return 'right';
+    if (type === 'fade-right') return 'left';
+    return 'bottom';
+  };
+  const normalizeFrom = (value, fallback) => {
+    const from = String(value || fallback || 'bottom').trim().toLowerCase();
+    if (from === 'up' || from === 'top') return 'top';
+    if (from === 'down' || from === 'bottom') return 'bottom';
+    if (from === 'start') return 'left';
+    if (from === 'end') return 'right';
+    if (from === 'left' || from === 'right' || from === 'center') return from;
+    return fallback || 'bottom';
+  };
+  const collectTrace = (el, type, trigger, from, duration, delay, order) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    el.setAttribute('data-pptx-native-anim', '1');
+    traces.push({
+      type,
+      trigger,
+      from,
+      duration: Math.max(100, Math.min(5000, Number(duration) || 500)),
+      delay: Math.max(0, Math.min(30000, Number(delay) || 0)),
+      order,
+      x: Math.round(rect.left - pageRect.left),
+      y: Math.round(rect.top - pageRect.top),
+      w: Math.round(rect.width),
+      h: Math.round(rect.height)
+    });
+  };
+
+  const elements = Array.from(root.querySelectorAll('[data-anim]'));
+
+  elements.forEach((el, order) => {
+    const type = normalizeType(el.getAttribute('data-anim'));
+    if (type === 'none') return;
+
+    const trigger = normalizeTrigger(el.getAttribute('data-anim-trigger'));
+    const effectiveTrigger = trigger === 'click' ? 'click' : 'load';
+    const from = normalizeFrom(el.getAttribute('data-anim-from'), defaultFrom(type));
+    const duration = Math.max(100, Math.min(5000, Number(el.getAttribute('data-anim-duration')) || 500));
+    const delayRaw = (el.getAttribute('data-anim-delay') || '0').trim();
+    let delay = 0;
+    if (delayRaw.indexOf('stagger') === 0) {
+      const match = delayRaw.match(/stagger\\s*\\(\\s*(\\d+)\\s*\\)/);
+      const gap = match ? Number(match[1]) : 50;
+      const key = effectiveTrigger;
+      if (staggerCounters[key] === undefined) staggerCounters[key] = 0;
+      delay = staggerCounters[key] * gap;
+      staggerCounters[key] += 1;
+    } else {
+      delay = Number(delayRaw) || 0;
+    }
+
+    if (effectiveTrigger === 'load') {
+      if (trigger === 'after') {
+        delay += lastSequenceEnd;
+        lastSequenceStart = delay;
+        lastSequenceEnd = Math.max(lastSequenceEnd, delay + duration);
+      } else if (trigger === 'with') {
+        delay += lastSequenceStart;
+        lastSequenceEnd = Math.max(lastSequenceEnd, delay + duration);
+      } else {
+        lastSequenceStart = delay;
+        lastSequenceEnd = Math.max(lastSequenceEnd, delay + duration);
+      }
+    }
+
+    collectTrace(el, type, effectiveTrigger, from, duration, delay, order);
+  });
+
+  const directMarkers = Array.from(
+    root.querySelectorAll('.opacity-0, [data-anime], [data-animate]')
+  ).filter((el) => !el.closest('[data-anim]'));
+  directMarkers.slice(0, 16).forEach((el, index) => {
+    collectTrace(el, 'fade-up', 'load', 'bottom', 560, index * 45, elements.length + index);
+  });
+
+  if (traces.length === 0) {
+    const legacyTargets = Array.from(
+      root.querySelectorAll('h1, h2, h3, p, li, .card, .panel, .text-section, .diagram-section, .timeline-node, section, section > *')
+    ).filter((el) => !el.closest('[data-anim]'));
+    legacyTargets.slice(0, 16).forEach((el, index) => {
+      collectTrace(el, 'fade-up', 'load', 'bottom', 560, index * 45, index);
+    });
+  }
+
+  return traces;
 })()
 `
 

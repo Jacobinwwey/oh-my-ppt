@@ -97,6 +97,15 @@ export const en = {
   app: {
     updateAvailable: 'New version {version} available',
     updateAvailableDescription: 'Current version: {currentVersion}. Click to download.',
+    updateAvailableTitle: 'New version {version} available',
+    updateAvailableDialogDescription: 'Current version: {currentVersion}. You can download the update now.',
+    currentVersion: 'Current version',
+    latestVersion: 'Latest version',
+    download: 'Download',
+    downloadZh: 'Cloud download',
+    githubRelease: 'GitHub download',
+    changeLog: 'Changelog',
+    later: 'Later',
     open: 'Open'
   },
   nav: {
@@ -490,6 +499,8 @@ Business presentations, product introductions, project summaries — formal but 
     previewTooltip: 'Open in browser — works independently outside the app',
     present: 'Present',
     presentTooltip: 'Fullscreen presentation, arrow keys to navigate, Esc to exit',
+    saveTemplate: 'Save Template',
+    saveTemplateTooltip: 'Save this presentation as a template',
     revealFile: 'Show file',
     collapseMessages: 'Collapse message panel',
     expandMessages: 'Expand message panel',

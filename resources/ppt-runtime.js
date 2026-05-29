@@ -155,6 +155,8 @@
       update: true,
       keyframes: true,
       direction: true,
+      alternate: true,
+      reversed: true,
     };
 
     targets.forEach(function (el, index) {
@@ -680,6 +682,42 @@
 
   installPlaybackBridge();
 
+  var DATA_ANIM_TYPES = {
+    "fade": true,
+    "fade-up": true,
+    "fade-down": true,
+    "fade-left": true,
+    "fade-right": true,
+    "scale-in": true,
+    "slide-up": true,
+    "slide-left": true,
+    "fly-in": true,
+    "wipe": true,
+    "zoom-in": true,
+    "spin-in": true,
+    "grow-shrink": true,
+    "pulse": true,
+    "exit-fade": true,
+    "exit-fly": true,
+    "path": true,
+    "lottie": true
+  };
+
+  var DATA_ANIM_ENTRANCE_TYPES = {
+    "fade": true,
+    "fade-up": true,
+    "fade-down": true,
+    "fade-left": true,
+    "fade-right": true,
+    "scale-in": true,
+    "slide-up": true,
+    "slide-left": true,
+    "fly-in": true,
+    "wipe": true,
+    "zoom-in": true,
+    "spin-in": true
+  };
+
   var DATA_ANIM_INITIAL_STYLES = {
     "fade":       { opacity: "0" },
     "fade-up":    { opacity: "0", transform: "translateY(20px)" },
@@ -688,18 +726,155 @@
     "fade-right": { opacity: "0", transform: "translateX(-20px)" },
     "scale-in":   { opacity: "0", transform: "scale(0.85)" },
     "slide-up":   { opacity: "0", transform: "translateY(40px)" },
-    "slide-left": { opacity: "0", transform: "translateX(40px)" }
+    "slide-left": { opacity: "0", transform: "translateX(40px)" },
+    "zoom-in":    { opacity: "0", transform: "scale(0.75)" },
+    "spin-in":    { opacity: "0", transform: "rotate(-12deg) scale(0.92)" }
   };
 
-  function applyInitialHiddenState(el, type) {
-    var initial = DATA_ANIM_INITIAL_STYLES[type] || DATA_ANIM_INITIAL_STYLES["fade-up"];
-    // Always set opacity to 0 for click-triggered elements
-    el.style.opacity = "0";
+  function normalizeDataAnimType(type) {
+    var normalized = String(type || "fade-up").trim().toLowerCase();
+    if (normalized === "none") return "none";
+    if (normalized === "fly" || normalized === "flyin") return "fly-in";
+    if (normalized === "zoom" || normalized === "zoomin") return "zoom-in";
+    if (normalized === "spin" || normalized === "spinin") return "spin-in";
+    if (normalized === "grow" || normalized === "growshrink") return "grow-shrink";
+    if (normalized === "emphasis") return "pulse";
+    if (DATA_ANIM_TYPES[normalized]) return normalized;
+    return "fade-up";
+  }
+
+  function normalizeAnimTrigger(trigger) {
+    var normalized = String(trigger || "load").trim().toLowerCase();
+    if (normalized === "on-click") return "click";
+    if (normalized === "after-previous") return "after";
+    if (normalized === "with-previous") return "with";
+    if (normalized === "click" || normalized === "load" || normalized === "with" || normalized === "after") {
+      return normalized;
+    }
+    return "load";
+  }
+
+  function normalizeAnimSide(side, fallback) {
+    var normalized = String(side || fallback || "bottom").trim().toLowerCase();
+    if (normalized === "up" || normalized === "top") return "top";
+    if (normalized === "down" || normalized === "bottom") return "bottom";
+    if (normalized === "start") return "left";
+    if (normalized === "end") return "right";
+    if (normalized === "left" || normalized === "right" || normalized === "center") return normalized;
+    return fallback || "bottom";
+  }
+
+  function defaultAnimSideForType(type) {
+    switch (type) {
+      case "fade-up":
+      case "slide-up":
+        return "bottom";
+      case "fade-down":
+        return "top";
+      case "fade-left":
+      case "slide-left":
+        return "right";
+      case "fade-right":
+        return "left";
+      default:
+        return "bottom";
+    }
+  }
+
+  function getSideOffset(side, distance) {
+    switch (normalizeAnimSide(side, "bottom")) {
+      case "left":
+        return { x: -distance, y: 0 };
+      case "right":
+        return { x: distance, y: 0 };
+      case "top":
+        return { x: 0, y: -distance };
+      case "center":
+        return { x: 0, y: 0, scale: 0.9 };
+      case "bottom":
+      default:
+        return { x: 0, y: distance };
+    }
+  }
+
+  function getWipeClipPath(side, visible) {
+    if (visible) return "inset(0% 0% 0% 0%)";
+    switch (normalizeAnimSide(side, "left")) {
+      case "right":
+        return "inset(0% 0% 0% 100%)";
+      case "top":
+        return "inset(0% 0% 100% 0%)";
+      case "bottom":
+        return "inset(100% 0% 0% 0%)";
+      case "center":
+        return "inset(20% 20% 20% 20%)";
+      case "left":
+      default:
+        return "inset(0% 100% 0% 0%)";
+    }
+  }
+
+  function getInitialDataAnimStyle(type, from) {
+    if (!DATA_ANIM_ENTRANCE_TYPES[type]) return null;
+    if (type === "fly-in") {
+      var fly = getSideOffset(from, 40);
+      if (fly.scale) return { opacity: "0", transform: "scale(" + fly.scale + ")" };
+      if (fly.x) return { opacity: "0", transform: "translateX(" + fly.x + "px)" };
+      return { opacity: "0", transform: "translateY(" + fly.y + "px)" };
+    }
+    if (type === "wipe") {
+      return { opacity: "0", clipPath: getWipeClipPath(from, false) };
+    }
+    return DATA_ANIM_INITIAL_STYLES[type] || DATA_ANIM_INITIAL_STYLES["fade-up"];
+  }
+
+  function applyInitialHiddenState(el, type, from) {
+    var initial = getInitialDataAnimStyle(type, from);
+    if (!initial) return false;
+    if (initial.opacity !== undefined) el.style.opacity = initial.opacity;
+    if (initial.clipPath) el.style.clipPath = initial.clipPath;
     // Compose with existing transform so Tailwind classes survive
     if (initial.transform) {
       var existing = (el.style.transform || "").trim();
       el.style.transform = existing ? existing + " " + initial.transform : initial.transform;
     }
+    return true;
+  }
+
+  function normalizeAnimRepeat(repeat) {
+    var raw = String(repeat || "").trim().toLowerCase();
+    if (!raw || raw === "1" || raw === "false") return null;
+    if (raw === "infinite" || raw === "loop" || raw === "true") return true;
+    var count = Number(raw);
+    if (!Number.isFinite(count) || count <= 1) return null;
+    return Math.min(20, Math.floor(count));
+  }
+
+  function applyRepeatDirectionParams(params, animDef) {
+    if (animDef.repeat === true) {
+      params.loop = true;
+    } else if (Number.isFinite(animDef.repeat) && animDef.repeat > 1) {
+      params.loop = animDef.repeat - 1;
+    }
+
+    if (animDef.direction === "alternate") {
+      params.alternate = true;
+    } else if (animDef.direction === "reverse") {
+      params.reversed = true;
+    }
+  }
+
+  function parseMotionPathDelta(path) {
+    var raw = String(path || "").trim();
+    if (!raw) return null;
+    var coords = raw.match(/-?\d+(?:\.\d+)?/g);
+    if (!coords || coords.length < 4) return null;
+    var startX = Number(coords[0]);
+    var startY = Number(coords[1]);
+    var endX = Number(coords[coords.length - 2]);
+    var endY = Number(coords[coords.length - 1]);
+    if (![startX, startY, endX, endY].every(Number.isFinite)) return null;
+    return { x: endX - startX, y: endY - startY };
   }
 
   function scanDataAnimElements(root) {
@@ -715,21 +890,26 @@
     var animConfigs = [];
     // Per-trigger-group counters for stagger(N) → numeric delay
     var staggerCounters = {};
+    var lastSequenceStart = 0;
+    var lastSequenceEnd = 0;
 
     elements.forEach(function (el, index) {
-      var type = (el.getAttribute("data-anim") || "fade-up").trim();
+      var type = normalizeDataAnimType(el.getAttribute("data-anim") || "fade-up");
       if (type === "none") return;
 
-      var trigger = (el.getAttribute("data-anim-trigger") || "load").trim();
+      var trigger = normalizeAnimTrigger(el.getAttribute("data-anim-trigger") || "load");
+      var effectiveTrigger = trigger === "click" ? "click" : "load";
+      var from = normalizeAnimSide(el.getAttribute("data-anim-from"), defaultAnimSideForType(type));
       var duration = Number(el.getAttribute("data-anim-duration")) || 500;
       var easing = (el.getAttribute("data-anim-easing") || "easeOutCubic").trim();
       var delayRaw = (el.getAttribute("data-anim-delay") || "0").trim();
       var delay = 0;
+      var boundedDuration = Math.max(100, Math.min(5000, duration));
 
       if (delayRaw.indexOf("stagger") === 0) {
         var match = delayRaw.match(/stagger\s*\(\s*(\d+)\s*\)/);
         var gap = match ? Number(match[1]) : 50;
-        var groupKey = trigger;
+        var groupKey = effectiveTrigger;
         if (staggerCounters[groupKey] === undefined) staggerCounters[groupKey] = 0;
         delay = staggerCounters[groupKey] * gap;
         staggerCounters[groupKey] += 1;
@@ -737,18 +917,38 @@
         delay = Number(delayRaw) || 0;
       }
 
+      if (effectiveTrigger === "load") {
+        if (trigger === "after") {
+          delay += lastSequenceEnd;
+          lastSequenceStart = delay;
+          lastSequenceEnd = Math.max(lastSequenceEnd, delay + boundedDuration);
+        } else if (trigger === "with") {
+          delay += lastSequenceStart;
+          lastSequenceEnd = Math.max(lastSequenceEnd, delay + boundedDuration);
+        } else {
+          lastSequenceStart = delay;
+          lastSequenceEnd = Math.max(lastSequenceEnd, delay + boundedDuration);
+        }
+      }
+
       if (trigger === "click" && type !== "lottie") {
-        applyInitialHiddenState(el, type);
-        el.setAttribute("data-ppt-anim-initialized", "1");
+        if (applyInitialHiddenState(el, type, from)) {
+          el.setAttribute("data-ppt-anim-initialized", "1");
+        }
       }
 
       var animDef = {
         targets: el,
         type: type,
         trigger: trigger,
-        duration: Math.max(100, Math.min(2000, duration)),
+        effectiveTrigger: effectiveTrigger,
+        from: from,
+        duration: boundedDuration,
         easing: easing,
         delay: delay,
+        repeat: normalizeAnimRepeat(el.getAttribute("data-anim-repeat")),
+        direction: (el.getAttribute("data-anim-direction") || "normal").trim().toLowerCase(),
+        path: (el.getAttribute("data-anim-path") || "").trim(),
         order: index
       };
 
@@ -762,8 +962,8 @@
       animConfigs.push(animDef);
     });
 
-    var loadAnims = animConfigs.filter(function (a) { return a.trigger === "load"; });
-    var clickAnims = animConfigs.filter(function (a) { return a.trigger === "click"; });
+    var loadAnims = animConfigs.filter(function (a) { return a.effectiveTrigger === "load"; });
+    var clickAnims = animConfigs.filter(function (a) { return a.effectiveTrigger === "click"; });
 
     ppt.clicks.setTotal(clickAnims.length);
 
@@ -788,6 +988,9 @@
         easing: animDef.easing,
         delay: animDef.delay
       };
+      applyRepeatDirectionParams(params, animDef);
+
+      var motionPathDelta = parseMotionPathDelta(animDef.path);
 
       switch (animDef.type) {
         case "fade":
@@ -821,9 +1024,65 @@
           params.opacity = [0, 1];
           params.translateX = [40, 0];
           break;
-        default:
+        case "fly-in": {
+          var fly = getSideOffset(animDef.from, 40);
           params.opacity = [0, 1];
-          params.translateY = [20, 0];
+          if (fly.scale) {
+            params.scale = [fly.scale, 1];
+          } else if (fly.x) {
+            params.translateX = [fly.x, 0];
+          } else {
+            params.translateY = [fly.y, 0];
+          }
+          break;
+        }
+        case "wipe":
+          params.opacity = [0, 1];
+          params.clipPath = [getWipeClipPath(animDef.from, false), getWipeClipPath(animDef.from, true)];
+          break;
+        case "zoom-in":
+          params.opacity = [0, 1];
+          params.scale = [0.75, 1];
+          break;
+        case "spin-in":
+          params.opacity = [0, 1];
+          params.rotate = [-12, 0];
+          params.scale = [0.92, 1];
+          break;
+        case "grow-shrink":
+          params.scale = [0.9, 1.08, 1];
+          break;
+        case "pulse":
+          params.scale = [1, 1.06, 1];
+          break;
+        case "exit-fade":
+          params.opacity = [1, 0];
+          break;
+        case "exit-fly": {
+          var exitFly = getSideOffset(animDef.from, 40);
+          params.opacity = [1, 0];
+          if (exitFly.x) {
+            params.translateX = [0, exitFly.x];
+          } else if (exitFly.y) {
+            params.translateY = [0, exitFly.y];
+          } else {
+            params.scale = [1, 0.9];
+          }
+          break;
+        }
+        default:
+          if (motionPathDelta) {
+            params.translateX = [0, motionPathDelta.x];
+            params.translateY = [0, motionPathDelta.y];
+          } else {
+            params.opacity = [0, 1];
+            params.translateY = [20, 0];
+          }
+      }
+
+      if (motionPathDelta && !params.translateX && !params.translateY) {
+        params.translateX = [0, motionPathDelta.x];
+        params.translateY = [0, motionPathDelta.y];
       }
 
       // Unified path: print-mode, task tracking, stopAnimations()

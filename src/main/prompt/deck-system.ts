@@ -1,6 +1,5 @@
 import type { SessionDeckGenerationContext } from '../tools/types'
 import {
-  ANIMATION_INTERACTION_RULES,
   CANVAS_CONSTRAINTS,
   CONTENT_LANGUAGE_RULES,
   CONTENT_WRITING_RULES,
@@ -96,8 +95,6 @@ export function buildDeckAgentSystemPrompt(
     '',
     FRONTEND_CAPABILITIES,
     '',
-    ANIMATION_INTERACTION_RULES,
-    '',
     CONTENT_WRITING_RULES,
     '',
     STABLE_HTML_FRAGMENT_PROTOCOL,
@@ -111,8 +108,6 @@ export function buildDeckAgentSystemPrompt(
     context.templatePageReadRequired
       ? '- Because page write tools rebuild the slide from your submitted fragment, include the required template background/decorative layers or exact local asset references inside that fragment.'
       : '',
-    '- 动画选择要先匹配用户提示词和页面叙事；click 触发是低优先级方案。简单入场和展示节奏优先使用静态呈现、data-anim 的 load 触发或 stagger 自动错峰；只有用户表达点击/按键/逐步展示意图时才使用 click 触发。',
-    '- 只有 data-anim 无法表达的复杂时间线或回调才使用 <script> + PPT.animate(...) / PPT.createTimeline(...)。',
     '- 不要在回复中贴大段 HTML；你的任务是通过工具把文件改好',
     isSinglePageTask
       ? '- 不要调用 edit_file / write_file / update_page_file；单页任务必须调用 update_single_page_file(pageId, content) 并成功落盘后才能最终回复'

@@ -29,6 +29,7 @@ import {
   createReferenceDocumentRetriever,
   formatReferenceDocumentSnippets
 } from '../../utils/reference-document-retrieval'
+import { logAgentToolEvents } from '../../utils/agent-tool-logger'
 
 type AppLocale = 'zh' | 'en'
 
@@ -94,6 +95,7 @@ async function processAgentStream(
 ): Promise<void> {
   const { sessionId, workerLabel, onCustom, onModelThinking, onMessage } = options
   let firstChunkLogged = false
+  const seenToolEvents = new Set<string>()
 
   for await (const chunk of stream) {
     if (!firstChunkLogged) {
@@ -104,6 +106,12 @@ async function processAgentStream(
     const parts = chunk as unknown[]
     const mode = parts[1] as string
     const data = parts[2]
+
+    if (mode === 'updates') {
+      logAgentToolEvents(data, seenToolEvents, { tag: 'deepagent', source: 'updates' })
+    } else if (mode === 'messages') {
+      logAgentToolEvents(data, seenToolEvents, { tag: 'deepagent', source: 'messages' })
+    }
 
     if (mode === 'custom' && data && typeof data === 'object') {
       const custom = data as DeckToolStatusChunk

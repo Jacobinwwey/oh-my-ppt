@@ -71,7 +71,11 @@ export const BASE_PAGE_STYLE_TAG = `<style id="ppt-page-guard-style">
     font-family: var(--ppt-title-font);
   }
   .ppt-page-content .text-xs,
-  .ppt-page-content .text-sm {
+  .ppt-page-content .text-sm,
+  .ppt-page-content [class*="text-[12px]"],
+  .ppt-page-content [class*="text-[13px]"],
+  .ppt-page-content [class*="text-[14px]"],
+  .ppt-page-content [class*="text-[15px]"] {
     font-size: 1rem !important;
     line-height: 1.5 !important;
   }
@@ -515,8 +519,7 @@ function isMarginUtilityClass(cls: string): boolean {
 function hasFixedChartHeightClass(classes: Iterable<string>): boolean {
   return Array.from(classes).some((cls) => {
     const base = classBaseName(cls)
-    if (/^h-(?:full|screen|dvh|svh|lvh|auto)$/.test(base)) return false
-    return /^h-(?:\[[^\]]+\]|(?!0\b)\d+)/.test(base)
+    return /^h-\[\s*(?!0+(?:\.0+)?px\b)\d+(?:\.\d+)?px\s*\]$/.test(base)
   })
 }
 
@@ -524,8 +527,8 @@ function isUnstableChartFrameLayoutClass(cls: string): boolean {
   const base = classBaseName(cls)
   return (
     base === 'flex-1' ||
-    /^h-(?:full|screen|dvh|svh|lvh|auto)$/.test(base) ||
-    /^min-h-(?:full|screen|dvh|svh|lvh|auto)$/.test(base) ||
+    (/^h-/.test(base) && !/^h-\[\s*(?!0+(?:\.0+)?px\b)\d+(?:\.\d+)?px\s*\]$/.test(base)) ||
+    /^min-h-/.test(base) ||
     /^max-h-/.test(base)
   )
 }
@@ -716,6 +719,21 @@ function repairMalformedCreativeFragment(content: string): string | null {
   } catch {
     return null
   }
+}
+
+function enforceMinimumFontSize(html: string): string {
+  return html.replace(
+    /font-size\s*:\s*([0-9.]+)\s*(px|rem|em)/gi,
+    (match, valueStr, unit) => {
+      const value = parseFloat(valueStr)
+      const u = unit.toLowerCase()
+      const px = u === 'px' ? value : u === 'rem' || u === 'em' ? value * 16 : value
+      if (px > 0 && px < 16) {
+        return `font-size: 1rem`
+      }
+      return match
+    }
+  )
 }
 
 function countHtmlTag(content: string, tagName: string): { open: number; close: number } {
@@ -957,8 +975,9 @@ export function createPageWriteTools(args: {
         titleFont: context.designContract?.titleFont || 'Inter',
         bodyFont: context.designContract?.bodyFont || 'Inter'
       }
+      const fixedContent = enforceMinimumFontSize(preparedContent.content)
       const normalized = await normalizeAndInjectPageRuntime(
-        preparedContent.content,
+        fixedContent,
         resolvedPageId,
         context.projectDir,
         designFonts

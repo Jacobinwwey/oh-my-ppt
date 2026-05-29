@@ -9,6 +9,12 @@ import { PPTDatabase } from './db/database'
 import { AgentManager } from './agent'
 import { setupIPC, registerLocalAssetProtocol } from './ipc'
 import { setStyleDb } from './utils/style-skills'
+import {
+  initializeSkills,
+  resolveBuiltinSkillsSourcePath,
+  resolveInstalledSkillsPath,
+  setSkillsRuntime,
+} from './skills'
 import { createTray, destroyTray, showTrayHideBalloon } from './tray'
 import type { UpdateAvailablePayload } from '@shared/app-update'
 
@@ -26,8 +32,7 @@ const BASE_MIN_HEIGHT = 680
 const TITLEBAR_HEIGHT = 48
 const TITLEBAR_BACKGROUND = '#f4eddf'
 const TITLEBAR_SYMBOL_COLOR = '#5d6b4d'
-const GITHUB_LATEST_RELEASE_API = 'https://api.github.com/repos/arcsin1/oh-my-ppt/releases/latest'
-const GITHUB_RELEASES_URL = 'https://github.com/arcsin1/oh-my-ppt/releases'
+const UPDATE_MANIFEST_URL = 'https://arcsin1.github.io/version.json'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
@@ -118,9 +123,9 @@ async function fetchLatestRelease(): Promise<UpdateAvailablePayload | null> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 8000)
   try {
-    const response = await fetch(GITHUB_LATEST_RELEASE_API, {
+    const response = await fetch(UPDATE_MANIFEST_URL, {
       headers: {
-        Accept: 'application/vnd.github+json',
+        Accept: 'application/json',
         'User-Agent': `${APP_NAME}/${app.getVersion()}`
       },
       signal: controller.signal
@@ -132,25 +137,28 @@ async function fetchLatestRelease(): Promise<UpdateAvailablePayload | null> {
       })
       return null
     }
-    const release = (await response.json()) as {
-      tag_name?: string
-      html_url?: string
-      name?: string
-      published_at?: string
-      draft?: boolean
-      prerelease?: boolean
+    const manifest = (await response.json()) as {
+      version?: unknown
+      downloadUrl?: unknown
+      downloadzhUrl?: unknown
+      changeLog?: unknown
     }
-    const latestVersion = String(release.tag_name || '').trim()
+    const latestVersion = String(manifest.version || '').trim()
     const currentVersion = app.getVersion()
-    if (!latestVersion || release.draft || release.prerelease) return null
+    const downloadUrl = typeof manifest.downloadUrl === 'string' ? manifest.downloadUrl.trim() : ''
+    const downloadzhUrl =
+      typeof manifest.downloadzhUrl === 'string' ? manifest.downloadzhUrl.trim() : ''
+    const changeLog = typeof manifest.changeLog === 'string' ? manifest.changeLog.trim() : ''
+
+    if (!latestVersion) return null
     if (!isNewerVersion(latestVersion, currentVersion)) return null
 
     return {
       currentVersion,
       latestVersion,
-      releaseUrl: release.html_url || GITHUB_RELEASES_URL,
-      releaseName: release.name,
-      publishedAt: release.published_at
+      downloadUrl: downloadUrl || undefined,
+      downloadzhUrl: downloadzhUrl || undefined,
+      changeLog: changeLog || undefined
     }
   } catch (error) {
     log.warn('[update] latest release check failed', {
@@ -163,7 +171,6 @@ async function fetchLatestRelease(): Promise<UpdateAvailablePayload | null> {
 }
 
 function scheduleUpdateNotification(window: BrowserWindow): void {
-  if (is.dev) return
   window.webContents.once('did-finish-load', () => {
     setTimeout(() => {
       void fetchLatestRelease().then((update) => {
@@ -289,6 +296,34 @@ if (gotSingleInstanceLock) {
       env: is.dev ? 'dev' : 'prod',
       dbPath: dbPath || 'userData/ohmyppt.db',
     })
+
+    const installedSkillsPath = resolveInstalledSkillsPath()
+    const skillsReadyPromise = initializeSkills({
+      builtinSourcePath: resolveBuiltinSkillsSourcePath(),
+      installedRootPath: installedSkillsPath,
+      logger: log,
+    })
+      .then((result) => {
+        log.info('[skills] initialized', {
+          installedSkillsPath,
+          builtinCount: result.builtinCount,
+          copiedCount: result.copiedCount,
+          skippedCount: result.skippedCount,
+          failedCount: result.failedCount,
+        })
+        return result
+      })
+      .catch((error) => {
+        log.warn('[skills] initialize failed', {
+          message: error instanceof Error ? error.message : String(error),
+        })
+        return null
+      })
+    setSkillsRuntime({
+      installedSkillsPath,
+      ready: skillsReadyPromise,
+    })
+
     agentManager = new AgentManager(db)
 
     const window = createWindow()

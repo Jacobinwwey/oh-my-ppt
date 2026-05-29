@@ -6,6 +6,11 @@ import {
   pageContentEndMarker,
   pageContentStartMarker
 } from './types'
+import {
+  CHART_SKILL_NAME,
+  DATA_ANIM_SKILL_NAME,
+  formatSkillUsageRequirement,
+} from '../skills/skill-contract'
 
 // ── HTML parsing ──
 
@@ -96,70 +101,21 @@ const classList = (classRaw: string): string[] =>
     .map((cls) => cls.trim())
     .filter(Boolean)
 
-const isPositionedContentClass = (classRaw: string): boolean => {
-  const classes = classList(classRaw).map(classBaseName)
-  return classes.some((cls) => cls === 'absolute' || cls === 'fixed')
-}
-
-const hasRiskyContentPositionClass = (classRaw: string): boolean => {
-  const classes = classList(classRaw).map(classBaseName)
-  return classes.some((cls) =>
-    /^-(?:top|right|bottom|left)-/.test(cls) ||
-    /^-?translate-[xy]-/.test(cls)
-  )
-}
-
-const isTextBearingLayoutNode = ($: cheerio.CheerioAPI, node: CheerioElement): boolean => {
-  const el = $(node)
-  if (el.is('svg, path, line, circle, rect, ellipse, polygon, polyline')) return false
-  if (el.find('h1,h2,h3,h4,h5,h6,p,li,[data-role="title"]').length > 0) return true
-  const text = el
-    .clone()
-    .find('svg,script,style')
-    .remove()
-    .end()
-    .text()
-    .replace(/\s+/g, '')
-  return text.length >= 8
-}
-
-const findRiskyPositionedContent = ($: cheerio.CheerioAPI): string | null => {
-  let hit: string | null = null
-  $('[class]').each((_, node) => {
-    const el = $(node)
-    const classRaw = el.attr('class') || ''
-    if (!isPositionedContentClass(classRaw)) return undefined
-    if (!hasRiskyContentPositionClass(classRaw)) return undefined
-    if (!isTextBearingLayoutNode($, node)) return undefined
-    const textPreview = el
-      .clone()
-      .find('svg,script,style')
-      .remove()
-      .end()
-      .text()
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 24)
-    hit = textPreview || classRaw
-    return false
-  })
-  return hit
-}
-
-const hasConcreteChartHeightClass = (classRaw: string): boolean =>
+const hasExplicitChartPixelHeightClass = (classRaw: string): boolean =>
   classRaw
     .split(/\s+/)
     .filter(Boolean)
     .some((cls) => {
       const base = classBaseName(cls)
-      if (/^h-(?:full|screen|dvh|svh|lvh|auto)$/.test(base)) return false
-      return /^h-(?:\[[^\]]+\]|(?!0\b)\d+)/.test(base)
+      return /^h-\[\s*(?!0+(?:\.0+)?px\b)\d+(?:\.\d+)?px\s*\]$/.test(base)
     })
 
 const hasConcreteChartHeightStyle = (styleRaw: string): boolean =>
-  /(?:^|;)\s*height\s*:\s*(?!\s*(?:auto|0(?:px|rem|em|%)?|100%|inherit|initial|unset)\b)[^;]+/i.test(
+  /(?:^|;)\s*height\s*:\s*(?!\s*(?:auto|0(?:px|rem|em|%)?|100%|inherit|initial|unset)\b)\d+(?:\.\d+)?(?:px|rem)\s*(?:;|$)/i.test(
     styleRaw
   )
+
+
 
 const isAllowedRuntimeAsset = (src: string): boolean => {
   const normalized = src.trim().toLowerCase()
@@ -249,24 +205,34 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
     errors.push(`检测到不允许的 script src：${preview}。页面片段禁止引入脚本资源，运行时已预注入。`)
   }
   if (/anime\s*\(\s*\{[\s\S]{0,240}?targets\s*:/im.test(html)) {
-    errors.push('检测到旧版 anime({ targets, ... }) 写法；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.animate(targets, params)')
+    errors.push(`检测到旧版 anime({ targets, ... }) 写法；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`)
   }
   if (/(^|[^\w$])anime\.(?:animate|stagger|createTimeline|timeline)\s*\(/i.test(html)) {
-    errors.push('检测到直接 anime.* 调用；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.animate/PPT.stagger/PPT.createTimeline')
+    errors.push(`检测到直接 anime.* 调用；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`)
   }
   if (/PPT\.animate\s*\(\s*\{[\s\S]{0,240}?targets\s*:/im.test(html)) {
-    errors.push('检测到 PPT.animate({ targets, ... }) 写法，请改为 PPT.animate(targets, params)')
+    errors.push(`检测到 PPT.animate({ targets, ... }) 写法；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`)
   }
   if (
     hasUnqualifiedCall('animate') ||
     hasUnqualifiedCall('stagger') ||
     hasUnqualifiedCall('createTimeline')
   ) {
-    errors.push('检测到未命名空间的动画调用（animate/stagger/createTimeline）；简单入场/逐条展示请改用 data-anim，复杂脚本才使用 PPT.*')
+    errors.push(`检测到未命名空间的动画调用（animate/stagger/createTimeline）；修改动画前请先 ${formatSkillUsageRequirement(DATA_ANIM_SKILL_NAME)}`)
   }
   if (/new\s+Chart\s*\(/i.test(html)) {
     errors.push(
-      '检测到直接 new Chart(...) 调用，请统一改为 PPT.createChart(canvasOrSelector, config)'
+      `检测到直接 new Chart(...) 调用；修改图表前请先 ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
+    )
+  }
+  if (/addEventListener\s*\(\s*['"](?:ppt-ready|ppt-rendered|ppt-page-ready)['"]/i.test(html)) {
+    errors.push(
+      `检测到自定义事件（ppt-ready/ppt-rendered/ppt-page-ready）绑定 chart 代码，这些事件运行时不会触发。请改用 DOMContentLoaded。${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
+    )
+  }
+  if (/PPT\.createChart/i.test(html) && !/DOMContentLoaded/i.test(html)) {
+    errors.push(
+      `PPT.createChart 未包裹在 DOMContentLoaded 回调中，图表可能无法渲染。${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
     )
   }
   if (/<[^>]*$/.test(html.trim())) {
@@ -309,12 +275,6 @@ export const validateHtmlContent = (html: string): { valid: boolean; errors: str
       .map(([id]) => id)
     if (duplicatedBlockIds.length > 0) {
       errors.push(`data-block-id 必须唯一，重复项：${duplicatedBlockIds.join(', ')}`)
-    }
-    const riskyPositionedContent = findRiskyPositionedContent($)
-    if (riskyPositionedContent) {
-      errors.push(
-        `检测到正文内容使用 absolute/fixed + translate/负偏移定位，容易导致重叠：${riskyPositionedContent}。正文卡片请使用 grid/flex 分区，absolute 仅用于装饰或连接线。`
-      )
     }
   } catch {
     errors.push('HTML 片段结构解析失败')
@@ -389,12 +349,6 @@ export const validatePersistedPageHtml = (
   if (!content.length) {
     errors.push('缺少 .ppt-page-content')
   }
-  const riskyPositionedContent = findRiskyPositionedContent($)
-  if (riskyPositionedContent) {
-    errors.push(
-      `正文内容使用 absolute/fixed + translate/负偏移定位，容易导致重叠：${riskyPositionedContent}。正文卡片请使用 grid/flex 分区。`
-    )
-  }
   const blockIds = new Map<string, number>()
   $('[data-block-id]').each((_, node) => {
     const id = ($(node).attr('data-block-id') || '').trim()
@@ -408,24 +362,6 @@ export const validatePersistedPageHtml = (
     errors.push(`data-block-id 重复：${duplicatedBlockIds.join(', ')}`)
   }
 
-  $('canvas').each((index, node) => {
-    const canvas = $(node)
-    const parent = canvas.parent()
-    if (!parent.length) {
-      errors.push(`第 ${index + 1} 个 canvas 缺少父容器`)
-      return
-    }
-    const parentElementChildren = parent.children()
-    const parentIsDedicatedFrame =
-      parentElementChildren.length === 1 && parentElementChildren.get(0) === canvas.get(0)
-    const hasDirectHeight =
-      hasConcreteChartHeightClass(parent.attr('class') || '') ||
-      hasConcreteChartHeightStyle(parent.attr('style') || '')
-
-    if (!parentIsDedicatedFrame || !hasDirectHeight) {
-      errors.push(`第 ${index + 1} 个 canvas 必须放在带固定高度的直接父容器中`)
-    }
-  })
 
   $('video').each((index, node) => {
     const video = $(node)

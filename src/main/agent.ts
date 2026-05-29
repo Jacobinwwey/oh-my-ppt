@@ -3,13 +3,29 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
-import { FilesystemBackend, createDeepAgent, type EditResult } from "deepagents";
+import { createMiddleware } from "langchain";
+import {
+  CompositeBackend,
+  FilesystemBackend,
+  GENERAL_PURPOSE_SUBAGENT,
+  createDeepAgent,
+  createSkillsMiddleware,
+  type EditResult,
+  type WriteResult,
+} from "deepagents";
 import log from "electron-log/main.js";
 import { createSessionBoundDeckTools, type SessionDeckGenerationContext } from "./tools";
 import {
   buildDeckAgentSystemPrompt,
   buildEditAgentSystemPrompt,
 } from "./prompt";
+import {
+  PRODUCT_SKILLS_ROUTE,
+  REQUIRED_PRODUCT_SKILL_NAMES,
+  getInstalledSkillsPath,
+  getSystemSkillsSourcePath,
+  waitForSkillsReady,
+} from "./skills";
 
 export { SHARED_PAGE_STYLES_START, SHARED_PAGE_STYLES_END, pageContentStartMarker, pageContentEndMarker } from "./tools";
 export type { SessionDeckGenerationContext } from "./tools";
@@ -67,9 +83,126 @@ class GuardedFilesystemBackend extends FilesystemBackend {
   }
 }
 
+class ReadOnlyFilesystemBackend extends FilesystemBackend {
+  async write(filePath: string, _content: string): Promise<WriteResult> {
+    return { error: `Product skills are read-only: ${filePath}` };
+  }
+
+  async edit(
+    filePath: string,
+    _oldString: string,
+    _newString: string,
+    _replaceAll?: boolean
+  ): Promise<EditResult> {
+    return { error: `Product skills are read-only: ${filePath}` };
+  }
+}
+
 function shouldBlockNativeEditFile(context: SessionDeckGenerationContext): boolean {
   if (context.editScope === "presentation-container") return true;
   return !Boolean(context.selectedSelector?.trim());
+}
+
+const SKILLS_READY_TIMEOUT_MS = 3000;
+
+function waitWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), timeoutMs);
+    }),
+  ]);
+}
+
+function createSkillsReadyMiddleware(backend: CompositeBackend, skillSource: string, scope: string) {
+  let hasLoggedReadySkills = false;
+  return createMiddleware({
+    name: "OhMyPptSkillsReadyMiddleware",
+    async beforeAgent() {
+      const initResult = await waitWithTimeout(waitForSkillsReady(), SKILLS_READY_TIMEOUT_MS);
+      if (initResult === null) {
+        throw new Error("产品 skill 初始化未完成，无法创建生成/编辑 Agent。请重启应用或检查 resources/skills。");
+      }
+
+      const readySkillNames: string[] = [];
+      for (const skillName of REQUIRED_PRODUCT_SKILL_NAMES) {
+        const skillPath = `${skillSource}${skillName}/SKILL.md`;
+        const readResult = await backend.read(skillPath, 0, 20);
+        if (readResult.error) {
+          throw new Error(`必需产品 skill 不可用：${skillPath}。${readResult.error}`);
+        }
+        readySkillNames.push(skillName);
+      }
+
+      if (!hasLoggedReadySkills) {
+        hasLoggedReadySkills = true;
+        log.info("[skills] required product skills ready", {
+          scope,
+          source: skillSource,
+          skills: readySkillNames,
+        });
+      }
+      return undefined;
+    },
+  });
+}
+
+function createProductSkillsMiddlewareSet(
+  backend: CompositeBackend,
+  skillSource: string,
+  scope: string
+): any[] {
+  return [
+    createSkillsReadyMiddleware(backend, skillSource, scope),
+    createSkillsMiddleware({
+      backend,
+      sources: [skillSource],
+    }),
+  ];
+}
+
+function attachProductSkillsBackend(projectBackend: GuardedFilesystemBackend): {
+  backend: GuardedFilesystemBackend | CompositeBackend;
+  middleware: any[];
+  skillSource: string;
+  enabled: boolean;
+} {
+  const installedSkillsPath = getInstalledSkillsPath();
+  if (!installedSkillsPath) {
+    throw new Error("产品 skill 运行时路径未初始化，无法创建生成/编辑 Agent。");
+  }
+
+  const backend = new CompositeBackend(projectBackend, {
+    [PRODUCT_SKILLS_ROUTE]: new ReadOnlyFilesystemBackend({
+      rootDir: installedSkillsPath,
+      virtualMode: true,
+    }),
+  });
+  const skillSource = `${PRODUCT_SKILLS_ROUTE}${getSystemSkillsSourcePath().replace(/^\//, "")}`;
+
+  return {
+    backend,
+    middleware: createProductSkillsMiddlewareSet(backend, skillSource, "main"),
+    skillSource,
+    enabled: true,
+  };
+}
+
+function createProductGeneralPurposeSubagent(args: {
+  model: BaseLanguageModel;
+  tools: unknown[];
+  backend: GuardedFilesystemBackend | CompositeBackend;
+  skillSource: string;
+}): any[] {
+  if (!(args.backend instanceof CompositeBackend)) return [];
+  return [
+    {
+      ...GENERAL_PURPOSE_SUBAGENT,
+      model: args.model as any,
+      tools: args.tools as any,
+      middleware: createProductSkillsMiddlewareSet(args.backend, args.skillSource, "general-purpose"),
+    },
+  ];
 }
 
 // ── Agent factory ──
@@ -99,6 +232,7 @@ export function createSessionEditAgent(args: {
       ? "当前编辑任务禁止使用 edit_file。请改用 update_single_page_file(pageId, content) 或 update_page_file(pageId, content)。"
       : undefined,
   });
+  const agentBackend = attachProductSkillsBackend(backend);
   const tools = createSessionBoundDeckTools(context);
   const systemPrompt = buildEditAgentSystemPrompt(args.styleId, context);
   const hasSelector = Boolean(context.selectedSelector?.trim());
@@ -116,13 +250,21 @@ export function createSessionEditAgent(args: {
     selectedPageId: context.selectedPageId,
     disableNativeEditFile,
     promptMode,
+    skillsEnabled: agentBackend.enabled,
   });
 
   return createDeepAgent({
     model: model as any,
-    backend,
+    backend: agentBackend.backend,
     systemPrompt,
     tools: tools as any,
+    middleware: agentBackend.middleware as any,
+    subagents: createProductGeneralPurposeSubagent({
+      model,
+      tools,
+      backend: agentBackend.backend,
+      skillSource: agentBackend.skillSource,
+    }),
   });
 }
 
@@ -150,6 +292,7 @@ export function createSessionDeckAgent(args: {
     editBlockedReason:
       "当前生成/全局编辑任务禁止使用 edit_file。请使用 update_single_page_file(pageId, content) 或 update_page_file(pageId, content)。",
   });
+  const agentBackend = attachProductSkillsBackend(backend);
   const getToolName = (tool: unknown): string => {
     const maybe = tool as { name?: unknown; lc_kwargs?: { name?: unknown } };
     if (typeof maybe.name === "string") return maybe.name;
@@ -170,6 +313,7 @@ export function createSessionDeckAgent(args: {
     projectDir: context.projectDir,
     indexPath: context.indexPath,
     selectedPageId: context.selectedPageId,
+    skillsEnabled: agentBackend.enabled,
     selectedPagePath:
       context.selectedPageId && context.pageFileMap[context.selectedPageId]
         ? context.pageFileMap[context.selectedPageId]
@@ -180,9 +324,16 @@ export function createSessionDeckAgent(args: {
 
   return createDeepAgent({
     model: model as any,
-    backend,
+    backend: agentBackend.backend,
     systemPrompt,
     tools: tools as any,
+    middleware: agentBackend.middleware as any,
+    subagents: createProductGeneralPurposeSubagent({
+      model,
+      tools,
+      backend: agentBackend.backend,
+      skillSource: agentBackend.skillSource,
+    }),
   });
 }
 

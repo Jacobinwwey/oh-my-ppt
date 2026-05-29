@@ -68,6 +68,7 @@ export function SessionCreatePage(): ReactElement {
   const { settings, modelConfigs, fetchSettings } = useSettingsStore()
   const { success, error, warning } = useToastStore()
   const t = useT()
+  const [submitting, setSubmitting] = useState(false)
   const [topic, setTopic] = useState('')
   const [brief, setBrief] = useState('')
   const [pageCount, setPageCount] = useState(String(DEFAULT_PAGE_COUNT))
@@ -230,6 +231,7 @@ export function SessionCreatePage(): ReactElement {
         styleLabel: selectedStyle.label
       })
 
+    setSubmitting(true)
     try {
       const sessionId = await createSession({
         topic: topicText,
@@ -243,6 +245,7 @@ export function SessionCreatePage(): ReactElement {
         duration: 1000
       })
       setPageCount(String(safePageCount))
+      await delay(500)
       navigate(`/sessions/${sessionId}/generating`, {
         state: {
           initialPrompt
@@ -252,6 +255,8 @@ export function SessionCreatePage(): ReactElement {
       error(t('home.sessionCreateFailed'), {
         description: err instanceof Error ? err.message : t('common.retryLater')
       })
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -649,10 +654,10 @@ export function SessionCreatePage(): ReactElement {
               void handleSubmit()
             }}
             className="w-full md:w-auto"
-            disabled={loading || !requiredReady}
+            disabled={submitting || loading || !requiredReady}
           >
-            <Sparkles className="mr-2 h-4 w-4" />
-            {loading ? t('home.creating') : t('home.createAndStart')}
+            {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            {submitting || loading ? t('home.creating') : t('home.createAndStart')}
           </Button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import type { DesignContract, SessionDeckGenerationContext } from '../tools/types'
 import { formatLayoutIntentPrompt } from '@shared/layout-intent'
+import { CHART_SKILL_NAME, formatSkillUsageRequirement } from '../skills/skill-contract'
 import {
-  ANIMATION_INTERACTION_RULES,
   CANVAS_CONSTRAINTS,
   CONTENT_LANGUAGE_RULES,
   FRONTEND_CAPABILITIES,
@@ -33,8 +33,6 @@ export function buildDeckGenerationPrompt(context: SessionDeckGenerationContext)
     '',
     FRONTEND_CAPABILITIES,
     '',
-    ANIMATION_INTERACTION_RULES,
-    '',
     PAGE_SEMANTIC_STRUCTURE,
     '',
     'Fill each slide strictly according to the content points in the page outline above.'
@@ -60,8 +58,8 @@ export function buildSinglePageGenerationPrompt(args: {
   }
 }): string {
   const previousError = args.retryContext?.previousError || ''
-  const shouldMentionChartOrAnimationFix =
-    /chart|canvas|animation|animate|anime|PPT\.animate|PPT\.createChart/i.test(previousError)
+  const shouldMentionChartFix =
+    /chart|canvas|PPT\.createChart/i.test(previousError)
   const shouldMentionWriteToolFix =
     /页面未写入|没有成功调用|not written|update_single_page_file|占位|placeholder/i.test(
       previousError
@@ -79,8 +77,8 @@ export function buildSinglePageGenerationPrompt(args: {
         '- Before calling the write tool, mentally validate that the main containers are closed and that no tag is left unfinished at the end.',
         '- If the previous issue was unclosed tags, do not patch the broken fragment. Rewrite a simpler, shallower fragment from scratch: one root div, no page shell (section[data-page-scaffold], main[data-role="content"], or runtime frame), grid/flex direct children, aim for 3 nesting levels and avoid exceeding 4, fewer wrappers, fewer modules.',
         '- If the previous issue was page shell structure, do not include .ppt-page-root, .ppt-page-content, .ppt-page-fit-scope, or data-ppt-guard-root anywhere, including CSS selectors, class names, scripts, and comments.',
-        shouldMentionChartOrAnimationFix
-          ? '- The previous issue involved animation/chart API usage. Match animation to the original user request and slide narrative. Prefer static/load/stagger for simple entry or reveal; treat data-anim-trigger="click" as a low-priority option only when the original request asks for click/keyboard/step-by-step presentation control. Use PPT.animate, PPT.createTimeline, and PPT.stagger only for complex scripted animation; use PPT.createChart for charts.'
+        shouldMentionChartFix
+          ? `- The previous issue involved chart API usage. Before repairing or writing chart code: ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`
           : ''
       ].filter(Boolean)
     : []
@@ -126,13 +124,13 @@ export function buildSinglePageGenerationPrompt(args: {
     '',
     CONTENT_LANGUAGE_RULES,
     '',
+    PAGE_SEMANTIC_STRUCTURE,
+    '',
     CANVAS_CONSTRAINTS,
     '',
     LAYOUT_COLLISION_RULES,
     '',
     FRONTEND_CAPABILITIES,
-    '',
-    ANIMATION_INTERACTION_RULES,
     '',
     STABLE_HTML_FRAGMENT_PROTOCOL,
     '',
@@ -145,6 +143,7 @@ export function buildSinglePageGenerationPrompt(args: {
     '- If there are 2-4 points, the final slide should cover all of them. You may add 1-2 supporting information blocks by priority.',
     '- You may complete reasonable data framing, examples, and structure, but do not drift away from the slide title and points.',
     '- Prefer visualization-friendly expression. When points involve trends, comparisons, or proportions, use charts or data cards when appropriate.',
+    '- Expansion must still fit one slide. If expanded content would exceed the 1600×900 canvas, summarize, merge, or drop lower-priority details instead of adding more cards or long paragraphs.',
     '',
     'Single-slide tool constraints:',
     `- Required action: call update_single_page_file(pageId="${args.pageId}", content=complete creative page fragment).`,

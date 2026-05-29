@@ -428,6 +428,46 @@ describe('PPT.scanDataAnim', () => {
     expect(result).not.toBeNull()
     expect((result as { all: unknown[] }).all.length).toBeGreaterThan(0)
   })
+
+  it('parses extended animation attributes without adding non-click steps', () => {
+    document.body.innerHTML = `
+      <div class="ppt-page-root">
+        <div data-anim="fly-in" data-anim-from="left" data-anim-trigger="with" id="fly">Fly</div>
+        <div data-anim="wipe" data-anim-from="right" data-anim-trigger="after" id="wipe">Wipe</div>
+        <div data-anim="pulse" data-anim-repeat="3" data-anim-direction="alternate" id="pulse">Pulse</div>
+      </div>
+    `
+
+    const result = (PPT.scanDataAnim as Function)(document.querySelector('.ppt-page-root')) as {
+      load: Array<Record<string, unknown>>
+      click: unknown[]
+      all: Array<Record<string, unknown>>
+    }
+
+    expect(result.load).toHaveLength(3)
+    expect(result.click).toHaveLength(0)
+    expect(getClicks(PPT).total).toBe(0)
+    expect(result.all[0]).toMatchObject({ type: 'fly-in', trigger: 'with', effectiveTrigger: 'load', from: 'left' })
+    expect(result.all[1]).toMatchObject({ type: 'wipe', trigger: 'after', effectiveTrigger: 'load', from: 'right' })
+    expect(result.all[2]).toMatchObject({ type: 'pulse', repeat: 3, direction: 'alternate' })
+    expect(Number(result.all[1].delay)).toBeGreaterThan(0)
+  })
+
+  it('does not hide click-triggered emphasis or exit animations before playback', () => {
+    document.body.innerHTML = `
+      <div class="ppt-page-root">
+        <div data-anim="pulse" data-anim-trigger="click" id="pulse">Pulse</div>
+        <div data-anim="exit-fly" data-anim-trigger="click" data-anim-from="bottom" id="exit">Exit</div>
+      </div>
+    `
+
+    ;(PPT.scanDataAnim as Function)(document.querySelector('.ppt-page-root'))
+
+    expect(document.getElementById('pulse')!.style.opacity).toBe('')
+    expect(document.getElementById('exit')!.style.opacity).toBe('')
+    expect(document.getElementById('pulse')!.getAttribute('data-ppt-anim-initialized')).toBeNull()
+    expect(getClicks(PPT).total).toBe(2)
+  })
 })
 
 describe('PPT.executeDataAnim (routed through PPT.animate)', () => {
@@ -473,6 +513,62 @@ describe('PPT.executeDataAnim (routed through PPT.animate)', () => {
     const params = animateSpy.mock.calls[0][1] as Record<string, unknown>
     expect(params.opacity).toEqual([0, 1])
     expect(params.translateX).toEqual([40, 0])
+    animateSpy.mockRestore()
+  })
+
+  it('maps fly-in direction to real translate params', () => {
+    const animateSpy = vi.spyOn(PPT, 'animate' as never)
+    const el = document.getElementById('el1')!
+    const config = [{ targets: el, type: 'fly-in', from: 'left', duration: 500, easing: 'easeOutCubic', delay: 0 }]
+    ;(PPT.executeDataAnim as Function)(config)
+    const params = animateSpy.mock.calls[0][1] as Record<string, unknown>
+    expect(params.opacity).toEqual([0, 1])
+    expect(params.translateX).toEqual([-40, 0])
+    animateSpy.mockRestore()
+  })
+
+  it('maps wipe direction to clipPath params', () => {
+    const animateSpy = vi.spyOn(PPT, 'animate' as never)
+    const el = document.getElementById('el1')!
+    const config = [{ targets: el, type: 'wipe', from: 'right', duration: 500, easing: 'easeOutCubic', delay: 0 }]
+    ;(PPT.executeDataAnim as Function)(config)
+    const params = animateSpy.mock.calls[0][1] as Record<string, unknown>
+    expect(params.opacity).toEqual([0, 1])
+    expect(params.clipPath).toEqual(['inset(0% 0% 0% 100%)', 'inset(0% 0% 0% 0%)'])
+    animateSpy.mockRestore()
+  })
+
+  it('maps emphasis repeat and direction to anime loop params', () => {
+    const animateSpy = vi.spyOn(PPT, 'animate' as never)
+    const el = document.getElementById('el1')!
+    const config = [{ targets: el, type: 'pulse', repeat: 3, direction: 'alternate', duration: 500, easing: 'easeOutCubic', delay: 0 }]
+    ;(PPT.executeDataAnim as Function)(config)
+    const params = animateSpy.mock.calls[0][1] as Record<string, unknown>
+    expect(params.scale).toEqual([1, 1.06, 1])
+    expect(params.loop).toBe(2)
+    expect(params.alternate).toBe(true)
+    animateSpy.mockRestore()
+  })
+
+  it('maps exit-fly to visible-to-hidden movement', () => {
+    const animateSpy = vi.spyOn(PPT, 'animate' as never)
+    const el = document.getElementById('el1')!
+    const config = [{ targets: el, type: 'exit-fly', from: 'bottom', duration: 500, easing: 'easeOutCubic', delay: 0 }]
+    ;(PPT.executeDataAnim as Function)(config)
+    const params = animateSpy.mock.calls[0][1] as Record<string, unknown>
+    expect(params.opacity).toEqual([1, 0])
+    expect(params.translateY).toEqual([0, 40])
+    animateSpy.mockRestore()
+  })
+
+  it('supports simple data-anim-path deltas', () => {
+    const animateSpy = vi.spyOn(PPT, 'animate' as never)
+    const el = document.getElementById('el1')!
+    const config = [{ targets: el, type: 'path', path: 'M 0 0 L 120 30', duration: 500, easing: 'linear', delay: 0 }]
+    ;(PPT.executeDataAnim as Function)(config)
+    const params = animateSpy.mock.calls[0][1] as Record<string, unknown>
+    expect(params.translateX).toEqual([0, 120])
+    expect(params.translateY).toEqual([0, 30])
     animateSpy.mockRestore()
   })
 
