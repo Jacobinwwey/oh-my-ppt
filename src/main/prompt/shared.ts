@@ -100,6 +100,7 @@ export const FRONTEND_CAPABILITIES = [
   `- Before adding or modifying charts: ${formatSkillUsageRequirement(CHART_SKILL_NAME)}`,
   '- If the task does not add or modify charts, do not read the full chart reference just to satisfy this contract.',
   '- Do not call new Chart(ctx, config); chart creation must go through the product runtime helper described by the chart skill.',
+  '- Wrap all PPT.createChart calls inside document.addEventListener("DOMContentLoaded", function() { ... }). The runtime only guarantees Chart.js is ready at DOMContentLoaded.',
   '',
   'Animations:',
   `- The mandatory animation source of truth is the DeepAgents skill ${DATA_ANIM_SKILL_NAME}.`,

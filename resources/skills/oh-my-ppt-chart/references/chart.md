@@ -1,82 +1,81 @@
 # Chart Reference
 
-Oh My PPT loads Chart.js and exposes the product helper `PPT.createChart(canvasEl, config)`. Use the helper so preview, validation, and export workflows see charts consistently.
+Oh My PPT loads Chart.js and exposes `PPT.createChart(canvasEl, config)`. Use the helper so preview, validation, and export workflows see charts consistently.
 
-## Required Structure
+## Complete working example
 
-Always give the canvas a direct parent chart frame with an explicit pixel height that you choose for the actual slide layout:
+Copy this pattern for every chart. Adapt the type, data, and options.
 
 ```html
-<div class="ppt-chart-frame relative h-[CHOSEN_PX] w-full">
-  <canvas class="h-full w-full"></canvas>
+<div class="ppt-chart-frame relative h-[320px] w-full overflow-hidden">
+  <canvas id="chart-sales" class="h-full w-full"></canvas>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  PPT.createChart(document.getElementById('chart-sales'), {
+    type: 'bar',
+    data: {
+      labels: ['Q1', 'Q2', 'Q3'],
+      datasets: [{
+        label: 'Revenue',
+        data: [12, 18, 26]
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
+  });
+});
+</script>
 ```
 
-Do not rely on `h-full`, `flex-1`, `min-h-*`, or a surrounding card to determine chart height. The direct parent must carry the stable height.
+## Chart frame height
 
-`CHOSEN_PX` is a placeholder. Replace it with a real pixel value such as `360px` or any other value you judge from the slide. The model must decide the height from the slide composition, content density, available vertical space, label length, legend placement, and the chart's narrative importance.
+The `.ppt-chart-frame` direct parent must carry an explicit `h-[Npx]` height. Choose the value from the slide layout:
 
-- Hero or primary charts should occupy most of the main content area.
-- Charts paired with explanation text should leave enough room for both the chart and the surrounding reading path.
-- Small supporting charts can be shorter, but must still be readable at presentation distance.
-- Dense labels, legends, or many categories need more height, not smaller text.
+- Hero or primary charts: taller, occupying most of the main content area.
+- Charts paired with text: leave room for both chart and reading path.
+- Small supporting charts: shorter, but still readable at presentation distance.
+- Dense labels, legends, or many categories: more height, not smaller text.
 
-Never copy a fixed height mechanically. The requirement is that you choose an explicit `h-[Npx]` height, not a specific number.
+Use `h-[Npx]` (e.g. `h-[360px]`, `h-[240px]`). Do not use `h-full`, `flex-1`, `min-h-*`, or Tailwind scale shortcuts like `h-64` for the chart frame height.
 
-Avoid Tailwind scale shortcuts like `h-64`, `h-72`, or `h-80` for chart frames. Use `h-[Npx]` so the chosen height is deliberate and visible in the HTML.
+## Chart script rules
 
-## Required JavaScript
+- Always wrap in `document.addEventListener('DOMContentLoaded', function() { ... })`. This is the only event the runtime guarantees. The runtime never fires `ppt-ready`, `ppt-rendered`, `ppt-page-ready`, or any similar event.
+- Always call `PPT.createChart(canvasElement, config)`. Pass the canvas DOM element as the first argument.
+- Always call `PPT.createChart` — never `new Chart(...)`.
 
-```js
-const chart = PPT.createChart(canvasEl, {
-  type: "bar",
-  data: {
-    labels: ["A", "B"],
-    datasets: [{ data: [10, 20] }]
-  },
-  options: {}
-})
-```
-
-Use `canvasEl` or a selected canvas element as the first argument. Do not pass `canvas.getContext('2d')`, do not pass a 2D context variable, and do not call `new Chart(...)`.
-
-## Category Axis Labels
+## Category axis labels
 
 Put category labels in `data.labels`:
 
 ```js
 data: {
-  labels: ["Q1", "Q2", "Q3"],
+  labels: ['Q1', 'Q2', 'Q3'],
   datasets: [{ data: [12, 18, 26] }]
 }
 ```
 
-Avoid custom `ticks.callback` on category axes. If a callback is truly necessary, use a normal function and return the label:
+If a `ticks.callback` is truly needed on a category axis, use a normal function and return the label:
 
 ```js
 ticks: {
   callback: function(value) {
-    return this.getLabelForValue(value)
+    return this.getLabelForValue(value);
   }
 }
 ```
 
-Do not return `value` directly on category axes, because it renders indexes like `0`, `1`, `2`.
+## Layout
 
-## Layout Rules
-
-- Reserve enough visual space for legends, long labels, and axis ticks.
+- Reserve space for legends, long labels, and axis ticks.
 - Prefer fewer categories over tiny unreadable labels.
-- Use chart containers as dedicated visual modules, not as decoration nested deep inside cards.
-- Use responsive Chart.js options only when they work with the explicit-height frame.
-- Avoid absolute positioning for chart canvases unless the chart frame itself has stable dimensions.
-
-## Forbidden
-
-- `new Chart(ctx, config)`
-- `PPT.createChart(canvas.getContext('2d'), config)` or any 2D context argument
-- `<canvas class="h-full w-full">` without an explicit-height direct parent
-- `.ppt-chart-frame` using `h-full`, `flex-1`, `min-h-*`, or scale shortcuts like `h-64` instead of a deliberate `h-[Npx]`
-- `canvas` directly in a text/card body without `.ppt-chart-frame`
-- Remote data fetches, CDN plugins, or runtime network dependency
-- Category-axis callbacks that return raw numeric `value`
+- Use chart containers as dedicated visual modules, not as decoration nested inside cards.
+- Use `responsive: true` and `maintainAspectRatio: false` in chart options — they work with the explicit-height frame.

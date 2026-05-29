@@ -113,11 +113,11 @@ export function SessionToolbar({
               disabled={isExporting}
             >
               <LayoutTemplate className={toolbarIconClass} />
-              保存模板
+              {t('sessionDetail.saveTemplate')}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="start">
-            保存当前演示为模板
+            {t('sessionDetail.saveTemplateTooltip')}
           </TooltipContent>
         </Tooltip>
       )}

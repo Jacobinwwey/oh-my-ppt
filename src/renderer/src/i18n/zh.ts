@@ -485,6 +485,8 @@ export const zh = {
     previewTooltip: '在浏览器中打开，可脱离客户端独立使用',
     present: '演示模式',
     presentTooltip: '全屏演示页面，方向键翻页，Esc 退出',
+    saveTemplate: '保存模板',
+    saveTemplateTooltip: '保存当前演示为模板',
     revealFile: '查看文件',
     collapseMessages: '收起消息面板',
     expandMessages: '展开消息面板',
