@@ -4,33 +4,17 @@ import type { DesignContract, SessionDeckGenerationContext } from '../tools/type
 import {
   CHART_SKILL_NAME,
   DATA_ANIM_SKILL_NAME,
+  LAYOUT_SKILL_NAME,
   formatSkillUsageRequirement,
 } from '../skills/skill-contract'
 
 export const PAGE_SEMANTIC_STRUCTURE = [
   '## 页面语义结构',
+  `- The layout source of truth is the skill ${LAYOUT_SKILL_NAME}. Before creating a slide, choosing a composition, or repairing overflow/collision: ${formatSkillUsageRequirement(LAYOUT_SKILL_NAME)}`,
+  '- If the task is a tiny text/style edit that does not affect layout, do not read the full layout reference.',
   '- 直接输出完整创意页面片段；系统会自动包裹 section[data-page-scaffold]、main[data-role="content"] 和标准 page frame。',
   '- 如果页面有明确标题，可以给第一个标题元素添加 data-role="title"；没有传统标题时不要为了校验硬造标题。',
-  '- 主动添加 data-block-id 时保持页面内唯一（kebab-case：metric-1、summary、chart-main）；未添加时系统会自动补齐。',
-  '',
-  '版式决策（先定原型，再排版）：',
-  '- 根据内容判断页面原型：封面/章节页、big number、key message、图文页、列表页、data exhibit、comparison、timeline/process、framework/matrix、引用页、问答页、executive summary、closing takeaway。',
-  '- 每页聚焦一个主张或中心问题；版式服务于“听众先看到什么、再理解什么、最后记住什么”。',
-  '- 标题是阅读路径的一部分，不是固定装饰头部；根据页面角色灵活放置——总结页/封面页可让标题占据视觉重心，数据页可让标题靠边或与关键数字组合，对比页让标题服务于对比关系。',
-  '- 在同一套视觉语言下保持变化，不要机械重复同一标题位置和同一网格。',
-  '',
-  '内容密度自适应：',
-  '- 根据内容密度、叙事意图和页面角色选择布局；允许创意构图。',
-  '- 低密度：用大尺度标题、单个核心数字、强视觉符号、大留白、对角构图或非对称版式承载。少内容页用留白和视觉节奏作为设计表达。',
-  '- 中密度：用主次分区、1 个主视觉 + 2-3 个辅助证据、左右叙事、时间线、阶梯、矩阵或对比结构。',
-  '- 高密度：用规整的网格、表格、列表或多卡片；模块数量由真实信息量决定。',
-  '- 等权卡片仅用于多个并列且同等重要的信息点；4 列卡片仅用于真实存在 4 个并列对象的对比页。',
-  '- 不要为了显得丰富而添加无来源的精确 KPI、装饰说明、底部 meta 条或重复摘要；没有可靠来源时使用定性表达或清楚标注为示意。',
-  '',
-  '标题可读性底线：',
-  '- 竖排仅限 2-6 个中文字符的短标签。',
-  '- 标题包含英文、数字、年份、中英混排或长句时必须横排。',
-  '- 完整标题优先保证可读性，不要为了装饰牺牲阅读。'
+  '- 主动添加 data-block-id 时保持页面内唯一（kebab-case：metric-1、summary、chart-main）；未添加时系统会自动补齐。'
 ].join('\n')
 
 export const CONTENT_LANGUAGE_RULES = [
@@ -58,31 +42,20 @@ export const STABLE_HTML_FRAGMENT_PROTOCOL = [
 
 export const CANVAS_CONSTRAINTS = [
   '## 画布约束',
-  '- 16:9 原始画布为 1600×900；预览缩放只用于适配窗口，不是布局兜底。生成时必须按 1600×900 原始画布完成排版。',
-  '- 可用内容区约 1584×884（外层有 p-2），所有标题、正文、图表、注释和装饰都必须在这个区域内完成。',
-  '- 用 Tailwind flex/grid 布局；禁止 w-[1600px]/h-[900px]/100vw/100vh/w-screen/h-screen 等画布锁定。',
+  `- Layout budgeting, density, and collision rules are in the skill ${LAYOUT_SKILL_NAME}. ${formatSkillUsageRequirement(LAYOUT_SKILL_NAME)}`,
+  '- 16:9 原始画布为 1600×900；可用内容区约 1584×884。所有内容必须在这个区域内。',
+  '- 用 Tailwind flex/grid 布局。禁止 w-[1600px]/h-[900px]/100vw/100vh/w-screen/h-screen。',
   '- 禁止 vw/vh 字体单位和 text-[clamp(...)]；h1 统一 text-5xl，禁 text-6xl/7xl/8xl。',
-  '- 禁止 iframe。禁止引用系统骨架类。',
+  '- 全局最小字号 16px（text-base）。所有可见文本——正文、标签、注释、脚注、来源——都不得小于 16px。text-xs/text-sm/text-[12px]/text-[13px]/text-[14px] 一律不用。放不下就缩短文案或减少模块，不要缩小字号。',
   '- 整套页面复用同一背景体系/主色/字体；背景铺满画布，定义在最外层容器上。',
-  '- 全局最小字号 16px，禁止 text-xs / text-sm / text-[12px] / text-[14px] 等小于 16px 的字号，正文最小 text-base。',
-  '',
-  '一屏适配：',
-  '- 所有主要内容必须在 1600×900 画布内完整可见；不要依赖 overflow-hidden 裁切、滚动条、系统自动缩放或缩小字号兜底。',
-  '- 写布局前先做高度预算：外边距/标题区/模块区/gap/注释合计不得超过可用高度。内容一多，先减少模块、合并要点、缩短文案或改成更紧凑的结构。',
-  '- 如果页面信息超过一屏容量，优先保留主结论和最强证据；删除次要解释、重复摘要、装饰说明、底部 meta 和低价值卡片。',
-  '- 避免在多个纵向层级同时使用 h-full、min-h-*、大 padding、大 gap 和多段长文本；这些组合最容易让内容超出画布。',
-  '- 图表、表格、时间线、长列表必须和标题/注释共同预算高度；不能先放满图表再把说明挤到画布外。'
+  '- 禁止 iframe。禁止引用系统骨架类。'
 ].join('\n')
 
 export const LAYOUT_COLLISION_RULES = [
   '## 布局防重叠规则',
-  '- 正文内容、信息卡片、标题、图表、列表必须由 grid/flex 的正常文档流分区承载；不要用 absolute/fixed + top/left/right/bottom/translate 手工摆放正文模块。',
-  '- absolute/fixed 仅用于背景装饰、连接线、非文字 SVG、少量不承载正文的视觉点缀；带有 h1/h2/h3/p/li 或主要文本的元素不得使用 absolute/fixed。',
-  '- 禁止用 -top-*、-left-*、-right-*、-bottom-*、translate-x-*、-translate-x-*、translate-y-*、-translate-y-* 把正文卡片推到容器外或叠在主视觉周围。',
-  '- 需要环绕/五点/放射状/中心图+周边说明时，使用明确的 grid 模板（例如三列三行：左上/中上/右上/左下/右下/中心），中心图和说明卡片各占独立 grid cell；连接线可用 SVG 作为装饰层。',
-  '- 每个主要内容区必须有稳定尺寸和间距：给 grid/flex 容器设置 gap，给长文本容器设置 min-w-0，避免文字或卡片把相邻区域挤压重叠。',
-  '- 写入前检查整页高度：标题、主视觉、卡片、图表、脚注都必须在画布内；任何内容被裁掉、压到边界外或需要滚动都算失败。',
-  '- 写入前做一次版面自检：标题、主视觉、每张卡片、底部元素都必须有独立空间，不能互相覆盖，不能依赖 hover/animation 后才可读。'
+  `- Full collision avoidance guide is in the skill ${LAYOUT_SKILL_NAME}. ${formatSkillUsageRequirement(LAYOUT_SKILL_NAME)}`,
+  '- 正文内容用 grid/flex 正常文档流承载。absolute/fixed 仅用于背景装饰、连接线、非文字 SVG。',
+  '- 需要环绕/放射/中心图布局时，用明确 grid 模板，每个模块占独立 cell。'
 ].join('\n')
 
 export const FRONTEND_CAPABILITIES = [

@@ -1,10 +1,12 @@
 export const PRODUCT_SKILLS_ROUTE = '/.ohmyppt-skills/'
 export const SYSTEM_SKILLS_SOURCE_PATH = '/system/'
 
+export const LAYOUT_SKILL_NAME = 'oh-my-ppt-layout'
 export const DATA_ANIM_SKILL_NAME = 'oh-my-ppt-data-anim'
 export const CHART_SKILL_NAME = 'oh-my-ppt-chart'
 
 export const REQUIRED_PRODUCT_SKILL_NAMES = [
+  LAYOUT_SKILL_NAME,
   DATA_ANIM_SKILL_NAME,
   CHART_SKILL_NAME,
 ] as const
