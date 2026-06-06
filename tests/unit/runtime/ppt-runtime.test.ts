@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  *
- * Unit tests for ppt-runtime.js v2.0.16:
+ * Unit tests for ppt-runtime.js v2.0.17:
  *   - PPT.stopAnimations() / PPT.resumeAnimations()
  *   - PPT.clicks state machine (advance returns boolean, _dispatch exact match)
  *   - PPT.scanDataAnim() / PPT.executeDataAnim() (routed through PPT.animate)
@@ -913,8 +913,8 @@ describe('PPT.createChart tick formatters', () => {
 })
 
 describe('Version guard', () => {
-  it('runtime version is 2.0.16', () => {
+  it('runtime version is 2.0.17', () => {
     const PPT = setupRuntime().PPT
-    expect(PPT.__runtimeVersion).toBe('2.0.16')
+    expect(PPT.__runtimeVersion).toBe('2.0.17')
   })
 })

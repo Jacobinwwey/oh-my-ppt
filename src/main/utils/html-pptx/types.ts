@@ -138,6 +138,10 @@ export interface HtmlToPptxAnimationTrace {
   y: number
   w: number
   h: number
+  /** blockId of the source element, for precise binding instead of spatial overlap. */
+  blockId?: string
+  /** Optional easing hint (GSAP name); not encoded in PPTX XML but preserved for re-import. */
+  ease?: string
 }
 
 export interface HtmlToPptxSlide {
