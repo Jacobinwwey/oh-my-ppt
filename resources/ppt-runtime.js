@@ -1076,7 +1076,9 @@
     "fade-right": true,
     "scale-in": true,
     "slide-up": true,
+    "slide-down": true,
     "slide-left": true,
+    "slide-right": true,
     "fly-in": true,
     "wipe": true,
     "zoom-in": true,
@@ -1084,6 +1086,7 @@
     "grow-shrink": true,
     "pulse": true,
     "exit-fade": true,
+    "exit-wipe": true,
     "exit-fly": true,
     "path": true,
     "lottie": true
@@ -1097,7 +1100,9 @@
     "fade-right": true,
     "scale-in": true,
     "slide-up": true,
+    "slide-down": true,
     "slide-left": true,
+    "slide-right": true,
     "fly-in": true,
     "wipe": true,
     "zoom-in": true,
@@ -1112,7 +1117,9 @@
     "fade-right": { opacity: "0", transform: "translateX(-20px)" },
     "scale-in":   { opacity: "0", transform: "scale(0.85)" },
     "slide-up":   { opacity: "0", transform: "translateY(40px)" },
+    "slide-down": { opacity: "0", transform: "translateY(-40px)" },
     "slide-left": { opacity: "0", transform: "translateX(40px)" },
+    "slide-right": { opacity: "0", transform: "translateX(-40px)" },
     "zoom-in":    { opacity: "0", transform: "scale(0.75)" },
     "spin-in":    { opacity: "0", transform: "rotate(-12deg) scale(0.92)" }
   };
@@ -1164,11 +1171,16 @@
       case "slide-up":
         return "bottom";
       case "fade-down":
+      case "slide-down":
         return "top";
       case "fade-left":
       case "slide-left":
         return "right";
       case "fade-right":
+      case "slide-right":
+        return "left";
+      case "wipe":
+      case "exit-wipe":
         return "left";
       default:
         return "bottom";
@@ -1426,9 +1438,17 @@
           params.opacity = [0, 1];
           params.translateY = [40, 0];
           break;
+        case "slide-down":
+          params.opacity = [0, 1];
+          params.translateY = [-40, 0];
+          break;
         case "slide-left":
           params.opacity = [0, 1];
           params.translateX = [40, 0];
+          break;
+        case "slide-right":
+          params.opacity = [0, 1];
+          params.translateX = [-40, 0];
           break;
         case "fly-in": {
           var fly = getSideOffset(animDef.from, 40);
@@ -1463,6 +1483,10 @@
           break;
         case "exit-fade":
           params.opacity = [1, 0];
+          break;
+        case "exit-wipe":
+          params.opacity = [1, 0];
+          params.clipPath = [getWipeClipPath(animDef.from, true), getWipeClipPath(animDef.from, false)];
           break;
         case "exit-fly": {
           var exitFly = getSideOffset(animDef.from, 40);
