@@ -94,6 +94,8 @@ function setupRuntimeWithGsap() {
       }),
       pause: vi.fn(),
       play: vi.fn(),
+      progress: vi.fn(),
+      totalProgress: vi.fn(),
       complete: vi.fn()
     }
     return tween
@@ -106,15 +108,20 @@ function setupRuntimeWithGsap() {
       }),
       pause: vi.fn(),
       play: vi.fn(),
+      progress: vi.fn(),
+      totalProgress: vi.fn(),
       complete: vi.fn()
     }
     return tween
   })
   const timelineInstance = {
     fromTo: vi.fn(),
+    to: vi.fn(),
     add: vi.fn(),
     pause: vi.fn(),
     play: vi.fn(),
+    progress: vi.fn(),
+    totalProgress: vi.fn(),
     restart: vi.fn()
   }
   const gsap = {
@@ -981,6 +988,7 @@ describe('PPT GSAP bridge', () => {
     expect(gsap.globalTimeline.progress).toHaveBeenCalledWith(1)
     expect(timelineInstance.pause).toHaveBeenCalled()
     expect(timelineInstance.play).toHaveBeenCalled()
+    expect(timelineInstance.totalProgress).toHaveBeenCalledWith(1)
   })
 
   it('removes completed GSAP timelines from the active runtime set', () => {
@@ -1024,6 +1032,32 @@ describe('PPT GSAP bridge', () => {
       duration: 0.3,
       opacity: 0
     })
+  })
+
+  it('uses timeline.to for exit opacity steps added through PPT.createTimeline', () => {
+    const { PPT, timelineInstance } = setupRuntimeWithGsap()
+
+    const timeline = (PPT.createTimeline as Function)({ paused: true })
+    timeline.add(
+      {
+        targets: '.outro',
+        opacity: [1, 0],
+        duration: 300,
+        easing: 'power2.out'
+      },
+      '+=0.1'
+    )
+
+    expect(timelineInstance.to).toHaveBeenCalledWith(
+      '.outro',
+      {
+        duration: 0.3,
+        ease: 'power2.out',
+        opacity: 0
+      },
+      '+=0.1'
+    )
+    expect(timelineInstance.fromTo).not.toHaveBeenCalled()
   })
 })
 
