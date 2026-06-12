@@ -103,6 +103,11 @@ describe('validateHtmlContent declarative animation controls', () => {
     expect(missing.errors.join('\n')).toContain('data-anim="path" 必须同时提供可解析为线性位移的 data-anim-path')
     expect(invalid.errors.join('\n')).toContain('data-anim="path" 必须同时提供可解析为线性位移的 data-anim-path')
     expect(unexpected.errors.join('\n')).toContain('只有 data-anim="path" 才能使用 data-anim-path')
+
+    const curved = validateHtmlContent(`
+      <div data-anim="path" data-anim-path="M 0 0 C 10 20 30 40 50 60">A</div>
+    `)
+    expect(curved.errors.join('\n')).toContain('data-anim="path" 必须同时提供可解析为线性位移的 data-anim-path')
   })
 
   it('allows bounded duration and delay values from the public contract', () => {

@@ -66,7 +66,7 @@ describe('PPTX animation browser scripts', () => {
     expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("const sequence = normalizeSequence(el.getAttribute('data-anim-sequence'));")
     expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("const clickGroupRaw = normalizeClickGroup(el.getAttribute('data-anim-click-group'));")
     expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("const staggerRaw = (el.getAttribute('data-anim-stagger') || '').trim();")
-    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("const parseLinearPathDelta = (value) => {")
+    expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("const LINEAR_PATH_RE")
     expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain('from,')
     expect(COLLECT_PPTX_ANIMATION_TRACES_SCRIPT).toContain("collectTrace(el, type, effectiveTrigger, from")
   })

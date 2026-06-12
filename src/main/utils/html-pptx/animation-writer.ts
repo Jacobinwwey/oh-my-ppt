@@ -99,11 +99,13 @@ const numericAnimXml = (
   </p:tavLst>
 </p:anim>`
 
+const LINEAR_PATH_RE = /^M\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\s+L\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\s*$/i
+
 const parseLinearPathDelta = (
   pathValue: string | undefined
 ): { x: number; y: number } | null => {
   const raw = String(pathValue || '').trim()
-  if (!raw) return null
+  if (!raw || !LINEAR_PATH_RE.test(raw)) return null
   const coords = raw.match(/-?\d+(?:\.\d+)?/g)
   if (!coords || coords.length < 4) return null
   const startX = Number(coords[0])

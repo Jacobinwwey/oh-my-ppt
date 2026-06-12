@@ -98,10 +98,10 @@ export const PAGE_PLACEHOLDER_TEXT = '等待模型填充这一页内容'
 export const isPlaceholderPageHtml = (html: string): boolean =>
   html.includes(PAGE_PLACEHOLDER_TEXT) || /data-placeholder-page\s*=\s*["']1["']/i.test(html)
 
-const isLinearMotionPathString = (value: string): boolean => {
-  const coords = value.match(/-?\d+(?:\.\d+)?/g)
-  return Array.isArray(coords) && coords.length >= 4
-}
+const LINEAR_PATH_RE = /^M\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\s+L\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\s*$/i
+
+const isLinearMotionPathString = (value: string): boolean =>
+  LINEAR_PATH_RE.test(value.trim())
 
 
 const isAllowedRuntimeAsset = (src: string): boolean => {

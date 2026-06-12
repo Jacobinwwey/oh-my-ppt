@@ -529,9 +529,10 @@ export const COLLECT_PPTX_ANIMATION_TRACES_SCRIPT = `
   let lastSequenceStart = 0;
   let lastSequenceEnd = 0;
   const traces = [];
+  const LINEAR_PATH_RE = /^M\\s+-?\\d+(?:\\\\.\\d+)?\\s+-?\\d+(?:\\\\.\\d+)?\\s+L\\s+-?\\d+(?:\\\\.\\d+)?\\s+-?\\d+(?:\\\\.\\d+)?\\s*$/i;
   const parseLinearPathDelta = (value) => {
     const raw = String(value || '').trim();
-    if (!raw) return null;
+    if (!raw || !LINEAR_PATH_RE.test(raw)) return null;
     const coords = raw.match(/-?\\d+(?:\\.\\d+)?/g);
     if (!coords || coords.length < 4) return null;
     const startX = Number(coords[0]);
