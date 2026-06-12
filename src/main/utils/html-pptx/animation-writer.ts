@@ -282,8 +282,6 @@ export function buildSlideTimingXml(animations: PptxTargetAnimation[], startNode
   let lastClickGroupId: number | undefined
   const effects = ordered.map((anim) => {
     if (anim.trigger !== 'click') {
-      lastClickGroup = undefined
-      lastClickGroupId = undefined
       return effectXml(anim, nextId)
     }
     if (!anim.clickGroup) {

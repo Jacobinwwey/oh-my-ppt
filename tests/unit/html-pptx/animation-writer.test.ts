@@ -153,6 +153,18 @@ describe('buildSlideTimingXml', () => {
     expect(xml).toContain('grpId="0"')
   })
 
+  it('preserves click-group across interleaved load animations', () => {
+    const xml = buildSlideTimingXml([
+      makeAnim({ spid: 3, trigger: 'click', clickGroup: 'step-1', type: 'fade-up', order: 0 }),
+      makeAnim({ spid: 4, trigger: 'load', type: 'fade', order: 1 }),
+      makeAnim({ spid: 5, trigger: 'click', clickGroup: 'step-1', type: 'pulse-soft', order: 2 })
+    ])
+
+    expect(xml).toContain('spid="3"')
+    expect(xml).toContain('spid="5"')
+    expect(xml.match(/grpId="1"/g)).toHaveLength(2)
+  })
+
   it('emits distinct native scale ranges for bounded emphasis variants', () => {
     const xml = buildSlideTimingXml([
       makeAnim({ spid: 3, type: 'pulse-soft' }),
