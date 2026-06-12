@@ -248,6 +248,7 @@ export const resolveTraceMotion = (from: DataAnimFrom | undefined): Exclude<Pptx
     case 'top':
       return 'fromTop'
     case 'bottom':
+    case 'center':
     default:
       return 'fromBottom'
   }
@@ -262,6 +263,7 @@ export const wipeFilterForFrom = (from: DataAnimFrom | undefined): string => {
     case 'bottom':
       return 'wipe(u)'
     case 'left':
+    case 'center':
     default:
       return 'wipe(r)'
   }
